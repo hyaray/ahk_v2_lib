@@ -23,7 +23,9 @@ NOTE NOTE NOTE 思路：
         2.2 ElementFromPoint(xScreen, yScreen) 有时会获取很大的元素，要用 ElementFromPointEx
         2.2如果是非标准窗口，一般先获取整个窗口控件 elWin := UIA.ElementFromHandle(hwnd)，再【搜索】特定的控件
         搜索方法：
-            ①只搜索单个控件 推荐用封装的函数 UIA.FindElement(WinGetID(), 控件名, 其他字段值, 其他字段名(默认"name"))
+            ①只搜索一次：
+               推荐用封装的函数 UIA.FindElement(WinGetID("A"), 控件名, 其他字段值, 其他字段名(默认"name"))
+               不需要保存 elWin，而是一次性用完就丢。
                比如Excel的【查找和替换】对话框，可用下面方法获取 Name="范围(H)": 的 ComboBox
                el := UIA.FindElement(WinGetID("A"), "ComboBox", "范围(H):")
                如果值不是精确匹配，比如查找部分匹配的，用 FindControlEx
@@ -33,9 +35,9 @@ NOTE NOTE NOTE 思路：
                    el := elTab.FindControl("TabItem", ComValue(0xB,-1), "SelectionItemIsSelected")
                ListItem
                    el := elTab.FindControl("ListItem", ComValue(0xB,-1), "SelectionItemIsSelected")
-            ②搜索多个控件
+            ②多次搜索控件：
                 1.先获取 elWin := UIA.ElementFromHandle(hwnd)
-                2.指定匹配条件 condition(NOTE 区分大小写) (NOTE CreatePropertyConditionEx 可以搭配 PropertyConditionFlags 实现部分匹配)
+                2.指定匹配条件 condition (NOTE CreatePropertyConditionEx 可以搭配 PropertyConditionFlags 实现部分匹配)
                     单条件
                         控件类型
                             cond := UIA.CreatePropertyCondition("ControlType", "Button")
@@ -624,6 +626,7 @@ class UIA {
     }
 
     ; Retrieves the UI Automation element that has the input focus.
+    ;TODO Tim 里有问题
     static GetFocusedElement() => (ComCall(8, this, "ptr*", &element := 0), IUIAutomationElement(element))
 
     ; Retrieves the UI Automation element that has the input focus, prefetches the requested properties and control patterns, and stores the prefetched items in the cache.
@@ -1157,6 +1160,8 @@ class IUIAutomationElement extends IUIABase {
         this.ClickByControl()
         sleep(100)
         elListItem := this.FindControl("ListItem", name)
+        if (!elListItem)
+            throw ValueError(format('failed to find ListItem of "{1}"', name))
         elListItem.GetCurrentPattern("SelectionItem").select()
         send("{enter}") ;TODO 如何优化
     }
