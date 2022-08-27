@@ -65,6 +65,8 @@
 class _GDIP {
 
     static __new() {
+        if (this != _GDIP)
+            return
         ;if !dllcall("GetModuleHandle", "str","gdiplus", "ptr")
         ;    dllcall("LoadLibrary", "str", "gdiplus")
         bufSi := buffer(8+A_PtrSize*2, 0)
