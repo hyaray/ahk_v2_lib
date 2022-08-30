@@ -1477,7 +1477,7 @@ class IUIAutomationElement extends IUIABase {
         }
     }
 
-    getTabItems() {
+    getTabItems(bName:=true) {
         ;获取 elTab
         if (this.CurrentControlType == UIA.ControlType.Tab)
             elTab := this
@@ -1485,7 +1485,7 @@ class IUIAutomationElement extends IUIABase {
             elTab := this.GetParent()
         arr := []
         for el in elTab.FindAll(UIA.CreateTrueCondition(), 2)
-            arr.push(el.CurrentName)
+            arr.push(bName ? el.CurrentName : el)
         return arr
     }
 
