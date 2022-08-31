@@ -511,7 +511,7 @@ class UIA {
             }
             arr := ComObjArray(0xd, count), i := 0
             for k, v in obj {
-                if (IsNumber(k))
+                if (k is integer)
                     k := Integer(k)
                 else
                     k := this.Property.%k%
@@ -676,12 +676,8 @@ class UIA {
     ; Creates a condition that selects elements that have a property with the specified value.
     ; NOTE 是boolean，value要用 ComValue(0xB,-1)
     static CreatePropertyCondition(propertyId, value) {
-        if !IsNumber(propertyId) {
-            try
-                propertyId := this.property.%propertyId%
-            catch
-                throw ValueError("ControlType invalid:`n" . propertyId)
-        }
+        if !(propertyId is integer)
+            propertyId := this.property.%propertyId%
         if (propertyId == 30003 && value is String)
             value := this.ControlType.%value%
         if (A_PtrSize == 4) {
@@ -694,12 +690,8 @@ class UIA {
 
     ; Creates a condition that selects elements that have a property with the specified value, using optional flags.
     static CreatePropertyConditionEx(propertyId, value, flags:=2) {
-        if !IsNumber(propertyId) {
-            try
-                propertyId := this.property.%propertyId%
-            catch
-                throw ValueError("ControlType invalid")
-        }
+        if !(propertyId is integer)
+            propertyId := this.property.%propertyId%
         if (propertyId == 30003 && value is String)
             value := this.ControlType.%value%
         if (A_PtrSize == 4) {
@@ -883,7 +875,7 @@ class IUIAutomationCacheRequest extends IUIABase {
             for pid in propertyId
                 ComCall(3, this, "int", pid)
         } else {
-            if !IsNumber(propertyId)
+            if !(propertyId is integer)
                 propertyId := UIA.property.%propertyId%
             ComCall(3, this, "int", propertyId)
         }
@@ -958,14 +950,11 @@ class IUIAutomationElement extends IUIABase {
     this 生成后出现的元素，用此方法也能获取，说明 this 是动态的
     */
     FindControl(ControlType, value, field:="Name", msWait:=0) {
-        if !IsNumber(ControlType) {
+        if !(ControlType is integer) {
             if (ControlType == "") { ;NOTE 非 Control 比如obsidian的【警报】
                 cond := UIA.CreatePropertyCondition(UIA.property.%field%, value)
             } else {
-                try
-                    ControlType := UIA.ControlType.%ControlType%
-                catch
-                    throw ValueError(format("ControlType invalid`ncontrol={1}`n{2}={3}", ControlType,field,value))
+                ControlType := UIA.ControlType.%ControlType%
                 cond := UIA.CreateAndCondition(UIA.CreatePropertyCondition(30003,ControlType), UIA.CreatePropertyCondition(UIA.property.%field%, value))
             }
         }
@@ -979,12 +968,8 @@ class IUIAutomationElement extends IUIABase {
     }
     ;【包含】 ControlType 并【包含】 value 的控件(非精确查找)
     FindControlEx(ControlType, value, field:="Name", msWait:=0) {
-        if !IsNumber(ControlType) {
-            try
-                ControlType := UIA.ControlType.%ControlType%
-            catch
-                throw ValueError("ControlType invalid")
-        }
+        if !(ControlType is integer)
+            ControlType := UIA.ControlType.%ControlType%
         cond := UIA.CreateAndCondition(UIA.CreatePropertyCondition(30003,ControlType), UIA.CreatePropertyConditionEx("Name",value))
         endtime := A_TickCount + msWait
         loop {
@@ -1636,12 +1621,10 @@ class IUIAutomationElement extends IUIABase {
 
     ; Retrieves the current value of a property for this UI Automation element.
     GetCurrentPropertyValue(propertyId) {
-        try {
-            if !IsNumber(propertyId)
-                propertyId := UIA.property.%propertyId%
-            ComCall(10, this, "int", propertyId, "ptr", val := ComVar())
-            return val[]
-        }
+        if !(propertyId is integer)
+            propertyId := UIA.property.%propertyId%
+        ComCall(10, this, "int", propertyId, "ptr", val := ComVar())
+        return val[]
     }
 
     ; Retrieves a property value for this UI Automation element, optionally ignoring any default value.
@@ -1652,7 +1635,7 @@ class IUIAutomationElement extends IUIABase {
 
     ; Retrieves a property value from the cache for this UI Automation element.
     GetCachedPropertyValue(propertyId) {
-        if !IsNumber(propertyId)
+        if !(propertyId is integer)
             propertyId := UIA.property.%propertyId%
         ComCall(12, this, "int", propertyId, "ptr", val := ComVar())
         return val[]
@@ -1663,33 +1646,29 @@ class IUIAutomationElement extends IUIABase {
 
     ; Retrieves the control pattern interface of the specified pattern on this UI Automation element.
     GetCurrentPatternAs(patternId, riid) {	; not completed
-        try {
-            if IsNumber(patternId)
-                name := UIA.ControlPattern.%patternId%
-            else
-                patternId := UIA.ControlPattern.%(name := patternId)%
-            ComCall(14, this, "int", patternId, "ptr", riid, "ptr*", &patternObject := 0)
-            return IUIAutomation%name%Pattern(patternObject)
-        }
+        if (patternId is integer)
+            name := UIA.ControlPattern.%patternId%
+        else
+            patternId := UIA.ControlPattern.%(name := patternId)%
+        ComCall(14, this, "int", patternId, "ptr", riid, "ptr*", &patternObject := 0)
+        return IUIAutomation%name%Pattern(patternObject)
     }
 
     ; Retrieves the control pattern interface of the specified pattern from the cache of this UI Automation element.
     GetCachedPatternAs(patternId, riid) {	; not completed
-        try {
-            if IsNumber(patternId)
-                name := UIA.ControlPattern.%patternId%
-            else
-                patternId := UIA.ControlPattern.%(name := patternId)%
-            ComCall(15, this, "int", patternId, "ptr", riid, "ptr*", &patternObject := 0)
-            return IUIAutomation%name%Pattern(patternObject)
-        }
+        if (patternId is integer)
+            name := UIA.ControlPattern.%patternId%
+        else
+            patternId := UIA.ControlPattern.%(name := patternId)%
+        ComCall(15, this, "int", patternId, "ptr", riid, "ptr*", &patternObject := 0)
+        return IUIAutomation%name%Pattern(patternObject)
     }
 
     ; Retrieves the IUnknown interface of the specified control pattern on this UI Automation element.
     ; This method gets the specified control pattern based on its availability at the time of the call.
     ; For some forms of UI, this method will incur cross-process performance overhead. Applications can reduce overhead by caching control patterns and then retrieving them by using IUIAutomationElement,,GetCachedPattern.
     GetCurrentPattern(patternId) {
-        if IsNumber(patternId)
+        if (patternId is integer)
             name := UIA.ControlPattern.%patternId%
         else
             patternId := UIA.ControlPattern.%(name := patternId)%
@@ -1699,7 +1678,7 @@ class IUIAutomationElement extends IUIABase {
 
     ; Retrieves from the cache the IUnknown interface of the specified control pattern of this UI Automation element.
     GetCachedPattern(patternId) {
-        if IsNumber(patternId)
+        if (patternId is integer)
             name := UIA.ControlPattern.%patternId%
         else
             patternId := UIA.ControlPattern.%(name := patternId)%

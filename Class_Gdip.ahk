@@ -1682,7 +1682,7 @@ class GDIP_Graphics extends _GDIP {
     drawImage(oPBitmap, aRectTo, aRectFrom:="", Matrix:=1) {
         if (!isobject(aRectFrom))
             aRectFrom := [0,0,oPBitmap.getWidth(),oPBitmap.getHeight()]
-        if !IsNumber(Matrix)
+        if !(Matrix is integer)
             ImageAttr := this.GdipSetImageAttributesColorMatrix(Matrix)
         else if (Matrix != 1)
             ImageAttr := this.GdipSetImageAttributesColorMatrix(format("1|0|0|0|0|0|1|0|0|0|0|0|1|0|0|0|0|0|{1}|0|0|0|0|0|1", Matrix))
@@ -1696,7 +1696,7 @@ class GDIP_Graphics extends _GDIP {
 
     ;NOTE 一般推荐用 drawImage，如果需要对原图进行处理才用
     GdipDrawImageRectRect(pBitmap, aRectTo, aRectFrom:="", Matrix:="1") {
-        if !IsNumber(Matrix)
+        if !(Matrix is integer)
             ImageAttr := this.GdipSetImageAttributesColorMatrix(Matrix)
         else if (Matrix != 1)
             ImageAttr := this.GdipSetImageAttributesColorMatrix(format("1|0|0|0|0|0|1|0|0|0|0|0|1|0|0|0|0|0|{1}|0|0|0|0|0|1", Matrix))
