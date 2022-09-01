@@ -614,7 +614,7 @@ class GDIP_PBitmap extends _GDIP {
                 this.GdipCreateBitmapFromScan0(w, h)
             else if FileExist(w)
                 this.GdipCreateBitmapFromFile(w)
-            ; else if !strlen(w) ;否则就创建个空白的对象(后面再添加图片)
+            ; else if (w == "") ;否则就创建个空白的对象(后面再添加图片)
             ;     msgbox(A_ThisFunc . "`n" . w . "`n" . h)
         }
     }
