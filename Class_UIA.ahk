@@ -1338,7 +1338,7 @@ class IUIAutomationElement extends IUIABase {
             obj["LegacyIAccessibleState"] := this.GetCurrentPropertyValue("LegacyIAccessibleState")
             obj["LegacyIAccessibleHelp"] := this.GetCurrentPropertyValue("LegacyIAccessibleHelp")
             obj["LegacyIAccessibleKeyboardShortcut"] := this.GetCurrentPropertyValue("LegacyIAccessibleKeyboardShortcut")
-            obj["LegacyIAccessibleSelection"] := this.GetCurrentPropertyValue("LegacyIAccessibleSelection")
+            ;obj["LegacyIAccessibleSelection"] := this.GetCurrentPropertyValue("LegacyIAccessibleSelection") ;TODO value 为 ComVar
             obj["LegacyIAccessibleDefaultAction"] := this.GetCurrentPropertyValue("LegacyIAccessibleDefaultAction")
         }
         if (obj["IsMultipleViewPatternAvailable"] := this.GetCurrentPropertyValue("IsMultipleViewPatternAvailable")) {

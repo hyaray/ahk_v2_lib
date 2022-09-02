@@ -7,7 +7,7 @@ class _UIADo {
     ;bSec 为显示秒数，0则一直显示，直到按下任意键
     static seeUIE(el, sTip:="", bSec:=0) {
         obj := el.allProperty()
-        oGuiWin := guiShow(el.allProperty())
+        oGuiWin := guiShow(obj)
         oGui1 := _UIADo.rectControls([el])
         WinWaitClose("ahk_id " . oGuiWin.hwnd)
         oGui1.destroy()
