@@ -90,9 +90,10 @@ NOTE NOTE NOTE 思路：
                 el.SetChecked(true)
         修改文字
             el.GetCurrentPattern("Value").SetValue("hello")
-    6.遍历 IUIAutomation_TreeWalker(TODO 一般用 FindAll)
-        UIA.AddAutomationEventHandler("Text_TextChanged", el, TreeScope_Element:=1, rst, handler)
+    6.遍历
+        见 GetNext 上下文(一般用 FindAll)
     7.事件监听 TODO
+        UIA.AddAutomationEventHandler("Text_TextChanged", el, TreeScope_Element:=1, rst, handler)
 
 https://www.codeproject.com/Articles/141842/Automate-your-UI-using-Microsoft-Automation-Framew
 NOTE 客户端程序员指南 https://docs.microsoft.com/en-us/windows/win32/winauto/uiauto-clientsoverview
@@ -736,7 +737,7 @@ class UIA {
             value := this.ControlType.%value%
         if (A_PtrSize == 4) {
             v := ComVar(value)
-            comcall(24, this, "int",propertyId, "int64",numget(v,'int64'), "int64",numget(v,8,"int64"), "int",flags, "ptr*",&newCondition:=0)
+            comcall(24, this, "int",propertyId, "int64",numget(v,0,"int64"), "int64",numget(v,8,"int64"), "int",flags, "ptr*",&newCondition:=0)
         } else
             comcall(24, this, "int",propertyId, "ptr",ComVar(value,,true), "int",flags, "ptr*",&newCondition:=0)
         return IUIAutomationPropertyCondition(newCondition)
@@ -816,7 +817,7 @@ class UIA {
     ; Converts a VARIANT containing rectangle coordinates to a RECT.
     static VariantToRect(var) {
         if (A_PtrSize == 4)
-            comcall(45, this, "int64",numget(var,"int64"), "int64",numget(var,8,"int64"), "ptr",rc := NativeArray(0, 4, "Int"))
+            comcall(45, this, "int64",numget(var,0,"int64"), "int64",numget(var,8,"int64"), "ptr",rc := NativeArray(0, 4, "Int"))
         else
             comcall(45, this, "ptr",var, "ptr",rc := NativeArray(0, 4, "Int"))
         return rc
@@ -860,7 +861,7 @@ class UIA {
     ; After retrieving a property for a UI Automation element, call this method to determine whether the element supports the retrieved property. CheckNotSupported is typically called after calling a property retrieving method such as GetCurrentPropertyValue.
     static CheckNotSupported(value) {
         if (A_PtrSize == 4)
-            value := ComVar(value,,true), comcall(53, this, "int64",numget(value,"int64"), "int64",numget(value,8,"int64"), "int*",&isNotSupported:=0)
+            value := ComVar(value,,true), comcall(53, this, "int64",numget(value,0,"int64"), "int64",numget(value,8,"int64"), "int*",&isNotSupported:=0)
         else
             comcall(53, this, "ptr",ComVar(value,,true), "int*",&isNotSupported:=0)
         return isNotSupported
@@ -1365,7 +1366,7 @@ class IUIAutomationElement extends IUIABase {
         obj["IsScrollItemPatternAvailable"] := this.GetCurrentPropertyValue("IsScrollItemPatternAvailable")
         if (obj["IsSelectionItemPatternAvailable"] := this.GetCurrentPropertyValue("IsSelectionItemPatternAvailable")) {
             obj["SelectionItemIsSelected"] := this.GetCurrentPropertyValue("SelectionItemIsSelected")
-            obj["SelectionItemSelectionContainer"] := this.GetCurrentPropertyValue("SelectionItemSelectionContainer")
+            ;obj["SelectionItemSelectionContainer"] := this.GetCurrentPropertyValue("SelectionItemSelectionContainer") ;TODO value 为 ComVar
         }
         if (obj["IsSelectionPatternAvailable"] := this.GetCurrentPropertyValue("IsMultipleViewPatternAvailable")) {
             obj["SelectionSelection"] := this.GetCurrentPropertyValue("SelectionSelection")
@@ -2115,10 +2116,12 @@ class IUIAutomationItemContainerPattern extends IUIABase {
     ; This method can be slow, because it may need to traverse multiple objects to find a matching one. When used in a loop to return multiple items, no specific order is defined so long as each item is returned only once (that is, the loop should terminate). This method is also item-centric, not UI-centric, so items with multiple UI representations need to be hit only once.
     ; When the propertyId parameter is specified as 0 (zero), the provider is expected to return the next item after pStartAfter. If pStartAfter is specified as NULL with a propertyId of 0, the provider should return the first item in the container. When propertyId is specified as 0, the value parameter should be VT_EMPTY.
     FindItemByProperty(pStartAfter, propertyId, value) {
-        if (A_PtrSize == 4)
-            value := ComVar(value,, true), comcall(3, this, "ptr",pStartAfter, "int",propertyId, "int64",numget(value,"int64"), "int64",numget(value,8,"int64"), "ptr*",&pFound:=0)
-        else
-            comcall(3, this, "ptr",pStartAfter, "int",propertyId, "ptr",ComVar(value,, true), "ptr*",&pFound:=0)
+        if (A_PtrSize == 4) {
+            value := ComVar(value,, true)
+            comcall(3, this, "ptr",pStartAfter, "int",propertyId, "int64",numget(value,0,"int64"), "int64",numget(value,8,"int64"), "ptr*",&pFound:=0)
+        } else {
+            comcall(3, this, "ptr",pStartAfter, "int",propertyId, "ptr",ComVar(value,,true), "ptr*",&pFound:=0)
+        }
         if (pFound)
             return IUIAutomationElement(pFound)
         throw TargetError("Target elements not found.")
@@ -2447,7 +2450,7 @@ class IUIAutomationStylesPattern extends IUIABase {
         comcall(10, this, "ptr*",&propertyArray:=0, "int*",&propertyCount:=0), arr := []
         for p in NativeArray(propertyArray, propertyCount) {
             arr.push({
-                PropertyName: BSTR(numget(p, "ptr")),
+                PropertyName: BSTR(numget(p, 0, "ptr")),
                 PropertyValue: BSTR(numget(p, A_PtrSize, "ptr"))
             })
         }
@@ -2589,7 +2592,7 @@ class IUIAutomationTextRange extends IUIABase {
     FindAttribute(attr, val, backward) {
         if (A_PtrSize == 4) {
             val := ComVar(val,, true)
-            comcall(7, this, "int",attr, "int64",numget(val,"int64"), "int64",numget(val,8,"int64"), "int",backward, "ptr*",&found:=0)
+            comcall(7, this, "int",attr, "int64",numget(val,0,"int64"), "int64",numget(val,8,"int64"), "int",backward, "ptr*",&found:=0)
         } else {
             comcall(7, this, "int",attr, "ptr",ComVar(val,,true), "int",backward, "ptr*",&found:=0)
         }
