@@ -1,7 +1,6 @@
-﻿;只放不依赖第3方的基础函数
+﻿/*
+;只放不依赖第3方的基础函数
 ;常规用到的也放这里方便移植，不适合放到软件专属库里
-;复杂点的放 hyaray1.ahk
-;#8::msgbox(hyf_input())
 
 ;hotkey("F10",(p*)=>hyf_ttt())
 ;hyf_ttt() {
@@ -21,6 +20,7 @@
 ;-----------------------------------Windows__-----------------------------------
 ;-----------------------------------Excel__-----------------------------------
 ;-----------------------------------obj__-----------------------------------
+*/
 
 ;-----------------------------------general__-----------------------------------
 ;数字则sleep，{xxx}开头则 SendText
@@ -83,7 +83,11 @@ hyf_getSelect(bVimNormal:=false, bInput:=false) {
     clipSave := A_Clipboard
     A_Clipboard := ""
     sleep(10)
-    send("{ctrl down}c{ctrl up}")
+    if WinActive("ahk_class VirtualConsoleClass") {
+        send("{enter}")
+    } else {
+        send("{ctrl down}c{ctrl up}")
+    }
     if ClipWait(0.2) {
         if 0
             res := trim(A_Clipboard) ;TODO 可能会耗时较长
@@ -189,6 +193,24 @@ hyf_setClip(str, stip:="已复制", n:=3000) {
     SetTimer(tooltip, -n)
 }
 
+;如果可直接键盘输出，一般用 SendText
+;用剪切板发送字符串
+hyf_paste(str, k:="") {
+    c := A_Clipboard
+    A_Clipboard := str
+    while(A_Clipboard != str)
+        sleep(10)
+    if (0) ;待完善
+        send("{shift down}{ins}{shift up}")
+    else
+        send("{ctrl down}v{ctrl up}")
+    sleep(20)
+    if (k != "")
+        send(k)
+    sleep(100)
+    A_Clipboard := c
+}
+
 hyf_regExist(dir) {
     loop reg, dir, "KV"
         return true
@@ -232,6 +254,151 @@ hyf_input(toLow:=false) {
     }
     suspend(false)
     return toLow ? StrLower(ih.EndKey) . ih.EndMods : ih.EndKey
+}
+
+;支持多行的 inputbox
+;替换换行符用 StrReplace(sList, "`r`n", ",")
+inputboxEX(tips, sDefaluet:="", sTitle:="", bEmpty:=false) {
+    nameEdit := "vvv"
+    oGui := gui()
+    oGui.title := sTitle
+    oGui.OnEvent("escape", doEscape)
+    oGui.OnEvent("close", doEscape)
+    oGui.SetFont("s13")
+    oEdit := oGui.AddEdit("w700 R18 section", sDefaluet)
+    oText := oGui.AddText("w700", tips)
+    oEdit.name := nameEdit
+    oGui.SetFont("s23 cRED")
+    oGui.AddButton("xs", "确定(&A)").OnEvent("click", btnClick)
+    ; oGui.AddButton("xp+300", "取消(&C)").OnEvent("click", btnCancle)
+    oGui.show("w800 h600")
+    res := oEdit.text
+    WinWaitClose("ahk_id " . oGui.Hwnd)
+    if (!bEmpty && (res == "")) {
+        msgbox("错误：为空",,0x40000)
+        exit
+    }
+    return res
+    btnClick(ctl, param*) {
+        res := ctl.gui[nameEdit].text
+        sleep(100)
+        oGui.destroy()
+    }
+    doEscape(oGui, param*) {
+        res := ""
+        oGui.destroy()
+    }
+}
+
+/*
+arr := [
+ ["姓名", "name", "default"],
+ ["性别", "gender", ["男","女"]],
+ ["年龄", "n|age", "20"],
+ ["是否党员", "b|dangyuan", 0],
+ ["备注", "2|beizhu", ""],
+]
+objOpt := hyf_inputOption(arr, "提示")
+msgbox(json.stringify(objOpt, 4))
+;arr的子数组
+;1.提示文字
+;2.变量名
+;   ①n|则强制为数字
+;   ②b|则为是否的 Checkbox
+;   ②2|则设置为多行Edit(添加选项 r2)
+;3.默认值
+;   数组，则为 AddComboBox
+;bOne 表示限制单结果，则会在 Edit内容改变时，清空其他控件
+;关闭则返回map()
+;NOTE 自动过滤空值
+*/
+hyf_inputOption(arr, sTips:="", bOne:=false) {
+    if (type(arr) == "Map") {
+        arr1 := arr.clone()
+        for k, v in arr1
+            arr.push([k,k,v])
+    }
+    oGui := gui()
+    oGui.OnEvent("escape", doEscape)
+    oGui.OnEvent("close", doEscape)
+    oGui.SetFont("cRed s22")
+    if strlen(sTips)
+        oGui.AddText("x10", sTips . "`n")
+    oGui.SetFont("cDefault s13")
+    funOpt := (x)=>"ys w200 v" . x
+    focusCtl := ""
+    for a in arr {
+        oGui.AddText("x10 section", a[1])
+        if (a.length > 3) ;NOTE 有第4参数，则跳过
+            continue
+        if (a.length > 2) { ;NOTE 核心判断
+            if isobject(a[3]) {
+                oGui.AddComboBox(funOpt(a[2]), a[3])
+            } else {
+                if instr(a[2], "|") { ;有选项
+                    opt := StrSplit(a[2], "|")[1]
+                    a[2] := StrSplit(a[2], "|")[2]
+                    if (opt == "n") { ;限制为数字
+                        oGui.AddEdit(funOpt(a[2]) . " number", a[3]).OnEvent("change", editChange)
+                    } else if (opt == "b") { ;boolean
+                        oGui.SetFont("cRed")
+                        if a[3]
+                            oGui.AddCheckbox(funOpt(a[2]) . " checked", "是")
+                        else
+                            oGui.AddCheckbox(funOpt(a[2]), "是")
+                        oGui.SetFont("cDefault")
+                    } else if (opt ~= "^\d+$") { ;r2
+                        oGui.AddEdit(format("{1} r{2}", funOpt(a[2]),opt), a[3]).OnEvent("change", editChange)
+                    }
+                } else {
+                    oGui.AddEdit(funOpt.call(a[2]), a[3]).OnEvent("change", editChange)
+                }
+            }
+            if (a.length >= 4)
+                focusCtl := a[2]
+        } else {
+            oGui.AddEdit(funOpt(a[2])).OnEvent("change", editChange)
+        }
+    }
+    oBtn := oGui.AddButton("default center", "确定")
+    oBtn.OnEvent("click", btnClick)
+    if (focusCtl != "") {
+        oGui[focusCtl].focus()
+    }
+    objRes := map() ;空白值不返回
+    objRes.default := ""
+    oGui.show()
+    WinWaitClose("ahk_id " . oGui.hwnd)
+    return objRes
+    editChange(ctl, p*) {
+        if (bOne) {
+            for hwnd, ctlLoop in ctl.gui {
+                if (ctlLoop.ClassNN ~= "^Edit\d+$" && hwnd != ctl.hwnd)
+                    ctlLoop.text := ""
+            }
+        }
+    }
+    btnClick(ctl, p*) {
+        ctl.gui.submit
+        for k, a in arr {
+            try ;有些控件并未生成
+                oGui[a[2]]
+            catch
+                continue
+            if (a[2] ~= "^b" || a.length <= 2)
+                v := oGui[a[2]].value
+            else
+                v := oGui[a[2]].text
+            if (type(v) == "String")
+                v := trim(v) ;TODO 是否trim
+            if strlen(v)
+                objRes[a[2]] :=  v
+        }
+        oGui.destroy()
+    }
+    doEscape(oGui, p*) {
+        oGui.destroy()
+    }
 }
 
 ;网址没在内，因为有依赖 _CB(var)
@@ -364,20 +531,6 @@ hyf_findFile(dirIn, arrNoExt, ext:="") {
 ;            return ctlName
 ;    }
 ;}
-
-;如果可直接键盘输出，则可用 _Key.post(str)
-hyf_sendByClip(str, k:="") { ;用剪切板发送字符串并按键（可选） ;mark不为空，则不写入ClipTool
-    c := A_Clipboard
-    A_Clipboard := str
-    while(A_Clipboard != str)
-        sleep(10)
-    ;send("{shift down}{ins}{shift up}")
-    sendEx("{ctrl down}v{ctrl up}", 20)
-    if (k != "")
-        send(k)
-    sleep(100)
-    A_Clipboard := c
-}
 
 ;-----------------------------------calc-----------------------------------
 eval(str) {
@@ -1058,15 +1211,18 @@ hyf_pipeRun(code, fn:="", callback:=0) {
             }
         )"
         strCode .= format('`nWM_COPYDATA_send(string({1}), "{2}")', code,fn)
-    } else
+    } else {
         strCode := format('#SingleInstance Force`n#NoTrayIcon`n{1}', code)
+    }
     shell := ComObject("WScript.Shell")
     oExec := shell.exec(A_AhkPath . " *")
     oExec.StdIn.write(strCode)
     oExec.StdIn.close()
-    while (CopyOfData == "") ;NOTE 等待
-        sleep(100)
-    return CopyOfData
+    if callback {
+        while (CopyOfData == "") ;NOTE 等待
+            sleep(100)
+        return CopyOfData
+    }
     Receive_WM_COPYDATA(wParam, lParam, msg, hwnd) {
         StringAddress := numget(lParam, 2*A_PtrSize, "Ptr")  ; 检索 CopyDataStruct 的 lpData 成员.
         CopyOfData := strget(StringAddress)  ; 从结构中复制字符串.
@@ -1075,37 +1231,252 @@ hyf_pipeRun(code, fn:="", callback:=0) {
     }
 }
 
-;支持多行的 inputbox
-;替换换行符用 StrReplace(sList, "`r`n", ",")
-inputboxEX(tips, sDefaluet:="", sTitle:="", bEmpty:=false) {
-    nameEdit := "vvv"
-    oGui := gui()
-    oGui.title := sTitle
-    oGui.OnEvent("escape", doEscape)
-    oGui.OnEvent("close", doEscape)
+;arrIn 如果是一维，会自动转成二维(以1-9当key)
+;arrIn := [
+;   ["J","jpg"],
+;   ["P","png"],
+;]
+;arrRes := hyf_tooltipAsMenu(arrIn)
+;if (!arrRes.length)
+;    return
+;msgbox(json.stringify(arrRes, 4))
+hyf_tooltipAsMenu(arrIn, strTip:="", x:=8, y:=8) {
+    static level := 20
+    if !arrIn.length
+        return
+    if !isobject(arrIn[1]) { ;一维转成[hot, item]
+        for k, v in arrIn
+            arrIn[k] := [k, v]
+    }
+    if (arrIn.length == 1)
+        return arrIn[1]
+    strTip := strlen(strTip) ? strTip . "`n`n" : ""
+    tooltip(strTip . arr2str(arrIn), x, y, level)
+    arrKeys := [] ;按键列表
+    loop {
+        key := hyf_input(true)
+        if (key == "escape") {
+            tooltip(,,, level)
+            return []
+        } else if (key = "space") { ;TODO 接受空格
+            arrKeys.push(A_Space)
+        } else if (strlen(key) > 1) {
+            arrKeys.push(key)
+        } else if (strlen(key) == 1) {
+            arrKeys.push(StrUpper(key))
+        } else { ;用不到
+            tooltip(,,, level)
+            return []
+        }
+        ;通过 arrKeys 获取筛选后的内容 arrThis
+        arrThis := arrIn
+        for keyLoop in arrKeys
+            arrThis := getArrByKey(arrThis, keyLoop)
+        ;单结果则直接返回，否则继续 tooltip
+        if (arrThis.length == 0) {
+            return
+        } else if (arrThis.length == 1) {
+            tooltip(,,, level)
+            return arrThis[1]
+        } else
+            tooltip(strTip . arr2str(arrThis), x, y, level)
+    }
+    getArrByKey(arr, key:="") { ;根据 key 获取子arr
+        if (key == "")
+            return arr
+        ;hyf_objView(arr, key)
+        for v in arr {
+            if (v[1] = key) ;TODO 多项
+                return [v]
+        }
+        ;没结果退出
+        tooltip(,x,y, level)
+        return []
+    }
+    arr2str(arr) { ;arr 根据 sKey 转为字符串
+        str := ""
+        for arrSub in arr
+            str .= format("({1})`t{2}`n", arrSub[1],arrSub[2])
+        return str
+    }
+}
+
+;去重或生成拼音都是根据 subArr[1]
+;去重后会无视原先排序
+;返回[序号, subArr] 如 res[2][1]
+;bAddPy 是否添加拼音
+;bDistinct 是否去重
+hyf_selectByArr(arr2, indexKey:=1, bAddPy:=false, bDistinct:=false) {
+    ;NOTE 转成二维(以第1项为主，用来生成拼音什么的，第2项用序号)
+    if !arr2.length
+        return []
+    if !isobject(arr2[1]) { ;一维转成[hot, item]
+        for k, v in arr2
+            arr2[k] := [v, k] ;TODO
+    }
+    arrNew := []
+    ;去重(根据 subArr[1])
+    if (bDistinct) { ;去重，并过滤空值
+        obj := map()
+        for subArr in arr2 {
+            v := subArr[1]
+            if (strlen(v) && !obj.has(v)) {
+                arrNew.push(subArr)
+            }
+            obj[v] := ""
+        }
+    } else {
+        arrNew := arr2
+    }
+    objRaw := map()
+    for arr in arr2
+        objRaw[arr[indexKey]] := arr
+    ;msgbox(json.stringify(arrNew, 4))
+    ;添加标题
+    arrField := ["序号"]
+    for v in arrNew[1]
+        arrField.push("v" . A_Index)
+    ;添加拼音
+    if (bAddPy) {
+        arrField.push("拼音")
+        for v in arrNew {
+            v.push(v[1].shouzimus())
+            ;sleep(1)
+        }
+        ;v.push(v[1])
+    }
+    ;msgbox(json.stringify(arrField, 4))
+    ;msgbox(json.stringify(arrNew, 4))
+    ;添加到 Gui
+    oGui := gui("+resize")
+    oGui.OnEvent("escape",doEscape)
+    oGui.OnEvent("close",doEscape)
     oGui.SetFont("s13")
-    oEdit := oGui.AddEdit("w700 R18 section", sDefaluet)
-    oText := oGui.AddText("w700", tips)
-    oEdit.name := nameEdit
-    oGui.SetFont("s23 cRED")
-    oGui.AddButton("xs", "确定(&A)").OnEvent("click", btnClick)
-    ; oGui.AddButton("xp+300", "取消(&C)").OnEvent("click", btnCancle)
-    oGui.show("w800 h600")
-    res := oEdit.text
-    WinWaitClose("ahk_id " . oGui.Hwnd)
-    if (!bEmpty && (res == "")) {
-        msgbox("错误：为空",,0x40000)
-        exit
+    oGui.add("Text",,"按 F1-F12 或【双击】可直接确定对应条目")
+    oEdit := oGui.add("Edit", "Lowercase section")
+    oEdit.OnEvent("change", loadLV)
+    oCB1 := oGui.Add("Checkbox", "yp checked", arrField[2])
+    ;if bAddPy
+    ;    oCB2 := oGui.Add("Checkbox", "yp", arrField[3])
+    ;添加按键显示结果(点击复制)
+    oButton1 := oGui.add("button", "w200 xs cRed")
+    oButton1.OnEvent("click", (ctl, p*)=>A_Clipboard := ctl.text)
+    if (arrNew[1].length > 2) {
+        oButton2 := oGui.add("button", "w500 yp xp+300 cRed")
+        oButton2.OnEvent("click", (ctl, p*)=>A_Clipboard := ctl.text)
     }
-    return res
-    btnClick(ctl, param*) {
-        res := ctl.gui[nameEdit].text
-        sleep(100)
+    ;ListView 标题名
+    ;field := 65
+    oLv := oGui.AddListView("vlv1 xs r20 cRed w1400", arrField) ;NOTE selectN 要用 lv1 获取控件，不要用 oLv(影响释放)
+    oLv.OnEvent("DoubleClick", do)
+    oLv.OnEvent("ItemFocus", tips)
+    tooltip("加载数据...")
+    timeSave := A_TickCount
+    obj := ""
+    nLoad := A_TickCount - timeSave
+    tooltip("添加到Gui...")
+    loadLV(oEdit)
+    nGui := A_TickCount - timeSave - nLoad
+    tooltip
+    oGui.title := format("读取耗时 {1} 加载到Gui耗时 {2}", nLoad,nGui)
+    oGui.show()
+    WinWaitActive("ahk_id " . oGui.hwnd)
+    ctl := ControlGetFocus() || WinGetID()
+    PostMessage(0x50,, dllcall("LoadKeyboardLayout", "str","04090409", "uint",1), ctl) ;NOTE 美国英语要用"08040804" 若不放ctl 在TC帮助的查找窗口无法切换
+    resGui := []
+    OnMessage(WM_KEYDOWN:=0x100, selectN)
+    WinWaitClose("ahk_id " . oGui.hwnd)
+    return resGui
+    doEscape(oGui, p*) {
+        OnMessage(WM_KEYDOWN, selectN, 0)
         oGui.destroy()
     }
-    doEscape(oGui, param*) {
-        res := ""
-        oGui.destroy()
+    loadLV(ctl, p*) { ;中文则搜索第1个内容，否则搜索第2个内容
+        oLv.delete()
+        oLv.opt("-Redraw")
+        ;获取匹配项
+        arrKeysMatch := []
+        if oCB1.value
+            arrKeysMatch.push(1)
+        ;if bAddPy && oCB2.value
+        ;    arrKeysMatch.push(2)
+        if !arrKeysMatch.length
+            return
+        ;msgbox(json.stringify(arrKeysMatch, 4))
+        sInput := ctl.text
+        arrKeysMatch[1] := (bAddPy && sInput ~= "[[:ascii:]]") ? arrNew[1].length : 1
+        ;msgbox(json.stringify(arrKeysMatch, 4))
+        i := 1
+        for subArr in arrNew {
+            for idx in arrKeysMatch {
+                if (sInput=="" || instr(subArr[idx], sInput)) {
+                    oLv.add(, i++, subArr*)
+                    break
+                }
+            }
+        }
+        ;搜网址有用没结果且只搜索标题，则搜索网址
+        ;if (oLv.GetCount() == 0) {
+        ;    for subArr in arrNew {
+        ;        if instr(subArr[2], sInput)
+        ;            oLv.add(, i++, subArr[1], subArr[2], subArr[3])
+        ;    }
+        ;}
+        oLv.ModifyCol(, "+AutoHdr +center")
+        oLv.ModifyCol(1, "48")
+        oLv.opt("+Redraw")
+        if (oLv.GetCount() == 1) { ;单结果
+            do(oLv, 1)
+        } else if (oLv.GetCount() > 1) {
+            oLv.modify(1, "+select")
+            tips(oLv, 1)
+        }
+    }
+    selectN(wParam, lParam, msg, hwnd) { ;NOTE 由于这个函数不传入oGui或oControl，要用 hwnd获取oGui，用oGui[ctlNmae]获取控件
+        try
+            oLv := GuiFromHwnd(hwnd, 1)["lv1"] ;NOTE
+        catch
+            return
+        if (wParam == 13) { ;enter
+            do(oLv, oLv.GetNext())
+        } else if (wParam == 40) { ;down
+            n := oLv.GetNext()
+            if (!n)
+                oLv.modify(1, "+select")
+            else {
+                oLv.modify(n, "-select")
+                oLv.modify(n+1, "+select")
+            }
+        } else if (wParam == 38) { ;up
+            n := oLv.GetNext()
+            if (n>1) {
+                oLv.modify(n, "-select")
+                oLv.modify(n-1, "+select")
+            }
+        } else {
+            r := wParam-111
+            if (r >= 1 && r <= 12) ;F1-F12
+                do(oLv, r)
+        }
+    }
+    tips(oLv, r, p*) {
+        ;获取当前行整行内容
+        arrRes := []
+        loop(arrNew.length)
+            arrRes.push(oLv.GetText(r, A_Index))
+        oButton1.text := arrRes[2]
+        try
+            oButton2.text := arrRes[3]
+    }
+    do(oLv, r, p*) { ;NOTE 要做的事
+        ;获取当前行整行内容
+        ;arrRes := []
+        ;loop(arrNew[1].length)
+        ;    arrRes.push(oLv.GetText(r, A_Index+1))
+        ;做任何事
+        ;设置返回值
+        resGui := objRaw[oLv.GetText(r, indexKey+1)] ;TODO 增加了序号
+        doEscape(oLv.gui)
     }
 }
 

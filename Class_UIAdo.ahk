@@ -117,7 +117,7 @@ class _UIADo {
         }
         if (aRects.length == 1)
             _UIADo.aRect := aRects[1]
-        return _GDIP.rectMark(aRects, clPen, wPen)
+        return _GDIP.rectMark(aRects, [clPen, wPen])
         getRectByCtrl(ctl) {
             ControlGetPos(&x, &y, &w, &h, ctl)
             return [x+xClient, y+yClient, w, h]

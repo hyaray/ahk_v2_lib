@@ -180,12 +180,18 @@ class _GDIP {
 
     ;aRect 画框
     ;oGui := _GDIP.rectMark(el.GetBoundingRectangle())
+    ;oGui := _GDIP.rectMark(_Win.toRect("ahk_id " . this.winInfo["winID"]))
     ;标窗口
     ;WinGetPos(&x, &y, &w, &h, "ahk_id " . hwnd)
     ;_GDIP.rectMark([x,y,w,h])
-    static rectMark(aRects, clPen:=0xffFF0000, wPen:=2, bOut:=false, keyWaitClose:="") {
+    static rectMark(aRects, arrStyle:=unset, keyWaitClose:="") {
         if !isobject(aRects[1])
             aRects := [aRects]
+        if !isset(arrStyle)
+            arrStyle := []
+        clPen := arrStyle.length >= 1 ? arrStyle[1] : 0xffFF0000
+        wPen := arrStyle.length >= 2 ? arrStyle[2] : 2
+        bOut := arrStyle.length >= 3 ? arrStyle[3] : false
         w := sysget(78)
         h := sysget(79)
         oHBitmap := GDIP_HBitmap(w,h)

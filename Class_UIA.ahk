@@ -1025,58 +1025,29 @@ class IUIAutomationElement extends IUIABase {
     ;NOTE 如果有 xOffset，则是相对于左/或右边缘，yOffset 同理
     ;TODO 如果 ElementFromHandle 传入控件id会出错
     ClickByControl(xOffset:=0, yOffset:=0) {
-        aRect := this.GetBoundingRectangle()
-        if (xOffset == 0)
-            x := aRect[1] + aRect[3]//2
-        else if (xOffset < 0)
-            x := aRect[1] + xOffset
-        else if (xOffset > 0)
-            x := aRect[1] + aRect[3] + xOffset
-        if (yOffset == 0)
-            y := aRect[2] + aRect[4]//2
-        else if (yOffset < 0)
-            y := aRect[2] + yOffset
-        else if (yOffset > 0)
-            y := aRect[2] + aRect[4] + yOffset
+        arrXY := this.getScreenXY(xOffset, yOffset)
         ;转成 client
         WinActive("ahk_id " . UIA.hwnd)
         WinGetClientPos(&xClient, &yClient) ;this.GetFatherWindow(1))
-        x -= xClient
-        y -= yClient
-        ControlClick(format("X{1} Y{2}", x,y))
-        return [x,y]
+        arrXY[1] -= xClient
+        arrXY[2] -= yClient
+        ControlClick(format("X{1} Y{2}", arrXY*))
+        return arrXY
     }
     ClickByMouse(bStay:=false, xOffset:=0, yOffset:=0, cnt:=1) { ;优先用 ClickByControl 备用 TODO Button IsInvokePatternAvailable=false
-        aRect := this.GetBoundingRectangle()
-        if (xOffset == 0)
-            x := aRect[1] + aRect[3]//2
-        else if (xOffset < 0)
-            x := aRect[1] + xOffset
-        else if (xOffset > 0) {
-            if (xOffset < 1) ;小数
-                x := aRect[1] + aRect[3] * xOffset
-            else
-                x := aRect[1] + aRect[3] + xOffset
-
-        }
-        if (yOffset == 0)
-            y := aRect[2] + aRect[4]//2
-        else if (yOffset < 0)
-            y := aRect[2] + yOffset
-        else
-            y := aRect[2] + aRect[4] + yOffset
+        arrXY := this.getScreenXY(xOffset, yOffset)
         cmMouse := A_CoordModeMouse
         CoordMode("mouse", "Screen")
         ;记录原位置
         MouseGetPos(&x0, &y0)
-        MouseMove(x, y, 0)
+        MouseMove(arrXY[1], arrXY[2], 0)
         sleep(20)
         click(cnt)
         ;回到原位置
         if (!bStay)
             MouseMove(x0, y0, 0)
         CoordMode("mouse", cmMouse)
-        return [x,y]
+        return arrXY
     }
     ;tp=1 则返回中心点坐标[x,y](screen)
     GetBoundingRectangle(tp:=0) {
@@ -1085,6 +1056,31 @@ class IUIAutomationElement extends IUIABase {
             return [(obj.left+obj.right)//2, (obj.top+obj.bottom)//2]
         else ;[x,y,w,h]
             return [obj.left,obj.top,obj.right-obj.left,obj.bottom-obj.top]
+    }
+    ;以 xOffset为例, yOffset 同理
+    ;   0 = 中点
+    ;   负数 = 左边界再往左偏移
+    ;   0-1 = 百分比(从左开始)
+    ;   >1 = 右边界再往右偏移
+    getScreenXY(xOffset, yOffset) {
+        obj := this.CurrentBoundingRectangle
+        if (xOffset == 0)
+            x := (obj.left + obj.right) // 2
+        else if (xOffset < 0)
+            x := obj.left + xOffset
+        else if (xOffset < 1) ;小数
+            x := obj.left + (obj.right-obj.left) * xOffset
+        else
+            x := obj.right + xOffset
+        if (yOffset == 0)
+            y := (obj.top + obj.bottom) // 2
+        else if (yOffset < 0)
+            y := obj.top + yOffset
+        else if (yOffset < 1) ;小数
+            y := obj.top + (obj.bottom-obj.top) * yOffset
+        else
+            y := obj.bottom + yOffset
+        return [x, y]
     }
     GetControlType() { ;字符串的控件类型 CurrentControlType 转成字符串
         return UIA.ControlType.%this.CurrentControlType%
