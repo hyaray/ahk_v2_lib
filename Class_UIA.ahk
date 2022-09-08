@@ -28,7 +28,7 @@ NOTE NOTE NOTE 思路：
                不需要保存 elWin，而是一次性用完就丢。
                比如Excel的【查找和替换】对话框，可用下面方法获取 Name="范围(H)": 的 ComboBox
                el := UIA.FindElement(WinGetID("A"), "ComboBox", "范围(H):")
-               如果值不是精确匹配，比如查找部分匹配的，用 FindControlEx
+               如果值不是精确匹配，比如查找部分匹配的，把 FindControl的flag参数设置为1
                TIM 选择表情
                    el := UIA.FindElement(WinGetID("A"), "ComboBox", "选择表情", "LegacyIAccessibleDescription")
                TabItem
@@ -433,56 +433,43 @@ class UIA {
     ;简易场景：由 hwnd 获取的 elWin 仅查找一次
     ;如果 elWin 要进行多次查找的，则用 elWin.FindControl
     ;为了区分名称，所以用了 FindElement
-    ;TODO 为了 ControlClick，增加了dllcall 添加 hwnd
-    static FindElement(hwnd, ControlType, value:="", field:="Name", msWait:=0) { ; <2021-02-10 14:29:46> By hyaray
-        if (!dllcall("GetParent", "UInt",hwnd)) {
-            bIsWindow := true
-        } else {
-            hwnd1 := hwnd
-            arr := [hwnd1]
-            loop 3
-                arr.push(getWinIndex(hwnd1))
-            for v in arr
-                arr[A_Index] := [getWinInfo("ahk_id " . v)]
-            ;msgbox(json.stringify(arr, 4))
-            if (1)
-                bIsWindow := true
-        }
-        return this.ElementFromHandle(hwnd, bIsWindow).FindControl(ControlType, value, field, msWait)
-        getWinIndex(id) {
-            loop {
-                id := dllcall("GetWindow", "uint",id, "int",2) ;1=上级窗口，比如谷歌翻译后，有个小弹框
-                if (dllcall("IsWindowVisible", "uint",id) == 1)
-                    break
-            }
-            return id
-        }
-        ;获取窗口的常见信息
-        getWinInfo(winTitle:="") {
-            obj := map()
-            idA := WinExist(winTitle)
-            WinGetPos(&winX, &winY, &width, &height)
-            obj["winX"] := winX
-            obj["winY"] := winY
-            obj["winExe"] := WinGetProcessName()
-            obj["winExeClean"] := StrReplace(RegExReplace(obj["winExe"], "i)_?(x?(64))?(\.\w+)?$"), A_Space, "_")
-            obj["winID"] := idA
-            obj["winPID"] := WinGetPID()
-            obj["winIsVisible"] := dllcall("IsWindowVisible", "uint",idA)
-            obj["winStyle"] := format("0x{:X}", WinGetStyle() & 0xFFFFFFFF)
-            ;obj["winExStyle"] := WinGetExStyle()
-            obj["winTitle"] := StrReplace(WinGetTitle(), " - Cent Browser")
-            ;obj["winText"] := WinGetText()
-            obj["winClass"] := WinGetClass()
-            obj["winPath"] := RegExReplace(WinGetProcessPath(), "^\w", "$L0")
-            try
-                obj["winCtl"] := ControlGetClassNN(ControlGetFocus())
-            if (width) {
-                obj["width"] := width
-                obj["height"] := height
-            }
-            return obj
-        }
+    ;TODO 为了 ClickByControl，增加了dllcall 添加 hwnd
+    static FindElement(hwnd, ControlType, value:="", field:="Name", msWait:=0, flag:=0) { ; <2021-02-10 14:29:46> By hyaray
+        ;if (!dllcall("GetParent", "UInt",hwnd)) {
+        ;    bIsWindow := true
+        ;} else {
+        ;    hwnd1 := hwnd
+        ;    arr := [hwnd1]
+        ;    loop 3
+        ;        arr.push(getWinIndex(hwnd1))
+        ;    for v in arr
+        ;        arr[A_Index] := [getWinInfo("ahk_id " . v)]
+        ;    ;msgbox(json.stringify(arr, 4))
+        ;    if (1)
+        ;        bIsWindow := true
+        ;}
+        bIsWindow := true
+        return this.ElementFromHandle(hwnd, bIsWindow).FindControl(ControlType, value, field, msWait, flag)
+        ;getWinIndex(id) {
+        ;    loop {
+        ;        id := dllcall("GetWindow", "uint",id, "int",2) ;1=上级窗口，比如谷歌翻译后，有个小弹框
+        ;        if (dllcall("IsWindowVisible", "uint",id) == 1)
+        ;            break
+        ;    }
+        ;    return id
+        ;}
+        ;GetFatherWindow(bHwnd:=false) {
+        ;    vw := UIA.ControlViewWalker()
+        ;    elParent := vw.GetParentElement(this)
+        ;    loop {
+        ;        ct := elParent.CurrentControlType
+        ;        if (!elParent.CurrentNativeWindowHandle || (ct!=50032 && ct!=50033)) { ;TODO 待验证
+        ;            elParent := vw.GetParentElement(elParent)
+        ;            continue
+        ;        }
+        ;        return bHwnd ? elParent.CurrentNativeWindowHandle : elParent
+        ;    }
+        ;}
     }
 
     /**
@@ -989,29 +976,20 @@ class IUIAutomationElement extends IUIABase {
     * @param propertyId The property identifier. `Name`(default)
     * @param waittime Waiting time for control element to appear.
     this 生成后出现的元素，用此方法也能获取，说明 this 是动态的
+    flag != 0 则为包含value，而不是精确匹配
     */
-    FindControl(ControlType, value, field:="Name", msWait:=0) {
+    FindControl(ControlType, value, field:="Name", msWait:=0, flag:=0) {
         if !(ControlType is integer) {
             if (ControlType == "") { ;NOTE 非 Control 比如obsidian的【警报】
                 cond := UIA.CreatePropertyCondition(UIA.property.%field%, value)
             } else {
                 ControlType := UIA.ControlType.%ControlType%
-                cond := UIA.CreateAndCondition(UIA.CreatePropertyCondition(30003,ControlType), UIA.CreatePropertyCondition(UIA.property.%field%, value))
+                if flag
+                    cond := UIA.CreateAndCondition(UIA.CreatePropertyCondition(30003,ControlType), UIA.CreatePropertyConditionEx(UIA.property.%field%, value))
+                else
+                    cond := UIA.CreateAndCondition(UIA.CreatePropertyCondition(30003,ControlType), UIA.CreatePropertyCondition(UIA.property.%field%, value))
             }
         }
-        endtime := A_TickCount + msWait
-        loop {
-            if (el := this.FindFirst(cond))
-                return el
-            else if (A_TickCount > endtime)
-                return
-        }
-    }
-    ;【包含】 ControlType 并【包含】 value 的控件(非精确查找)
-    FindControlEx(ControlType, value, field:="Name", msWait:=0) {
-        if !(ControlType is integer)
-            ControlType := UIA.ControlType.%ControlType%
-        cond := UIA.CreateAndCondition(UIA.CreatePropertyCondition(30003,ControlType), UIA.CreatePropertyConditionEx("Name",value))
         endtime := A_TickCount + msWait
         loop {
             if (el := this.FindFirst(cond))
@@ -1028,7 +1006,7 @@ class IUIAutomationElement extends IUIABase {
         arrXY := this.getScreenXY(xOffset, yOffset)
         ;转成 client
         WinActive("ahk_id " . UIA.hwnd)
-        WinGetClientPos(&xClient, &yClient) ;this.GetFatherWindow(1))
+        WinGetClientPos(&xClient, &yClient) ;见 UIA.FindElement()
         arrXY[1] -= xClient
         arrXY[2] -= yClient
         ControlClick(format("X{1} Y{2}", arrXY*))
@@ -1084,26 +1062,6 @@ class IUIAutomationElement extends IUIABase {
     }
     GetControlType() { ;字符串的控件类型 CurrentControlType 转成字符串
         return UIA.ControlType.%this.CurrentControlType%
-    }
-    ;ClickByControl 需要获取所在窗口
-    GetFatherWindow(bHwnd:=false) {
-        vw := UIA.ControlViewWalker()
-        elParent := vw.GetParentElement(this)
-        loop {
-            ct := elParent.CurrentControlType
-            if (!elParent.CurrentNativeWindowHandle || (ct!=50032 && ct!=50033)) { ;TODO 待验证
-                elParent := vw.GetParentElement(elParent)
-                continue
-            }
-            return bHwnd ? elParent.CurrentNativeWindowHandle : elParent
-        }
-    }
-    GetWindow(bHwnd:=false) {
-        vw := UIA.ControlViewWalker()
-        elParent := vw.GetParentElement(this)
-        while(elParent.CurrentControlType != 50032)
-            elParent := vw.GetParentElement(elParent)
-        return bHwnd ? elParent.CurrentNativeWindowHandle : elParent
     }
     GetParent(tp:=0) { ;NOTE 用 tp=0 会比较好理解
         return this._ViewWalker(tp, "GetParentElement")
