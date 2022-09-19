@@ -13,7 +13,7 @@ class _UIADo {
         oGui1.destroy()
         ;s := sTip . "`n"
         ;for k, v in obj {
-        ;    if strlen(v)
+        ;    if (v != "")
         ;        s .= format("{1}=`t{2}`n", k,v)
         ;}
         ;tooltip(s,,, 9)
@@ -34,7 +34,7 @@ class _UIADo {
         ;}
         ;defButton是默认按钮前面的text内容
         guiShow(obj, defButton:="", oGui:="", times:=0) {
-            if !isobject(obj)
+            if (!isobject(obj))
                 return
             if (type(obj)) == "Array" && !obj.length
                 return
@@ -49,9 +49,9 @@ class _UIADo {
             for k, v in obj {
                 x := times*30 + 10 ;缩进30，离左边缘10
                 oGui.add("text","section x" . x, k)
-                if isobject(v)
+                if (isobject(v))
                     %A_ThisFunc%(v, defButton, oGui, times+1)
-                else if strlen(defButton) && (k = defButton)
+                else if ((defButton != "") && (k = defButton))
                     oGui.add("button","ys yp-5 default v" . k, v).OnEvent("click", hyf_GuiMsgbox_1)
                 else
                     oGui.add("button","ys yp-5 v" . k, v).OnEvent("click", hyf_GuiMsgbox_1)
@@ -136,7 +136,7 @@ class _UIADo {
         oGraphics.GdipSetSmoothingMode(4)
         for i, ctl in aCtls {
             aRect := getRectByCtrl(ctl)
-            if isobject(funcRect) {
+            if (isobject(funcRect)) {
                 for k, v in aRect
                     aRect[k] := funcRect.call(v)
             }

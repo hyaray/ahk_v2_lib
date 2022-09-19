@@ -42,24 +42,24 @@ sendEx(arr*) {
 ;NOTE 可直接获取的不依赖复制
 ;bVimNormal 获取 Vim normal模式下的内容
 hyf_getSelect(bVimNormal:=false, bInput:=false) {
-    if WinActive("ahk_class XLMAIN") {
+    if (WinActive("ahk_class XLMAIN")) {
         if (ControlGetClassNN(ControlGetFocus()) == "EXCEL71")
             return rng2str(ox().selection)
-    } else if WinActive("ahk_class Vim") { ;Vim 用接口直接获取内容，无需复制
+    } else if (WinActive("ahk_class Vim")) { ;Vim 用接口直接获取内容，无需复制
         oVim := ComObjActive("Vim.application")
         if (oVim.eval("mode()") == "n") {
-            if bVimNormal {
+            if (bVimNormal) {
                 cword := oVim.eval('iconv(expand("<cword>"),"utf-8","cp936")')
-                if strlen(cword)
+                if (cword != "")
                     return cword
             }
-        } else if instr(oVim.eval("mode()"), "v") { ;见 _Vim.getSelect()
+        } else if (instr(oVim.eval("mode()"), "v")) { ;见 _Vim.getSelect()
             oVim.SendKeys("y")
             res := oVim.eval('iconv(@0,"utf-8","cp936")')
             oVim.SendKeys("gv")
             return res
         }
-    } else if WinActive("ahk_class #32770") {
+    } else if (WinActive("ahk_class #32770")) {
         res := getTextIn32770()
         if (res != "")
             return res
@@ -83,13 +83,13 @@ hyf_getSelect(bVimNormal:=false, bInput:=false) {
     clipSave := A_Clipboard
     A_Clipboard := ""
     sleep(10)
-    if WinActive("ahk_class VirtualConsoleClass") {
+    if (WinActive("ahk_class VirtualConsoleClass")) {
         send("{enter}")
     } else {
         send("{ctrl down}c{ctrl up}")
     }
-    if ClipWait(0.2) {
-        if 0
+    if (ClipWait(0.2)) {
+        if (0)
             res := trim(A_Clipboard) ;TODO 可能会耗时较长
         else
             res := A_Clipboard
@@ -109,7 +109,7 @@ hyf_getSelect(bVimNormal:=false, bInput:=false) {
         if (rng.cells.count == 1)
             return rng.text
         res := ""
-        if !isobject(funcObj)
+        if (!isobject(funcObj))
             funcObj := x=>x
         arrV := rng.value
         loop(rng.rows.count) {
@@ -133,7 +133,7 @@ hyf_getSelect(bVimNormal:=false, bInput:=false) {
         }
     }
     getTextIn32770() {
-        if StrLower(ControlGetClassNN(ControlGetFocus())) ~= "(static|button)" {
+        if (StrLower(ControlGetClassNN(ControlGetFocus())) ~= "(static|button)") {
             /*
             ---------------------------
             KwMusic.exe - 系统错误
@@ -322,7 +322,7 @@ hyf_inputOption(arr, sTips:="", bOne:=false) {
     oGui.OnEvent("escape", doEscape)
     oGui.OnEvent("close", doEscape)
     oGui.SetFont("cRed s22")
-    if strlen(sTips)
+    if (sTips != "")
         oGui.AddText("x10", sTips . "`n")
     oGui.SetFont("cDefault s13")
     funOpt := (x)=>"ys w200 v" . x
@@ -332,17 +332,17 @@ hyf_inputOption(arr, sTips:="", bOne:=false) {
         if (a.length > 3) ;NOTE 有第4参数，则跳过
             continue
         if (a.length > 2) { ;NOTE 核心判断
-            if isobject(a[3]) {
+            if (isobject(a[3])) {
                 oGui.AddComboBox(funOpt(a[2]), a[3])
             } else {
-                if instr(a[2], "|") { ;有选项
+                if (instr(a[2], "|")) { ;有选项
                     opt := StrSplit(a[2], "|")[1]
                     a[2] := StrSplit(a[2], "|")[2]
                     if (opt == "n") { ;限制为数字
                         oGui.AddEdit(funOpt(a[2]) . " number", a[3]).OnEvent("change", editChange)
                     } else if (opt == "b") { ;boolean
                         oGui.SetFont("cRed")
-                        if a[3]
+                        if (a[3])
                             oGui.AddCheckbox(funOpt(a[2]) . " checked", "是")
                         else
                             oGui.AddCheckbox(funOpt(a[2]), "是")
@@ -391,53 +391,13 @@ hyf_inputOption(arr, sTips:="", bOne:=false) {
                 v := oGui[a[2]].text
             if (type(v) == "String")
                 v := trim(v) ;TODO 是否trim
-            if strlen(v)
+            if (v != "")
                 objRes[a[2]] :=  v
         }
         oGui.destroy()
     }
     doEscape(oGui, p*) {
         oGui.destroy()
-    }
-}
-
-;网址没在内，因为有依赖 _CB(var)
-hyf_do(var) {
-    if !(var is string) {
-        var()
-        return 1
-    }
-    try {
-        if (type(%var%) ~= "^(ObjBindMethod|Closure|BoundFunc|Func)$") {
-            %var%()
-            return 1
-        }
-    }
-    if !(var ~= "i)^[a-z]:[\\/]") {
-        if (var ~= "^\w+\(\S*\)$") { ;运行function()
-            arr := StrSplit(substr(var, 1, strlen(var)-1), "(")
-            (arr[2]=="") ? %arr[1]%() : %arr[1]%(arr[2])
-            return 1
-        } else if (var ~= "^(\w+)\.(\w+)\((.*)\)$") { ;NOTE 运行 class.method(param1)
-            RegExMatch(var, "^(\w+)\.(\w+)\((.*)\)$", &m)
-            (m[3] != "") ?  %m[1]%.%m[2]%(m[3]) : %m[1]%.%m[2]%()
-            return 1
-        }
-        if (var ~= '^\{\w{8}(-\w{4}){3}-\w{12}\}$') { ;clsid
-            var := "explorer.exe shell:::" . var
-        } else if (var ~= '^\w+\.cpl(,@?\d?)*$') { ;cpl
-            var := "control.exe " . var
-            ;} else if (substr(var,1,12) == "ms-settings:") {
-            ;    var := var
-            ;} else if (var ~= 'i)^control(\.exe)?\s+\w+\.cpl$') {
-            ;    var := var
-        }
-        tooltip(var)
-        run(var)
-        SetTimer(tooltip, -1000)
-        return 1
-    } else { ;打开文件，需要判断文件是否已打开，所以不处理
-        return 0
     }
 }
 
@@ -455,7 +415,7 @@ hyf_runByVim(fp, line:=0, params:="--remote-tab-silent") { ;用文本编辑器�
                 params .= "/"
         }
     }
-    if ProcessExist("gvim.exe")
+    if (ProcessExist("gvim.exe"))
         WinShow("ahk_class Vim")
     run(format('d:\TC\soft\Vim\gvim.exe {1} "{2}"', params, fp))
     WinWait("ahk_class Vim")
@@ -485,7 +445,7 @@ hyf_runByIE(url:="") { ;关闭当前窗口
 ;arrNoExt 从后向前找第一个匹配的文件路径
 hyf_findFile(dirIn, arrNoExt, ext:="") {
     ;如果是文件夹，找不到就返回空，如果是文件，找不到就返回文件路径
-    if DirExist(dirIn) {
+    if (DirExist(dirIn)) {
         dir := dirIn
         res := ""
     } else {
@@ -495,7 +455,7 @@ hyf_findFile(dirIn, arrNoExt, ext:="") {
     ;msgbox(FileExist(dirIn) . "`n" . dir . "`n" . dirIn)
     if (ext == "") ;FIXME
         return res
-    if !isobject(arrNoExt)
+    if (!isobject(arrNoExt))
         arrNoExt := [arrNoExt]
     loop(arrNoExt.length) {
         fp := findPath(arrNoExt[-A_Index]) ;NOTE 从后向前遍历
@@ -511,12 +471,12 @@ hyf_findFile(dirIn, arrNoExt, ext:="") {
                     return A_LoopFileFullPath
             } else {
                 fp := format("{1}\{2}.{3}", A_LoopFileFullPath,noExt,ext)
-                if FileExist(fp)
+                if (FileExist(fp))
                     return fp
             }
         }
         ;在主目录中找
-        if FileExist(format("{1}\{2}.{3}", dir,noExt,ext))
+        if (FileExist(format("{1}\{2}.{3}", dir,noExt,ext)))
             return format("{1}\{2}.{3}", dir,noExt,ext)
     }
 }
@@ -627,7 +587,7 @@ hyf_onekeyHide() {
     regSound := "sound"
     send("{LWin down}d{LWin up}")
     DetectHiddenWindows(false)
-    if WinExist("ahk_class Shell_TrayWnd") {
+    if (WinExist("ahk_class Shell_TrayWnd")) {
         tooltip("hide")
         hideGeneral()
         WinHide("ahk_class Shell_TrayWnd")
@@ -681,7 +641,7 @@ hyf_onekeyHide() {
             "ahk_class Vim",
         ]
         for winTitle in arrWinTitle {
-            if WinExist(winTitle)
+            if (WinExist(winTitle))
                 WinHide
         }
     }
@@ -697,7 +657,7 @@ hyf_getDocumentPath(winTitle:="") { ;获取当前窗口编辑文档的路径
         return ComObjActive("Word.application").ActiveDocument.fullname
     else if (exeName == "powerpnt.exe")
         return ComObjActive("Powerpoint.application").ActivePresentation.fullname
-    else if RegExMatch(substr(getCommandLine(winTitle), 4), "[a-zA-Z]:[^:]+$", &m)
+    else if (RegExMatch(substr(getCommandLine(winTitle), 4), "[a-zA-Z]:[^:]+$", &m))
         return m[0]
     getCommandLine(winTitle:="") {
         for item in ComObjGet("winmgmts:").ExecQuery(format("Select * from Win32_Process where ProcessId={1}", WinGetPID(winTitle)))
@@ -718,7 +678,7 @@ hyf_hwnds(winTitle, funHwnd:="") {
         catch
             continue
         if (isobject(funHwnd)) {
-            if funHwnd.call(winHwnd)
+            if (funHwnd.call(winHwnd))
                 arr.push(winHwnd)
         } else if (instr(winTitle, "ahk_class") && titleLoop ~= "\S") { ;指定了 ahk_class 则非空标题就添加
             arr.push(winHwnd)
@@ -778,7 +738,7 @@ hyf_removeUSB(bUPan:=true) { ;移除U盘
     l := strlen(u)
     if (!l) {
         arr := hardList()
-        if arr.length {
+        if (arr.length) {
             return (eject("u") == 1) ;TODO 如何获取移动硬盘盘符
         } else {
             tooltip("没找到U盘")
@@ -831,7 +791,7 @@ hyf_removeUSB(bUPan:=true) { ;移除U盘
             dllcall("SetupAPI\CM_Request_Device_Eject" ,"uint",nDID, "Ptr*",&nVT:=1, "ptr",var, "int",260, "int",0)
 
         }
-        if nVT {
+        if (nVT) {
             return [
                 "PNP_VetoTypeUnknown`nThe specified operation was rejected for an unknown reason.",
                 "PNP_VetoLegacyDevice`nThe device does not support the specified PnP operation.",
@@ -904,7 +864,7 @@ hyf_cmd(strCode, callback:="", encode:="CP936") { ;  GAHK32 ; Modified version :
     while (dllcall("ReadFile", "ptr",hStdInRd, "ptr",oBuf, "UInt",4094, "ptr*",&nSz:=0, "ptr",0)) {
         sThis := strget(oBuf, nSz, encode)
         sRes .= sThis
-        if isobject(callback)
+        if (isobject(callback))
             callback.call(A_Index, sThis)
     }
     ; https://docs.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-getexitcodeprocess
@@ -946,7 +906,7 @@ hyf_isInstalled(funRegname) {
     ]
     for k, v in arr {
         loop reg, v, "K" {
-            if funRegname.call(A_LoopRegName)
+            if (funRegname.call(A_LoopRegName))
                 return true
         }
     }
@@ -955,7 +915,7 @@ hyf_isInstalled(funRegname) {
 ;-----------------------------------Excel__-----------------------------------
 
 ox(winTitle:="ahk_class XLMAIN") {
-    if WinExist(winTitle)
+    if (WinExist(winTitle))
         ctlID := ControlGetHwnd("EXCEL71")
     else
         return ComObject("Excel.application")
@@ -983,13 +943,13 @@ hyf_delete0(num) {
 ;一维时，如果 toRows 则转成多行
 ;二维时，如果 toRows 则列数要通过arr[1]遍历获得
 hyf_arr2arrayA(arr, toRows:=false) {
-    if !arr.length
+    if (!arr.length)
         return
     rs := arr.length
-    if isobject(arr[1]) {
+    if (isobject(arr[1])) {
         ;获取列数 cs
         cs := 0
-        if toRows {
+        if (toRows) {
             if (toRows > 1) ;直接当列数
                 cs := toRows
             else {
@@ -1007,7 +967,7 @@ hyf_arr2arrayA(arr, toRows:=false) {
                 arrA[i-1,A_Index-1] := arr[i][A_Index]
         }
     } else { ;单维
-        if toRows {
+        if (toRows) {
             arrA := ComObjArray(12, rs, 1)
             loop(rs)
                 arrA[A_Index-1,0] := arr[A_Index]
@@ -1023,7 +983,7 @@ hyf_arr2arrayA(arr, toRows:=false) {
 ;普通数组转VBA标准数组
 ;一维时，如果 toRows 则转成多行
 hyf_arr2cell(arr, cell:="", toRows:=false) {
-    if !isobject(cell)
+    if (!isobject(cell))
         cell := ox().ActiveCell
     hyf_arrayA2cell(hyf_arr2arrayA(arr, toRows), cell)
 }
@@ -1031,14 +991,14 @@ hyf_arr2cell(arr, cell:="", toRows:=false) {
 ;nf为设置 NumberFormat
 hyf_arrayA2cell(arrA, cell, nf:="") {
     rng := cell.resize(arrA.MaxIndex(1)+1,arrA.MaxIndex(2)+1)
-    if strlen(nf)
+    if (nf != "")
         rng.NumberFormat := nf
     rng.value := arrA
 }
 
 hyf_getWorkbook(fp, bActive:=false) {
     ;wb
-    if isobject(fp)
+    if (isobject(fp))
         return fp
     ;已打开
     SplitPath(fp, &fn)
@@ -1046,7 +1006,7 @@ hyf_getWorkbook(fp, bActive:=false) {
         xl := ox("ahk_id " . hwnd)
         try { ;可能是进程残留
             for wb in xl.workbooks {
-                SplitPath(wb.name, ,,, &noExt)
+                SplitPath(wb.name,,,, &noExt)
                 if (wb.name = fn || noExt = fn) { ;为什么要 noExt？
                     if (bActive)
                         WinActivate("ahk_id " . hwnd)
@@ -1100,13 +1060,13 @@ hyf_dir(cls, funFilter:="", bShowValue:=false) {
     }
     return arr
     pushProp(prop) {
-        if bShowValue
+        if (bShowValue)
             arr.push([prop, cls.%prop%])
         else
             arr.push(prop)
     }
     pushMethod(method) {
-        if bShowValue
+        if (bShowValue)
             arr.push([method, cls.%method%()])
         else
             arr.push(method)
@@ -1141,14 +1101,14 @@ hyf_objProps(cls, funFilter:="") {
 */
 UUIDCreate(mode:=1, format:="", &UUID:="") {
     UuidCreate := "Rpcrt4\UuidCreate"
-    if instr("02", mode)
+    if (instr("02", mode))
         UuidCreate .= mode ? "Sequential" : "Nil"
     UUID := buffer(16, 0) ;// long(UInt) + 2*UShort + 8*UChar
     if (dllcall(UuidCreate, "ptr",&UUID) == 0)
         && (dllcall("Rpcrt4\UuidToString", "ptr",&UUID, "uint*",&pString:=0) == 0) {
         string := strget(pString)
         dllcall("Rpcrt4\RpcStringFree", "uint*",&pString:=0)
-        if instr(format, "U")
+        if (instr(format, "U"))
             dllcall("CharUpper", "ptr",&string)
         return instr(format, "{") ? "{" . string . "}" : string
     }
@@ -1166,7 +1126,7 @@ hyjson2arr(obj, mark:=1) {
     for k, v in obj {
         if (v["key"] == "") ;首先过滤key为空的 NOTE
             continue
-        if v.has("sub") && isobject(v["sub"]) { ;为目录
+        if (v.has("sub") && isobject(v["sub"])) { ;为目录
             for v in hyjson2arr(v["sub"], 0)
                 arr.push(v)
         } else {
@@ -1185,7 +1145,7 @@ hyjson2arr(obj, mark:=1) {
 hyf_pipeRun(code, fn:="", callback:=0) {
     if (fn == "")
         fn := A_ScriptDir
-    if callback {
+    if (callback) {
         CopyOfData := ""
         OnMessage(0x4a, (p*)=>Receive_WM_COPYDATA(p*))
         strCode := "
@@ -1218,7 +1178,7 @@ hyf_pipeRun(code, fn:="", callback:=0) {
     oExec := shell.exec(A_AhkPath . " *")
     oExec.StdIn.write(strCode)
     oExec.StdIn.close()
-    if callback {
+    if (callback) {
         while (CopyOfData == "") ;NOTE 等待
             sleep(100)
         return CopyOfData
@@ -1242,7 +1202,7 @@ hyf_pipeRun(code, fn:="", callback:=0) {
 ;msgbox(json.stringify(arrRes, 4))
 hyf_tooltipAsMenu(arrIn, strTip:="", x:=8, y:=8) {
     static level := 20
-    if !arrIn.length
+    if (!arrIn.length)
         return
     if !isobject(arrIn[1]) { ;一维转成[hot, item]
         for k, v in arrIn
@@ -1308,7 +1268,7 @@ hyf_tooltipAsMenu(arrIn, strTip:="", x:=8, y:=8) {
 ;bDistinct 是否去重
 hyf_selectByArr(arr2, indexKey:=1, bAddPy:=false, bDistinct:=false) {
     ;NOTE 转成二维(以第1项为主，用来生成拼音什么的，第2项用序号)
-    if !arr2.length
+    if (!arr2.length)
         return []
     if !isobject(arr2[1]) { ;一维转成[hot, item]
         for k, v in arr2
@@ -1396,11 +1356,11 @@ hyf_selectByArr(arr2, indexKey:=1, bAddPy:=false, bDistinct:=false) {
         oLv.opt("-Redraw")
         ;获取匹配项
         arrKeysMatch := []
-        if oCB1.value
+        if (oCB1.value)
             arrKeysMatch.push(1)
         ;if bAddPy && oCB2.value
         ;    arrKeysMatch.push(2)
-        if !arrKeysMatch.length
+        if (!arrKeysMatch.length)
             return
         ;msgbox(json.stringify(arrKeysMatch, 4))
         sInput := ctl.text
@@ -1492,22 +1452,22 @@ hyf_selectByArr(arr2, indexKey:=1, bAddPy:=false, bDistinct:=false) {
 
 hyf_obj2Str(obj, char:="`n", level:=0) {
     static t := "", s := ""
-    if level
+    if (level)
         t .= A_Tab ;前置tab显示级数
     else
         t := "", s := "" ;防止多次运行时结果叠加
-    if !isobject(obj)
+    if (!isobject(obj))
         return "非对象，值为`n" . obj
     try { ;FIXME 无故出错
         for k, v in obj {
-            if isobject(v) {
+            if (isobject(v)) {
                 s .= t . k . char
                 %A_ThisFunc%(v, char, level + 1)
                 t := substr(t, 2) ;删除一个tab
             } else {
                 ;if (strlen(v) > 100) ;TODO 删除太长的内容
                 ;    v := substr(v, 1, 100) . "..."
-                if char == "`n" { ;NOTE 添加key信息
+                if (char == "`n") { ;NOTE 添加key信息
                     s .= t . k . A_Tab . v . char
                 } else
                     s .= t . v . char
@@ -1521,7 +1481,7 @@ hyf_obj2Str(obj, char:="`n", level:=0) {
 }
 
 hyf_objView(obj, str:="", char:="`n", n:=0) {
-    if strlen(str)
+    if (str != "")
         return msgbox(str . "`n" . hyf_obj2Str(obj,char),,0x40000+n)
     else
         return msgbox(hyf_obj2Str(obj,char),,0x40000+n)
@@ -1529,7 +1489,7 @@ hyf_objView(obj, str:="", char:="`n", n:=0) {
 
 hyf_objToolTip(obj, str:="", t:=0) {
     res := str ? str . "`n" . hyf_obj2Str(obj, "`n") : hyf_obj2Str(obj, "`n")
-    if !t {
+    if (!t) {
         tooltip(res)
         hyf_input()
         tooltip
@@ -1552,7 +1512,7 @@ hyf_objClip(obj, str:="", char:="`n", n:=0) {
 ;defButton是默认按钮前面的text内容
 ;hyf_GuiMsgbox(map("a",132,"b",22), "aaa")
 hyf_GuiMsgbox(obj, title:="", defButton:="", oGui:="", times:=0) {
-    if !isobject(obj)
+    if (!isobject(obj))
         return
     if (obj is array && !obj.length)
         return
@@ -1567,7 +1527,7 @@ hyf_GuiMsgbox(obj, title:="", defButton:="", oGui:="", times:=0) {
     for k, v in obj {
         x := times*30 + 10 ;缩进30，离左边缘10
         oGui.AddText("section x" . x, k)
-        if isobject(v)
+        if (isobject(v))
             %A_ThisFunc%(v, title, defButton, oGui, times+1)
         else if (defButton != "") && (k = defButton)
             oGui.AddButton("ys yp-5 default", v).OnEvent("click", hyf_GuiMsgbox_1)
@@ -1595,7 +1555,7 @@ hyf_GuiListView(arr2, arrCol:="") {
         return
     }
     wCol := 100
-    if !isobject(arr2)
+    if (!isobject(arr2))
         return
     oGui := gui()
     oGui.OnEvent("escape",doEscape)
@@ -1664,10 +1624,10 @@ hyf_GuiListView(arr2, arrCol:="") {
 
 reduce(fun, arr, v0:="") {
     if (arr.length == 1) {
-        if strlen(v0)
+        if (v0 != "")
             return fun.call(v0, arr[1])
     }
-    res := strlen(v0) ? fun.call(v0, arr[1]) : arr[1]
+    res := (v0 != "") ? fun.call(v0, arr[1]) : arr[1]
     loop(arr.length-1)
         res := fun.call(res, arr[A_Index+1])
     return res

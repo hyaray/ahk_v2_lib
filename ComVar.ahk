@@ -6,7 +6,7 @@ class ComVar {
     * ### example
     * `var1 := ComVar('string'), MsgBox(var1[])`
     * 
-    * `var2 := ComVar([1,2,3,4], , true)`
+    * `var2 := ComVar([1,2,3,4],, true)`
     * 
     * `var3 := ComVar(ComValue(0xb, -1))`
     * @param vType Variant's type, VT_VARIANT(default)
@@ -16,14 +16,14 @@ class ComVar {
         static size := 8 + 2 * A_PtrSize
         this.var := buffer(size, 0), this.owner := true
         this.ref := ComValue(0x4000 | vType, this.var.Ptr + (vType = 0xC ? 0 : 8))
-        if IsSet(vVal) {
+        if (isset(vVal)) {
             if (type(vVal) == "ComVar") {
                 this.var := vVal.var, this.ref := vVal.ref, this.obj := vVal, this.owner := false
             } else {
                 if (isobject(vVal)) {
                     if (vType != 0xC)
                         this.ref := ComValue(0x400C, this.var.ptr)
-                    if convert && (vVal is Array) {
+                    if (convert && (vVal is array)) {
                         switch type(vVal[1]) {
                             case "Integer": vType := 3
                             case "String": vType := 8
