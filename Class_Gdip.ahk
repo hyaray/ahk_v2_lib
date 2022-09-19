@@ -60,7 +60,7 @@
 ;            "→←", ["右左",(p*)=>msgbox("→←")],
 ;))
 
-#dllLoad gdiplus.dll
+#dllload gdiplus.dll
 
 class _GDIP {
 
@@ -77,7 +77,7 @@ class _GDIP {
 
     __delete() {
         dllcall("gdiplus\GdiplusShutdown", "ptr",this.pToken)
-        if hModule := dllcall("GetModuleHandle", "str","gdiplus", "ptr")
+        if (hModule := dllcall("GetModuleHandle", "str","gdiplus", "ptr"))
             dllcall("FreeLibrary", "ptr",hModule)
         return 0
     }
@@ -123,7 +123,7 @@ class _GDIP {
     ;转成 [100, 200, 110, 160]
     static rectDeal(aRect, arrWH) {
         for k, v in aRect {
-            if isobject(v)
+            if (isobject(v))
                 aRect[k] := v.call(arrWH)
             else if (v < 0)
                 aRect[k] := arrWH[mod(k-1,2)+1] + v ;1,3转成 w+v, 2,4转成 h+v
@@ -137,7 +137,7 @@ class _GDIP {
     ;aRect := _GDIP.getRect((p*)=>GetKeyState(RegExReplace(A_ThisLabel, ".*\s"), "P"))
     ;同 _Mouse.getRect
     static getRect(funDo:="") {
-        if !isobject(funDo)
+        if (!isobject(funDo))
             funDo := (p*)=>GetKeyState("LButton", "P")
         ;截图时显示的Gui
         oGui := gui("-caption +AlwaysOnTop +Border +E0x80000 +LastFound +OwnDialogs +ToolWindow")
@@ -187,7 +187,7 @@ class _GDIP {
     static rectMark(aRects, arrStyle:=unset, keyWaitClose:="") {
         if !isobject(aRects[1])
             aRects := [aRects]
-        if !isset(arrStyle)
+        if (!isset(arrStyle))
             arrStyle := []
         clPen := arrStyle.length >= 1 ? arrStyle[1] : 0xffFF0000
         wPen := arrStyle.length >= 2 ? arrStyle[2] : 2
@@ -329,7 +329,7 @@ class _GDIP {
         resAll := getRes()
         ;loop(20)
         ;    tooltip(,,, A_Index)
-        if objDo.has(resAll) {
+        if (objDo.has(resAll)) {
             objDo[resAll][2]()
         } else {
             return
@@ -365,7 +365,7 @@ class _GDIP {
                 return
             sTip := ""
             for k,v in objDo {
-                if substr(k, 1, strlen(resAll)) == resAll {
+                if (substr(k, 1, strlen(resAll)) == resAll) {
                     sSpace := ""
                     loop(lenKey-strlen(k))
                         sSpace .= "　"
@@ -397,10 +397,10 @@ class _GDIP {
             ;1.汇总
             ;1.合并
             bTips := false
-            if 1 {
+            if (1) {
                 l := arrRecord.length
                 _ := arrRecord[l][1]
-                if bTips
+                if (bTips)
                     tooltip(toTable(arrRecord),10,0, level:=1)
                 loop(l-1) { ;逆序遍历并合并
                     i := l-A_Index
@@ -412,7 +412,7 @@ class _GDIP {
                         _ := arrRecord[i][1]
                     }
                 }
-                if bTips
+                if (bTips)
                     tooltip("合并`n" . toTable(arrRecord),200,0, ++level)
                 if (arrRecord.length == 1)
                     return arrRecord[1][1]
@@ -425,7 +425,7 @@ class _GDIP {
                     if (abs(arrClone[i][4]-arrClone[i][2]) <= lenOmit && abs(arrClone[i][5]-arrClone[i][3]) <= lenOmit)
                         arrClone.removeat(i)
                 }
-                if bTips
+                if (bTips)
                     tooltip("临时删除短距离`n" . toTable(arrRecord),400,0, ++level)
                 ;3连接
                 resAll := "" ;所有的方向
@@ -454,7 +454,7 @@ class _GDIP {
         }
         toTable(arr) {
             res := ""
-            if !arr.length
+            if (!arr.length)
                 return ""
             for arr1 in arr
                 res .= format("{1}  {2},{3}  {4},{5}`n", arr1*)
@@ -567,7 +567,7 @@ class _GDIP {
     static MDMF_GetInfo(HMON) {
         bufMIEX := buffer(40 + (32 << 1))
         numput("uint", bufMIEX.size, bufMIEX)
-        if dllcall("User32.dll\GetMonitorInfo", "Ptr",HMON, "Ptr",bufMIEX) {
+        if (dllcall("User32.dll\GetMonitorInfo", "Ptr",HMON, "Ptr",bufMIEX)) {
             MonName := strget(bufMIEX + 40, 32)	; CCHDEVICENAME = 32
             MonNum := RegExReplace(MonName, ".*(\d+)$", "$1")
             return {	Name:		(Name := strget(bufMIEX + 40, 32))
@@ -608,7 +608,7 @@ class GDIP_PBitmap extends _GDIP {
     ;oHBitmap
     ;[x,y,w,h] aRect
     __new(w:="", h:=0) {
-        if isobject(w) {
+        if (isobject(w)) {
             if (w is GDIP_HBitmap)
                 this.GdipCreateBitmapFromHBITMAP(w, Palette:=0)
             else if (w.length == 2)
@@ -616,9 +616,11 @@ class GDIP_PBitmap extends _GDIP {
             else if (w.length == 4)
                 this.getFromRect(w)
         } else {
-            if (w ~= "^\d+$")
+            if (w == "")
+                this.getFromClipboard()
+            else if (w ~= "^\d+$")
                 this.GdipCreateBitmapFromScan0(w, h)
-            else if FileExist(w)
+            else if (FileExist(w))
                 this.GdipCreateBitmapFromFile(w)
             ; else if (w == "") ;否则就创建个空白的对象(后面再添加图片)
             ;     msgbox(A_ThisFunc . "`n" . w . "`n" . h)
@@ -632,7 +634,7 @@ class GDIP_PBitmap extends _GDIP {
 
     GdipCreateBitmapFromScan0(w, h, PixelFormat:=0x26200A) {
         dllcall("gdiplus\GdipCreateBitmapFromScan0", "int",w, "int",h, "int",0, "int",PixelFormat, "ptr",0, "ptr*",&pBitmap:=0)
-        if !pBitmap {
+        if (!pBitmap) {
             msgbox(A_ThisFunc . "`n" . w . "`n" . h)
         }
         this.w := w
@@ -647,7 +649,7 @@ class GDIP_PBitmap extends _GDIP {
         this.h := 0
         this.ptr := pBitmap
         ; SplitPath(fp,,, ext)
-        ; if RegExMatch(ext, "^(i:exe|dll)$") {
+        ; if (RegExMatch(ext, "^(i:exe|dll)$")) {
         ;     Sizes := IconSize ? IconSize : 256 "|" 128 "|" 64 "|" 48 "|" 32 "|" 16
         ;     BufSize := 16 + (2*A_PtrSize)
         ;     buf := buffer(BufSize, 0)
@@ -700,26 +702,26 @@ class GDIP_PBitmap extends _GDIP {
     }
 
     getFromClipboard() {
-        if !dllcall("OpenClipboard", "ptr",A_ScriptHwnd)
-            return
-        idData := 2
-        if !dllcall("IsClipboardFormatAvailable", "uint",idData)
-            throw Error('Clipboard does not have "CF_BITMAP" stream data.')
-        if !(hData := dllcall("GetClipboardData", "uint",idData, "ptr"))
-            throw Error("Shared clipboard data has been deleted.")
-        ; Allow the stream to be freed while leaving the hData intact.
+        idData := 8
+        if (!dllcall("IsClipboardFormatAvailable", "uint",8))
+            return -2 ;throw Error('Clipboard does not have "CF_BITMAP" stream data.')
+        if (!dllcall("OpenClipboard", "ptr",A_ScriptHwnd)) ;可用0代替？
+            return -1
+        if !(hBitmap := dllcall("GetClipboardData", "uint",2, "ptr"))
+            return -3 ;throw Error("Shared clipboard data has been deleted.")
+        ; Allow the stream to be freed while leaving the hBitmap intact.
         ; Please read: https://devblogs.microsoft.com/oldnewthing/20210930-00/?p=105745
-        dllcall("gdiplus\GdipCreateBitmapFromHBITMAP", "ptr",hData, "ptr",0, "ptr*",&pBitmap:=0)
-        dllcall("DeleteObject", "ptr", hData)
+        dllcall("gdiplus\GdipCreateBitmapFromHBITMAP", "ptr",hBitmap, "ptr",0, "ptr*",&pBitmap:=0)
         dllcall("CloseClipboard")
-        return pBitmap
+        dllcall("DeleteObject", "ptr", hBitmap)
+        return this.ptr := pBitmap
     }
 
     ; Thanks tic - https://www.autohotkey.com/boards/viewtopic.php?t=6517
     getFromWindow(winTitle) {
         hwnd := WinExist(winTitle)
         ; Restore the window if minimized! Must be visible for capture.
-        if dllcall("IsIconic", "ptr",hwnd)
+        if (dllcall("IsIconic", "ptr",hwnd))
             dllcall("ShowWindow", "ptr",hwnd, "int",4)
         ; Get the width and height of the client window.
         dllcall("GetClientRect", "ptr",hwnd, "ptr",Rect:=buffer(16)) ; sizeof(RECT) = 16
@@ -744,7 +746,7 @@ class GDIP_PBitmap extends _GDIP {
     ;Thanks tic - https://www.autohotkey.com/boards/viewtopic.php?t=6517
     ;这个不返回 pStream
     getFromRect(aRect) {
-        if 0
+        if (0)
             this.GdipCreateBitmapFromHBITMAP(GDIP_HBitmap(aRect))
         else {
             hdc := dllcall("CreateCompatibleDC", "ptr",0, "ptr")
@@ -767,33 +769,18 @@ class GDIP_PBitmap extends _GDIP {
         return this.ptr := pBitmap
     }
 
-    ; getFromClipboard() {
-    ;     if !dllcall("IsClipboardFormatAvailable", "uint",8)
-    ;         return -2
-    ;     if !dllcall("OpenClipboard", "ptr",0)
-    ;         return -1
-    ;     if !hBitmap := dllcall("GetClipboardData", "uint",2, "ptr")
-    ;         return -3
-    ;     if !pBitmap := this.GdipCreateBitmapFromHBITMAP(oHBitmap)
-    ;         return -4
-    ;     if !dllcall("CloseClipboard")
-    ;         return -5
-    ;     dllcall("gdi32\DeleteObject", "ptr",hBitmap)
-    ;     return this.ptr := pBitmap
-    ; }
-
     ; getFromHICON(hIcon) {
     ;     dllcall("gdiplus\GdipCreateBitmapFromHICON",A_PtrSize ? "ptr" : "uint",hIcon, A_PtrSize ? "ptr*" : "uint*",&pBitmap:=0)
     ;     return this.ptr := pBitmap
     ; }
 
     getSize(&w:=0, &h:=0) {
-        if !this.w {
+        if (!this.w) {
             dllcall("gdiplus\GdipGetImageWidth", "ptr",this, "uint*",&w:=0)
             this.w := w
         } else
             w := this.w
-        if !this.h {
+        if (!this.h) {
             dllcall("gdiplus\GdipGetImageHeight", "ptr",this, "uint*",&h:=0)
             this.h := h
         } else
@@ -801,14 +788,14 @@ class GDIP_PBitmap extends _GDIP {
         return [this.w, this.h]
     }
     getWidth() {
-        if !this.w {
+        if (!this.w) {
             dllcall("gdiplus\GdipGetImageWidth", "ptr",this, "uint*",&w:=0)
             this.w := w
         }
         return this.w
     }
     getHeight() {
-        if !this.h {
+        if (!this.h) {
             dllcall("gdiplus\GdipGetImageHeight", "ptr",this, "uint*",&h:=0)
             this.h := h
         }
@@ -830,7 +817,7 @@ class GDIP_PBitmap extends _GDIP {
         this.ptr1 := this.ptr
         this.getSize(&w, &h)
         ;新图宽高
-        if isobject(PercentOrWH) {
+        if (isobject(PercentOrWH)) {
             wNew := integer(PercentOrWH[1])
             hNew := integer(PercentOrWH[2])
         } else {
@@ -844,7 +831,7 @@ class GDIP_PBitmap extends _GDIP {
         oGraphics.GdipSetSmoothingMode(4)
         oGraphics.GdipDrawImageRectRect(this.ptr1, [0,0,wNew,hNew], [0,0,w,h])
         oGraphics := ""
-        if Dispose
+        if (Dispose)
             dllcall("gdiplus\GdipDisposeImage", "ptr",this)
     }
 
@@ -900,7 +887,7 @@ class GDIP_PBitmap extends _GDIP {
         oGraphics.GdipSetSmoothingMode(4)
         oGraphics.GdipDrawImageRectRect(this.ptr1, [0,0,wNew,hNew], [0,0,w,h])
         oGraphics := ""
-        if Dispose
+        if (Dispose)
             dllcall("gdiplus\GdipDisposeImage", "ptr",this)
     }
 
@@ -916,14 +903,14 @@ class GDIP_PBitmap extends _GDIP {
         oGraphics.GdipSetSmoothingMode(4)
         oGraphics.GdipDrawImageRectRect(this.ptr1, [0,0,wNew,hNew], [left,up,wNew,hNew])
         oGraphics := ""
-        if Dispose
+        if (Dispose)
             dllcall("gdiplus\GdipDisposeImage", "ptr",this)
     }
 
     ;FIXME 马赛克
     ; GdipPixelateBitmap(pBitmap, oBitmapOut, BlockSize) {
     ;     if (!PixelateBitmap) {
-    ;         if A_PtrSize != 8 {
+    ;         if (A_PtrSize != 8) {
     ;             MCode_PixelateBitmap := "
     ;             (ltrim join
     ;             558BEC83EC3C8B4514538B5D1C99F7FB56578BC88955EC894DD885C90F8E830200008B451099F7FB8365DC008365E000894DC88955F08945E833FF897DD4
@@ -1047,25 +1034,25 @@ class GDIP_PBitmap extends _GDIP {
         ; Throw if the oInput is an empty string.
         if (oInput == "")
             throw Error("oInput data is an empty string.")
-        if IsObject(oInput) {
+        if (isobject(oInput)) {
             if (oInput.base.HasOwnProp("__class") && oInput.base is ClipboardAll) {
-                if dllcall("IsClipboardFormatAvailable", "uint",dllcall("RegisterClipboardFormat", "str","png", "uint"))
+                if (dllcall("IsClipboardFormatAvailable", "uint",dllcall("RegisterClipboardFormat", "str","png", "uint")))
                     return "clipboard_png"
-                if dllcall("IsClipboardFormatAvailable", "uint",2) ;CF_BITMAP
+                if (dllcall("IsClipboardFormatAvailable", "uint",2)) ;CF_BITMAP
                     return "clipboard"
                 throw Error("Clipboard format not supported.")
             }
-            if oInput is GDIP_PBitmap ;NOTE hy
+            if (oInput is GDIP_PBitmap) ;NOTE hy
                 return "GDIP_PBitmap"
-            if oInput.HasOwnProp("pBitmap") ; A "object" has a pBitmap property that points to an internal GDI+ bitmap.
+            if (oInput.HasOwnProp("pBitmap")) ; A "object" has a pBitmap property that points to an internal GDI+ bitmap.
                 return "object"
-            if oInput.HasOwnProp("ptr") && oInput.HasOwnProp("size")
+            if (oInput.HasOwnProp("ptr") && oInput.HasOwnProp("size"))
                 return "buffer"
             if (oInput[1] ~= "^-?\d+$" && oInput[2] ~= "^-?\d+$" && oInput[3] ~= "^-?\d+$" && oInput[4] ~= "^-?\d+$") ;aRect
                 return "screenshot"
         }
         ; A "window" is anything considered a Window Title including ahk_class and "A".
-        if WinExist(oInput)
+        if (WinExist(oInput))
             return "window"
         if (oInput = "desktop") ;a hidden window behind the desktop icons created by ImagePutDesktop.
             return "desktop"
@@ -1076,9 +1063,9 @@ class GDIP_PBitmap extends _GDIP {
         ; A "pdf" is either a file or url with a .pdf extension.
         if (oInput ~= "\.pdf$") && (FileExist(oInput) || this.is_url(oInput))
             return "pdf"
-        if this.is_url(oInput)
+        if (this.is_url(oInput))
             return "url"
-        if FileExist(oInput)
+        if (FileExist(oInput))
             return "file"
         if (strlen(oInput) >= 116) && (oInput ~= "(?i)^\s*(0x)?[0-9a-f]+\s*$") ;binary image data encoded into text using hexadecimal.
             return "hex"
@@ -1097,7 +1084,7 @@ class GDIP_PBitmap extends _GDIP {
             if (dllcall("GetObjectType", "ptr",oInput, "uint") == 7)
                 return "hBitmap"
             ; An "hIcon" is a handle to a GDI icon.
-            if dllcall("DestroyIcon", "ptr",dllcall("CopyIcon", "ptr",oInput, "ptr"))
+            if (dllcall("DestroyIcon", "ptr",dllcall("CopyIcon", "ptr",oInput, "ptr")))
                 return "hIcon"
             ; A "bitmap" is a pointer to a GDI+ Bitmap.
             try if !dllcall("gdiplus\GdipGetImageType", "ptr",oInput, "ptr*",&type:=0) && (type == 1)
@@ -1107,15 +1094,15 @@ class GDIP_PBitmap extends _GDIP {
             ; Note 3: Critical error for ranges 0-4095 on v1 and 0-65535 on v2.
             ObjRelease(oInput) ; Therefore do not move this, it has been tested.
             ; A "stream" is a pointer to the IStream interface.
-            try if ComObjQuery(oInput, "{0000000C-0000-0000-C000-000000000046}")
+            try if (ComObjQuery(oInput, "{0000000C-0000-0000-C000-000000000046}"))
                 return "stream"
             ; A "RandomAccessStream" is a pointer to the IRandomAccessStream interface.
-            try if ComObjQuery(oInput, "{905A0FE1-BC53-11DF-8C49-001E4FC686DA}")
+            try if (ComObjQuery(oInput, "{905A0FE1-BC53-11DF-8C49-001E4FC686DA}"))
                 return "RandomAccessStream"
         }
         ; For more helpful error messages: Catch file names without extensions!
         for extension in ["bmp","dib","rle","jpg","jpeg","jpe","jfif","gif","tif","tiff","png","ico","exe","dll"]
-            if FileExist(format("{1}.{2}", oInput,extension))
+            if (FileExist(format("{1}.{2}", oInput,extension)))
                 throw Error(format("A .{1} file extension is required!", extension))
         throw Error("oInput type could not be identified.")
     }
@@ -1182,7 +1169,7 @@ class GDIP_PBitmap extends _GDIP {
         ; Compare the signature of the file with the PDF magic string "%PDF".
         dllcall("shlwapi\IStream_Read", "ptr",pStream, "ptr",signature:=buffer(4), "uint",4, "HRESULT")
         StrPut("%PDF", magic:=buffer(4), "CP0")
-        if dllcall("ntdll\RtlCompareMemory", "ptr",signature, "ptr",magic, "uptr",4, "uptr") < 4
+        if (dllcall("ntdll\RtlCompareMemory", "ptr",signature, "ptr",magic, "uptr",4, "uptr") < 4)
             throw Error("Could not be loaded from a valid file path or URL.")
         ; Create a RandomAccessStream with BSOS_PREFERDESTINATIONSTREAM.
         dllcall("ole32\CLSIDFromString", "wstr","{905A0FE1-BC53-11DF-8C49-001E4FC686DA}", "ptr",CLSID:=buffer(16), "HRESULT")
@@ -1240,7 +1227,7 @@ class GDIP_PBitmap extends _GDIP {
     }
 
     ObjReleaseClose(&obj) {
-        if obj {
+        if (obj) {
             if (Close := ComObjQuery(obj, IClosable := "{30D5A829-7FA4-4026-83BB-D75BAE4EA99E}")) {
                 ComCall(IClosable_Close := 6, Close)
                 Close := ""
@@ -1403,14 +1390,19 @@ class GDIP_HBitmap extends _GDIP {
     ptr := 0
 
     __new(widthOrPBitmap, heightOrColor:=0xffFFFFFF, hDC:=0) {
-        if isobject(widthOrPBitmap) {
+        if (isobject(widthOrPBitmap)) {
             if (widthOrPBitmap is GDIP_PBitmap) {
                 dllcall("gdiplus\GdipCreateHBITMAPFromBitmap", "ptr",widthOrPBitmap, "ptr*",&hBitmap:=0, "int",heightOrColor)
+                arr := widthOrPBitmap.getSize()
+                this.w := arr[1]
+                this.h := arr[2]
                 this.ptr := hBitmap
-            } else if (widthOrPBitmap is Array) ;aRect
+            } else if (widthOrPBitmap is Array) { ;aRect
                 this.getFromRect(widthOrPBitmap)
-        } else
+            }
+        } else {
             this.CreateDIBSection(widthOrPBitmap, heightOrColor, hDC)
+        }
     }
 
     __delete() {
@@ -1455,7 +1447,7 @@ class GDIP_HBitmap extends _GDIP {
         hDC2 := hDC ? hDC : dllcall("GetDC", "ptr",0, "ptr")
         bufBI := _GDIP._bufBitmapInfoHeader(w, h, bpp)
         hBitmap := dllcall("CreateDIBSection", "ptr",hDC2, "ptr",bufBI, "uint",0, "ptr*",&ppvBits, "ptr",0, "uint",0, "ptr")
-        if !hDC
+        if (!hDC)
             dllcall("ReleaseDC", "ptr",0, "ptr",hDC2)
         return this.ptr := hBitmap
     }
@@ -1481,7 +1473,7 @@ class GDIP_HBitmap extends _GDIP {
         dllcall("RtlMoveMemory", "Uint",pDIB, "Uint",&bufOI+24, "Uint",40)
         dllcall("RtlMoveMemory", "Uint",pDIB+40, "Uint",numget(bufOI,20), "Uint",numget(bufOI,44))
         dllcall("GlobalUnlock", "Uint",hDIB)
-        if bDelete
+        if (bDelete)
             dllcall("DeleteObject", "Uint",this.ptr)
         dllcall("OpenClipboard", "Uint",0)
         dllcall("EmptyClipboard")
@@ -1489,7 +1481,8 @@ class GDIP_HBitmap extends _GDIP {
         dllcall("CloseClipboard")
     }
 
-    showByGui(aRect) {
+    ;贴图
+    showByGui(aRect:=unset) {
         ;放入gui
         ; oGui := gui("-Caption +ToolWindow +AlwaysOnTop +LastFound +Border -DPIScale")
         oGui := gui("-Caption +ToolWindow +AlwaysOnTop +LastFound -DPIScale") ;no border
@@ -1497,9 +1490,13 @@ class GDIP_HBitmap extends _GDIP {
         oGui.OnEvent("ContextMenu", (p*)=>oGui.destroy())
         oGui.MarginX := 0
         oGui.MarginY := 0
-        oPic := oGui.Addpicture(format("w{1} h{2} +0xE", aRect[3],aRect[4]))
+        if (!isset(aRect)) {
+            MouseGetPos(&xMouse, &yMouse)
+            aRect := [xMouse,yMouse,this.w,this.h]
+        }
+        oPic := oGui.AddPicture(format("w{1} h{2} +0xE", aRect[3],aRect[4]))
         oPic.OnEvent("click", (p*)=>PostMessage(WM_NCLBUTTONDOWN:=0xA1, 2)) ; 随着鼠标移动
-        ; oPic.OnEvent("DoubleClick", ObjBindMethod(this,"zoom"))
+        ;oPic.OnEvent("DoubleClick", ObjBindMethod(this,"zoom"))
         SendMessage(STM_SETIMAGE:=0x172,, this.ptr,, "ahk_id " . oPic.hwnd)
         oGui.show(format("x{1} y{2}", aRect[1]-1,aRect[2]-1))
     }
@@ -1516,7 +1513,7 @@ class GDIP_HBitmap extends _GDIP {
         SendMessage(STM_SETIMAGE:=0x172,, this.ptr,, "ahk_id " . oCtl.hwnd)
         ControlMove(,, w*n, h*n, oCtl)
         WinMove(,, w*n, h*n, "ahk_id " . oCtl.Gui.hwnd)
-        ;if !isobject(oCtl)
+        ;if (!isobject(oCtl))
         ;{
         ;MouseGetPos(,, idWin, oCtl)
         ;ControlGetPos(x,y,w,h, oCtl, "ahk_id " . idWin)
@@ -1566,7 +1563,7 @@ class GDIP_Graphics extends _GDIP {
 
     __new(oInstance) {
         this.pSelectObject := 0 ;没属性会报错
-        if isobject(oInstance) {
+        if (isobject(oInstance)) {
             if (oInstance is GDIP_PBitmap)
                 this.GdipGetImageGraphicsContext(oInstance.ptr)
             else if (oInstance is GDIP_HBitmap) { ;NOTE 先生成 this.hDC
@@ -1716,7 +1713,7 @@ class GDIP_Graphics extends _GDIP {
 
     GdipSetImageAttributesColorMatrix(Matrix) {
         bufColourMatrix := buffer(100, 0)
-        Matrix := RegExReplace(RegExReplace(Matrix, "^[^\d-\.]+([\d\.])", "$1", , 1), "[^\d-\.]+", "|")
+        Matrix := RegExReplace(RegExReplace(Matrix, "^[^\d-\.]+([\d\.])", "$1",, 1), "[^\d-\.]+", "|")
         Matrix := StrSplit(Matrix, "|")
         loop(25) {
             M := (Matrix[A_Index] != "") ? Matrix[A_Index] : !mod(A_Index-1, 6)
@@ -1811,11 +1808,11 @@ class GDIP_Graphics extends _GDIP {
             "NoWrap",0x4000,
         )
         for v in arrOpt {
-            if objStyle.has(v)
+            if (objStyle.has(v))
                 style |= objStyle[v]
-            else if objAlign.has(v)
+            else if (objAlign.has(v))
                 align |= objAlign[v]
-            else if objPos.has(v)
+            else if (objPos.has(v))
                 arrPos := [1]
             else { ;处理其他选项
                 ;完整匹配
@@ -1862,7 +1859,7 @@ class GDIP_Graphics extends _GDIP {
         ; RegExMatch(opts, pattern_opts . "Top|Up|Bottom|Down|vCentre|vCenter", &vPos)
         ; RegExMatch(opts, pattern_opts . "R(\d)", &Rendering)
         ; RegExMatch(opts, pattern_opts . "S(\d+)(p*)", &Size)
-        ; ; if Colour && !GdipDeleteBrush(this.GdipCloneBrush(Colour[2])) {
+        ; ; if (Colour && !GdipDeleteBrush(this.GdipCloneBrush(Colour[2]))) {
         ; ;     PassBrush := 1
         ; ;     pBrush := Colour[2]
         ; ; }
@@ -1871,7 +1868,7 @@ class GDIP_Graphics extends _GDIP {
         ; style := 0
         ; Styles := "Regular|Bold|Italic|BoldItalic|Underline|Strikeout"
         ; for k, valStyle in StrSplit(Styles, "|") {
-        ;     if RegExMatch(opts, "\b" . valStyle)
+        ;     if (RegExMatch(opts, "\b" . valStyle))
         ;         style |= (valStyle != "StrikeOut") ? (A_Index-1) : 8
         ; }
         ; Align := 0
@@ -1906,7 +1903,7 @@ class GDIP_Graphics extends _GDIP {
         this.GdipSetTextRenderingHint(objType["r"])
         oStringFormat.GdipSetStringFormatAlign(align)
         arrRes := this.GdipMeasureString(sText, oFont, oStringFormat, aRect)
-        if !Measure
+        if (!Measure)
             _E := this.GdipDrawString(sText, oFont, oStringFormat, oBrush, aRect)
         ; if !PassBrush
         ;     Gdip_DeleteBrush(pBrush)
@@ -2251,7 +2248,7 @@ class GDIP_Graphics extends _GDIP {
     ; https://docs.microsoft.com/en-us/windows/win32/api/wingdi/nf-wingdi-selectobject
     SelectObject(oGdiObj:="") {
         if (oGdiObj) {
-            if !this.pSelectObject { ;只记录一次(原始对象)
+            if (!this.pSelectObject) { ;只记录一次(原始对象)
                 return this.pSelectObject := dllcall("SelectObject", "ptr",this.hDC, "ptr",oGdiObj)
             } else
                 return dllcall("SelectObject", "ptr",this.hDC, "ptr",oGdiObj)
@@ -2303,7 +2300,7 @@ class GDIP_Pen extends _GDIP {
     ptr := 0
 
     __new(argbOrBrush, width) {
-        if isobject(argbOrBrush)
+        if (isobject(argbOrBrush))
             this.createByBrush(argbOrBrush)
         else
             this.createByArgb(argbOrBrush, width)
@@ -2317,7 +2314,7 @@ class GDIP_Pen extends _GDIP {
 
     createByArgb(argb, width) {
         ;TODO 是否需要先删除原画笔？
-        if this.ptr
+        if (this.ptr)
             this.__delete()
         res := dllcall("gdiplus\GdipCreatePen1", "uint",argb, "float",width, "int",2, "ptr*",&pPen:=0)
         if (!pPen)
@@ -2327,7 +2324,7 @@ class GDIP_Pen extends _GDIP {
     }
 
     createByBrush(oBrush){
-        if this.ptr
+        if (this.ptr)
             this.__delete()
         this.pBrush := oBrush ;TODO 是否需要保存 <2020-12-11 14:36:59> hyaray
         res := dllcall("gdiplus\GdipCreatePen2", "ptr",&argbOrBrush, "float",&width, "int",2, "ptr*",&pPen:=0)
@@ -2366,7 +2363,7 @@ class GDIP_Pen extends _GDIP {
 class GDIP_Brush extends _GDIP {
     ptr := 0
     __new(argb, argbBack:=0, HatchStyle:=0) {
-        if argbBack
+        if (argbBack)
             this.GdipCreateHatchBrush(argb, argbBack, HatchStyle)
         else
             this.GdipCreateSolidFill(argb)
@@ -2378,10 +2375,10 @@ class GDIP_Brush extends _GDIP {
     }
 
     GdipCreateSolidFill(argb) {
-        if !argb
+        if (!argb)
             msgbox(A_ThisFunc . "`nargb = 0")
         ;TODO 是否需要先删除原画刷？
-        if this.ptr
+        if (this.ptr)
             this.__delete()
         dllcall("gdiplus\GdipCreateSolidFill", "uint",argb, "ptr*",&pBrush:=0)
         if (!pBrush)
@@ -2488,7 +2485,7 @@ class GDIP_Font extends _GDIP {
     ;   sFont
     __new(oInstance:="Arial", size:=12) {
         res := 0
-        if isobject(oInstance) {
+        if (isobject(oInstance)) {
             if (oInstance is GDIP_Graphics)
                 res := dllcall("gdiplus\GdipCreateFontFromDC", "ptr",oInstance.hDC, "ptr*",&pFont:=0)
             else if (oInstance is GDIP_FontFamily)
@@ -2498,7 +2495,7 @@ class GDIP_Font extends _GDIP {
             this.GdipCreateFont(oFontFamily, size)
             oFontFamily := ""
         }
-        if res
+        if (res)
             msgbox(A_ThisFunc)
     }
 
@@ -2514,7 +2511,7 @@ class GDIP_Font extends _GDIP {
     ; Strikeout = 8
     GdipCreateFont(pFontFamily, size, style:=0) {
         res := dllcall("gdiplus\GdipCreateFont", "ptr",pFontFamily, "float",size, "uint",style, "uint",0, "ptr*",&pFont:=0)
-        if res
+        if (res)
             msgbox(A_ThisFunc)
         return this.ptr := pFont
     }
@@ -2523,7 +2520,7 @@ class GDIP_Font extends _GDIP {
 class GDIP_FontFamily {
     __new(sFont) {
         res := dllcall("gdiplus\GdipCreateFontFamilyFromName", "ptr",strptr(sFont), "ptr",0, "ptr*",&pFontFamily:=0)
-        if !pFontFamily {
+        if (!pFontFamily) {
             msgbox(format("字体{1}不存在", sFont),,0x40000)
             exit
         }
@@ -2567,7 +2564,7 @@ class GDIP_StringFormat extends _GDIP {
 
     GdipCreateStringFormat(formatFlags, langId) {
         res := dllcall("gdiplus\GdipCreateStringFormat", "uint",formatFlags, "UShort",langId, "ptr*",&pStringFormat:=0)
-        if res
+        if (res)
             msgbox(A_ThisFunc)
         this.ptr := pStringFormat
     }
