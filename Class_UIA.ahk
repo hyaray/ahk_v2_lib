@@ -76,7 +76,9 @@ NOTE NOTE NOTE 思路：
         获取 Table 下所有 数据 名称
             elTable.getTableData()
         获取 Tree 下所有 ListItem 名称
-            elTable.getTreeData()
+            elListItem.getTreeData()
+        TODO 后期尽量用下面的通用方法代替
+            elParent.getSiblingItems()
     5.操作控件，见类 IUIAutomationPattern 上方相关说明，可操作列表见 IUIAutomationPattern_vt
         激活控件
             el.SetFocus()
@@ -417,7 +419,7 @@ class UIA {
         if (res) {
             return res
         } else {
-            if (this.GetFocusedElement().CurrentControlType == 50004) ;Edit
+            if (this.GetFocusedElement().CurrentControlType == UIA.ControlType.Edit)
                 return true
         }
     }
@@ -984,7 +986,7 @@ class IUIAutomationElement extends IUIABase {
                 cond := UIA.CreatePropertyCondition(UIA.property.%field%, value)
             } else {
                 ControlType := UIA.ControlType.%ControlType%
-                if flag
+                if (flag)
                     cond := UIA.CreateAndCondition(UIA.CreatePropertyCondition(30003,ControlType), UIA.CreatePropertyConditionEx(UIA.property.%field%, value))
                 else
                     cond := UIA.CreateAndCondition(UIA.CreatePropertyCondition(30003,ControlType), UIA.CreatePropertyCondition(UIA.property.%field%, value))
@@ -1102,14 +1104,17 @@ class IUIAutomationElement extends IUIABase {
     }
     ;点击Text右侧以激活 Edit控件，并设置值
     ;arrFind 用于 FindControl 的所有参数
+    ;elWin.FindByBeside(["Text", "名称"], [30,0])
     FindByBeside(arrFind, arrOffset:=30, value:=unset) {
         if (type(arrFind) == "String")
             arrFind := ["Text", arrFind]
-        if !isobject(arrOffset)
+        if (!isobject(arrOffset))
             arrOffset := [arrOffset]
         this.FindControl(arrFind*).ClickByControl(arrOffset*)
         sleep(100)
         elFocus := UIA.GetFocusedElement()
+        if (!elFocus)
+            return
         if (isset(value)) {
             if (isobject(value)) ;函数
                 elFocus.GetCurrentPattern("Value").SetValue(value(elFocus))
@@ -1147,7 +1152,7 @@ class IUIAutomationElement extends IUIABase {
     }
     ;包含坐标
     ContainXY(xScreen:=unset, yScreen:=unset, cm:=0) { ;cm 0=windows 1=screen
-        if !isset(xScreen) {
+        if (!isset(xScreen)) {
             cmMouse := A_CoordModeMouse
             CoordMode("mouse", "screen")
             MouseGetPos(&xScreen, &yScreen)
@@ -1248,6 +1253,8 @@ class IUIAutomationElement extends IUIABase {
         obj := map()
         obj["name"] := this.CurrentName
         obj["ControlType"] := this.GetControlType()
+        if (obj["ControlType"] == "ListItem")
+            obj["ZZ"] := this.getSiblingItems()
         obj["LocalizedControlType"] := this.CurrentLocalizedControlType
         obj["BoundingRectangle"] := format("xm:{1} ym:{2} l:{3} t:{4} w:{5} h:{6}", aRect[1]+aRect[3]//2, aRect[2]+aRect[4]//2,aRect*)
         obj["CurrentBoundingRectangle"] := format("l:{1} t:{2} r:{3} b:{4}", aRect[1], aRect[2], aRect[1]+aRect[3], aRect[2]+aRect[4])
@@ -1395,7 +1402,7 @@ class IUIAutomationElement extends IUIABase {
         }
         return (objRes.count) ? objRes : map()
         objToTable(obj, charItem:="`t") {
-            if !obj.count
+            if (!obj.count)
                 return ""
             res := ""
             ;记录第1项的类型
@@ -1439,6 +1446,73 @@ class IUIAutomationElement extends IUIABase {
         }
     }
 
+    ;从上2级获取特定元素的父级 TODO 待验证
+    ;TabItem→Tab
+    ;ListItem→List
+    ;*→Table
+    getFather(bString:=false) {
+        oRV := UIA.RawViewWalker()
+        aRectThis := this.GetBoundingRectangle()
+        OutputDebug(format("i#{1} {2}:obj={3}", A_LineFile,A_LineNumber,json.stringify(aRectThis)))
+        elParent := oRV.GetParentElement(this)
+        loop(2) {
+            aRect := elParent.GetBoundingRectangle()
+            if (aRect[4] > aRectThis[4] * 2) { ;找到父元素
+                OutputDebug(format("d#{1} {2}: father={3} aRect={4}", A_LineFile,A_LineNumber,elParent.GetControlType(),json.stringify(aRect)))
+                return elParent
+            } else {
+                elParent := oRV.GetParentElement(elParent)
+            }
+        }
+    }
+
+    ;以当前元素获取兄弟元素
+    ;DataItem 不规范的不用此方法
+    getSiblingItems() {
+        oRV := UIA.RawViewWalker()
+        tpThis := this.GetControlType()
+        if (tpThis ~= "^(List|Tab)$") {
+            elParent := this
+            obj := map(
+                "List", "ListItem",
+                "Tab", "TabItem",
+            )
+            tpSon := obj[tpThis]
+        } else {
+            elParent := this.getFather()
+            tpSon := tpThis
+        }
+        if (!isobject(elParent))
+            return
+        ;确定 funGetValue
+        if (this.GetCurrentPropertyValue("ValueValue") != "") {
+            OutputDebug(format("i#{1} {2}:funGetValue = value", A_LineFile,A_LineNumber))
+            funGetValue := (el)=>el.GetCurrentPropertyValue("ValueValue")
+        } else if (this.CurrentName != "") {
+            OutputDebug(format("i#{1} {2}:funGetValue = name", A_LineFile,A_LineNumber))
+            funGetValue := (el)=>el.CurrentName
+        } else {
+            OutputDebug(format("i#{1} {2}:funGetValue = find & value", A_LineFile,A_LineNumber))
+            funGetValue := (el)=>el.FindFirst(UIA.CreatePropertyCondition("ControlType", tpSon)).GetCurrentPropertyValue("ValueValue")
+        }
+        arr := []
+        if (1) {
+            for el in elParent.FindAll(UIA.CreatePropertyCondition("ControlType", tpSon))
+                arr.push(funGetValue(el))
+        } else {
+            elItem := oRV.GetFirstChildElement(elParent) ;用这个还是 this
+            loop {
+                if (elItem.CurrentControlType == UIA.ControlType.ListItem)
+                    arr.push(funGetValue(elItem))
+                try
+                    elItem := oRV.GetNextSiblingElement(elItem)
+                catch
+                    break
+            }
+        }
+        return arr
+    }
+
     getTabItems(bName:=true) {
         ;获取 elTab
         if (this.CurrentControlType == UIA.ControlType.Tab)
@@ -1451,17 +1525,12 @@ class IUIAutomationElement extends IUIABase {
         return arr
     }
 
+    ;使用的场景不规范，不好转到 getSiblingItems
     getTreeData() {
         oRV := UIA.RawViewWalker()
-        elTree := oRV.GetParentElement(this)
-        loop(2) {
-            if (elTree.CurrentControlType != "Tree")
-                elTree := oRV.GetParentElement(elTree)
-            else
-                break
-        }
+        elParent := this.getFather()
         funGetValue := (el)=>el.GetCurrentPropertyValue("ValueValue") ? el.GetCurrentPropertyValue("ValueValue") : el.GetFirst().GetCurrentPropertyValue("ValueValue")
-        elItem := oRV.GetFirstChildElement(oRV.GetLastChildElement(elTree))
+        elItem := oRV.GetFirstChildElement(oRV.GetLastChildElement(elParent))
         ;arrX := [elItem.GetBoundingRectangle()[1]]
         arr := []
         loop {
@@ -1482,7 +1551,7 @@ class IUIAutomationElement extends IUIABase {
         oRV := UIA.RawViewWalker()
         elTable := oRV.GetParentElement(this)
         loop(2) {
-            if (elTable.CurrentControlType != "Table")
+            if (elTable.CurrentControlType != UIA.ControlType.Table)
                 elTable := oRV.GetParentElement(elTable)
             else
                 break
