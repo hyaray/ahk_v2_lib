@@ -1137,12 +1137,12 @@ class GDIP_PBitmap extends _GDIP {
     }
 
     getStreamFromFile(fp) {
-        file := FileOpen(fp, "r")
-        hData := dllcall("GlobalAlloc", "uint",0x2, "ptr",file.length, "ptr")
+        f := FileOpen(fp, "r")
+        hData := dllcall("GlobalAlloc", "uint",0x2, "ptr",f.length, "ptr")
         pData := dllcall("GlobalLock", "ptr",hData, "ptr")
-        file.RawRead(pData, file.length)
+        f.RawRead(pData, f.length)
         dllcall("GlobalUnlock", "ptr",hData)
-        file.Close()
+        f.close()
         return this.CreateStreamOnHGlobal(hData)
     }
 

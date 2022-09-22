@@ -704,7 +704,6 @@ class UIA {
     static CreateFalseCondition() => (comcall(22, this, "ptr*",&newCondition:=0), IUIAutomationBoolCondition(newCondition))
 
     ; Creates a condition that selects elements that have a property with the specified value.
-    ; NOTE 是boolean，value要用 ComValue(0xB,-1)
     static CreatePropertyCondition(propertyId, value) {
         if !(propertyId is integer)
             propertyId := this.property.%propertyId%

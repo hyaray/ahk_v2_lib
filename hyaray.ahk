@@ -649,19 +649,55 @@ hyf_onekeyHide() {
 
 hyf_getDocumentPath(winTitle:="") { ;获取当前窗口编辑文档的路径
     exeName := StrLower(WinGetProcessName(winTitle))
-    if (exeName == "gvim.exe" || exeName == "iThought.exe")
-        return WinGetTitle(winTitle)
-    else if (exeName == "excel.exe")
-        return ox().ActiveWorkbook.fullname
-    else if (exeName == "winword.exe")
-        return ComObjActive("Word.application").ActiveDocument.fullname
-    else if (exeName == "powerpnt.exe")
-        return ComObjActive("Powerpoint.application").ActivePresentation.fullname
-    else if (RegExMatch(substr(getCommandLine(winTitle), 4), "[a-zA-Z]:[^:]+$", &m))
-        return m[0]
+    exeName := RegExReplace(exeName, "\.exe$")
+    switch exeName {
+    case "gvim": return WinGetTitle(winTitle)
+    case "ithought": return WinGetTitle(winTitle)
+    case "excel": return ox().ActiveWorkbook.fullname
+    case "winword": return ComObjActive("Word.application").ActiveDocument.fullname
+    case "powerpnt": return ComObjActive("Powerpoint.application").ActivePresentation.fullname
+    case "hh.exe": return getDocPathOfHH(winTitle)
+    default:
+        if (RegExMatch(substr(getCommandLine(winTitle), 4), "[a-zA-Z]:[^:]+$", &m))
+            return m[0]
+    }
     getCommandLine(winTitle:="") {
         for item in ComObjGet("winmgmts:").ExecQuery(format("Select * from Win32_Process where ProcessId={1}", WinGetPID(winTitle)))
             return item.CommandLine
+    }
+    ;comcall 简化了下面3行
+    ;if !dllcall(numget(numget(0,pobj,"UPtr"), 0, "UPtr"), "Ptr",pobj, "Ptr",PID, "Ptr*",&psp:=0)
+    ;   && !dllcall(numget(numget(0,psp,"UPtr"),A_PtrSize*3,"UPtr"), "Ptr",psp, "Ptr",Query_Guid4String(&SID,SID), "Ptr",IID=="!"?SID:Query_Guid4String(&IID,IID), "Ptr*",&pobj:=0) {
+    ;   dllcall(numget(numget(0,psp,"UPtr"),A_PtrSize*2,"UPtr"), "Ptr",psp)
+    getDocPathOfHH(winTitle:="") {
+        ctl := ControlGetHwnd("Internet Explorer_Server1", winTitle)
+        dllcall("LoadLibrary", "Str","oleacc", "Ptr")
+        numput('int64',0x11CF3C3D618736E0, 'int64',0x719B3800AA000C81, IID:=buffer(16))
+        if (!dllcall("oleacc\AccessibleObjectFromWindow", "ptr",ctl, "uint",0, "ptr",IID, "ptr*",&pacc:=0)) {
+            accWin := ComValue(9, pacc, 1)
+            chmPath := Query_Service(accWin, "{332C4427-26CB-11D0-B483-00C04FD90119}").document.url
+            chmPath := RegExReplace(chmPath, "im)mk\:\@MSITStore\:(.*)\:\:.*$", "$1")
+            chmPath := StrReplace(chmPath, "%20", " ")
+            return chmPath
+        }
+        ;没单独放起来，可能有重复
+        Query_Service(pobj, SID, IID:="!", bRaw:="") {
+            if (isobject(pobj))
+                pobj := ComObjValue(pobj)
+            numput('int64',0x11CE74366D5140C1, 'int64',0xFA096000AA003480, pid:=buffer(16))
+            res0 := comcall(0, pobj, "Ptr",pid, "Ptr*",&psp:=0)
+            res3 := comcall(3, psp, "Ptr",Query_Guid4String(&SID, SID), "Ptr",IID=="!"?SID:Query_Guid4String(&IID,IID), "Ptr*",&pobj:=0)
+            if (!res0 && !res3 || ObjRelease(psp)) {
+                if (bRaw)
+                    return pobj
+                else
+                    return ComValue(9, pobj, 1)
+            }
+        }
+        Query_Guid4String(&GUID, sz:="") {
+            dllcall("ole32\CLSIDFromString", "WStr",sz?sz:sz==""?"{00020400-0000-0000-C000-000000000046}":"{00000000-0000-0000-C000-000000000046}", "Ptr",GUID:=buffer(16,0))
+            return GUID
+        }
     }
 }
 
