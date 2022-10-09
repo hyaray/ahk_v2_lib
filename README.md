@@ -5,4 +5,4 @@
 and compiled `ahkDefine.ahk` using [Ahk2Exe](https://github.com/AutoHotkey/Ahk2Exe) to avoid some problems.
 
 compile commandline: `"Ahk2Exe.exe" /in "d:\ahkDefine.ahk" /out "D:\AutoHotkey64.exe" /base "c:\AutoHotkey\AutoHotkey64.exe" /resourceid #2`
-`/resourceid #2` is the key param.
+> `/resourceid #2` is the key param.
