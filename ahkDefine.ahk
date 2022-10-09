@@ -30,18 +30,18 @@ company := "My Company"
 ;@Ahk2Exe-Let U_company = %A_PriorLine~U)^(.+"){3}(.+)".*$~$2%
 ;@Ahk2Exe-IgnoreEnd
 
-#include Class_String.ahk
-#include Class_Number.ahk
-#include Class_Array.ahk
-#include Class_Object.ahk
+#include lib\Class_String.ahk
+#include lib\Class_Number.ahk
+#include lib\Class_Array.ahk
+#include lib\Class_Object.ahk
 
-#include hyaray.ahk
-#include WebSocket.ahk
-#include Class_Mouse.ahk
-#include Class_Ctrl.ahk
-#include Class_UIA.ahk
-#include Class_Gdip.ahk
+#include lib\hyaray.ahk
+#include lib\WebSocket.ahk
+#include lib\Class_Mouse.ahk
+#include lib\Class_Ctrl.ahk
+#include lib\Class_UIA.ahk
+#include lib\Class_Gdip.ahk
 
-#include Class_CDP.ahk
-#include CentBrowser.ahk
+#include lib\Class_CDP.ahk
+#include lib\CentBrowser.ahk
 

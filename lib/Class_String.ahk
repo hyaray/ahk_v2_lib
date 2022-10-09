@@ -2022,7 +2022,6 @@ class _String {
     }
 
     /*
-
     ""
     ":"
     "-"
@@ -2145,8 +2144,9 @@ class _String {
             for v in arr
                 res .= v
             return res
-        } else
+        } else {
             return arr
+        }
     }
 
     ;msgbox('%E5%85%B110'.decode())
