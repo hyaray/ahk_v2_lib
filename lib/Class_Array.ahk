@@ -26,34 +26,6 @@ class _Array extends Array {
         return this.toJson()
     }
 
-    ;转换
-    ;有charKey则显示k
-    ;见 _String.join(arr)
-    ;toString1(charItem:=",", charKey:="") {
-    ;    arr := this
-    ;    if (!arr.length)
-    ;        return ""
-    ;    res := ""
-    ;    if (!isobject(arr[1])) { ;一维
-    ;        if (charKey != "") {
-    ;            for k, v in arr
-    ;                res .= format("{1}{2}{3}{4}", k,charKey,v,charItem)
-    ;        } else {
-    ;            for v in arr
-    ;                res .= v . charItem
-    ;        }
-    ;        return rtrim(res, charItem)
-    ;    } else { ;二维，无视 charKey
-    ;        for arrRow in arr {
-    ;            for k1, v1 in arrRow {
-    ;                res .= v1 . charItem
-    ;            }
-    ;            res := rtrim(res,charItem) . "`n"
-    ;        }
-    ;    }
-    ;    return substr(res, 1, strlen(res)-strlen(charItem))
-    ;}
-
     ;获取
     count(value) {
         res := 0
@@ -76,12 +48,6 @@ class _Array extends Array {
         return this.index(value) > 0
     }
 
-    ;修改
-    append(value) {
-        this.push(value)
-        return this
-    }
-
     extend(arr) {
         arr0 := this
         for v in arr
@@ -89,20 +55,39 @@ class _Array extends Array {
         return arr0
     }
 
+    slice(start:=1, end:=0, step:=1) {
+        len := this.length
+        i := start < 1 ? len + start : start
+        j := end < 1 ? len + end : end
+        arrRes := []
+        reverse := false
+        if (i < 1 || j > len)
+            throw IndexError("Slice: start or end value out of bounds", -1)
+        if step = 0 {
+            throw error("Slice: step cannot be 0",-1)
+        } else if step < 0 {
+            if i < j
+                throw error("Slice: if step is negative then start value must be greater than end value", -1)
+            while i >= j {
+                arrRes.push(this[i])
+                i += step
+            }
+        } else {
+            if (i > j)
+                throw error("Slice: start value must be smaller than end value", -1)
+            while (i <= j) {
+                arrRes.push(this[i])
+                i += step
+            }
+        }
+        return arrRes
+    }
+
     reverse() {
         arrRes := []
         loop(this.length)
             arrRes.push(this[-A_Index])
         return arrRes
-    }
-
-    ;参考 python
-    ;每个元素根据fun处理
-    map(fun) {
-        arr := this
-        for v in arr
-            arr[A_Index] := fun.call(v)
-        return arr
     }
 
     toMap(arrKey:=unset) {
@@ -116,6 +101,38 @@ class _Array extends Array {
                 obj[A_Index] := v
         }
         return obj
+    }
+
+    ;参考 python
+    ;每个元素根据fun处理
+    map(fun) {
+        arr := this
+        for v in arr
+            arr[A_Index] := fun.call(v)
+        return arr
+    }
+
+    ;funDistinct 返回值当 key 用来筛选
+    ;参数都是(v,k)
+    ;arr.filter((v,k)=>v[1]!="", (v,k)=>v[1])
+    filter(fun, funDistinct:=unset) {
+        arrRes := []
+        if (!isset(funDistinct)) {
+            for k, v in this {
+                if (fun(k, v))
+                    arrRes.push(v)
+            }
+        } else {
+            obj := map()
+            for k, v in this {
+                key := funDistinct(v,k)
+                if (fun(v,k) && !obj.has(key)) {
+                    arrRes.push(v)
+                    obj[key] := ""
+                }
+            }
+        }
+        return arrRes
     }
 
     reduce(fun, v0:=unset) {
@@ -339,42 +356,6 @@ class _Array extends Array {
         return this
     }
 
-    filterEqualValue(val:="") {
-        arrRes := this.clone() ;不修改原数组
-        arrIdx := [] ;先记录所有的idx
-        for k, v in arrRes {
-            if (v = val)
-                arrIdx.push(k)
-        }
-        loop(arrIdx.length)
-            arrRes.RemoveAt(arrIdx[-1]) ;从后开始删
-        return arrRes
-    }
-
-    filterInstrValue(arr, value) { ;删除所有instr项
-        arrRemove := []
-        for k, v in arr {
-            if (instr(v, value))
-                arrRemove.push(k)
-        }
-        arrNew := arr.clone()
-        loop(arrRemove.length)
-            arrNew.RemoveAt(arrRemove[-A_Index])
-        return arrNew
-    }
-
-    filterStartWithValue(arr, value) { ;删除所有value开始的项
-        arrRemove := []
-        for k, v in arr {
-            if (instr(v, value) = (1))
-                arrRemove.push(k)
-        }
-        arrNew := arr.clone()
-        loop(arrRemove.length)
-            arrNew.RemoveAt(arrRemove[-A_Index])
-        return arrNew
-    }
-
     /*
     removeByArrValue() {
         arrNew := arr.clone()
@@ -563,5 +544,6 @@ class _Array extends Array {
 ;    ["a","aa","aaa"],
 ;    ["b","bb","bbb"],
 ;]
+;msgbox(["a","b"].filter((x)=>instr(x, "b")))
 ;msgbox(string(arr))
 ;msgbox([1,2])

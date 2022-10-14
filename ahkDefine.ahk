@@ -1,6 +1,7 @@
-﻿#SingleInstance Force
-#MapCaseSense off
+﻿#Requires AutoHotkey v2.0-beta
+#SingleInstance Force
 #warn Unreachable, off
+#MapCaseSense off
 SetControlDelay(-1)
 SetKeyDelay(-1)
 CoordMode("mouse", "window")
@@ -30,10 +31,13 @@ company := "My Company"
 ;@Ahk2Exe-Let U_company = %A_PriorLine~U)^(.+"){3}(.+)".*$~$2%
 ;@Ahk2Exe-IgnoreEnd
 
+;#include lib\JSON.ahk
+;#include lib\struct.ahk
+
 #include lib\Class_String.ahk
 #include lib\Class_Number.ahk
 #include lib\Class_Array.ahk
-#include lib\Class_Object.ahk
+#include lib\Class_Map.ahk
 
 #include lib\hyaray.ahk
 #include lib\WebSocket.ahk

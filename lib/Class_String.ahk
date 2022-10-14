@@ -54,8 +54,9 @@ class _String {
     length => strlen(this)
     repeat(n) => StrReplace(format(format("{:{1}}",n),""), " ", this)
 
-    left(n) => substr(this,1,n)
-    right(n) => substr(this,strlen(this)-n+1)
+    left(n) => substr(this, 1, n)
+    right(n) => substr(this, -n)
+    split(p*) => StrSplit(this, p*)
 
     ;路径相关
     fn() {
@@ -306,40 +307,10 @@ class _String {
         return obj
     }
 
-    toPipInstall(toCmd:=false, bUpdate:=false) {
-        str := this
-        obj := map( ;NOTE v 为数组(可能有依赖)
-            "bs4", ["beautifulsoup4"],
-            "cv2", ["opencv-python"],
-            "magic", ["python-magic"],
-            "skimage", ["scikit-image"],
-            "smtplib", ["pyEmail"],
-            "win32api", ["pywin32"],
-            "PIL", ["Pillow"],
-            "paddleocr", ["python_Levenshtein","paddleocr"],
-        )
-        if (obj.has(str)) {
-            arr := obj[str]
-        } else if (str = "Django") {
-            arr := inputbox("输入Django版本")
-            if (arr.result=="Cancel" || !(arr.value ~= "^\d+$"))
-                arr := ["django"] ;安装最新版
-            else
-                arr := ["django==" . arr.value]
-        } else
-            arr := [str]
-        if (toCmd) {
-            sUpgrade := bUpdate ? "--upgrade " : ""
-            for v in arr
-                arr[A_Index] := format('pip install -i https://mirrors.aliyun.com/pypi/simple {1}{2}', sUpgrade,v)
-        }
-        return arr
-    }
-
     ;转成正则能匹配的内容
     toReg() {
         str := this
-        sChar := "\.*?+[{|()^$"
+        sChar := "^$\.*+?{}|()[]"
         loop parse, sChar
             str := StrReplace(str, A_LoopField, "\" . A_LoopField)
         return str
@@ -2372,17 +2343,6 @@ class _String {
             NewText .= StrLeft .  substr(StrTab, 1, Num_AddTab) . StrRight . "`n"
         }
         return RTrim(NewText, "`n") ;删除最后的空行
-    }
-
-    hyf_strForRegex(s) { ;字符串转换成原义匹配（正则时用）
-        str := ".^$*+\?{}|()[]``" ;todo
-        loop parse, s {
-            if (A_LoopField = '"') ;"转成""
-                r .= "" . A_LoopField
-            else
-                r .= instr(str, A_LoopField) ? "\" . A_LoopField : A_LoopField ;其他前置\
-        }
-        return r
     }
 
     */

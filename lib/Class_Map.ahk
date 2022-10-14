@@ -1,14 +1,16 @@
 ﻿;不修改原obj
 ;优先使用Arrays
-
-defprop := object.DefineProp.bind(object.prototype)
-proto := _Object.prototype
+;v1 https://www.autohotkey.com/board/topic/83081-ahk-l-customizing-object-and-array
+defprop := object.DefineProp.bind(map.prototype)
+proto := _Map.prototype
 for k in proto.OwnProps() {
     if (k != "__Class")
         defprop(k, proto.GetOwnPropDesc(k))
 }
 
-class _Object extends Object {
+class _Map extends map {
+    ;CaseSense := 0
+    ;Default := ""
 
     toString() {
         return super.toJson()
@@ -29,10 +31,10 @@ class _Object extends Object {
         res := ""
         ;记录第1项的类型
         for k, v in obj {
-            tp := type(v)
+            isArray := v is array
             break
         }
-        if (tp == "Array") {
+        if (isArray) {
             for k, arr1 in obj {
                 res .= k
                 for v in arr1
@@ -132,16 +134,16 @@ class _Object extends Object {
     ;第一个k为基准，数字+1，统计缺少的项
     ;如果少4,5,6,7则合并成4-7
     ;Arrays有同名方法
-    joinNumLost(obj, joinNum:=true) {
+    joinNumLost(joinNum:=true) {
         numSave := ""
-        for k, _ in obj {
+        for k, _ in this {
             numSave := k
             break
         }
         if (numSave == "")
             return
         arrRes := [] ;记录缺失数字
-        for k, _ in obj {
+        for k, _ in this {
             if (A_Index == 1){
                 numSave := k
                 continue

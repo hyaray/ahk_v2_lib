@@ -1291,55 +1291,44 @@ hyf_tooltipAsMenu(arrIn, strTip:="", x:=8, y:=8) {
 }
 
 ;去重或生成拼音都是根据 subArr[indexKey]
-;indexKey 主值在 subArr 的序号
+;indexKey 主值在 subArr 的序号(不能重复，否则返回结果有问题)
 ;bAddPy 是否添加拼音
 ;bDistinct 是否去重
 ;返回 subArr
 hyf_selectByArr(arr2, indexKey:=1, bAddPy:=false, bDistinct:=false) {
-    ;NOTE 转成二维(以第1项为主，用来生成拼音什么的，第2项用序号)
     if (!arr2.length)
         return []
-    ;1. arr2 转成二维，并在每项末尾添加序号
-    if (!isobject(arr2[1])) { ;一维转成[hot, item]
-        for k, v in arr2
-            arr2[k] := [v, k]
+    arrNew := [] ;防止修改原数组
+    ;1. arrNew 转成二维，NOTE 并在每项末尾添加 A_Index
+    if (!isobject(arr2[1])) {
+        for v in arr2
+            arrNew.push([v, A_Index])
     } else {
-        for subArr in arr2
-            subArr.push(A_Index)
-    }
-    ;转移到 arrNew
-    arrNew := []
-    ;   去重(根据 subArr[1])
-    if (bDistinct) {
-        obj := map()
         for subArr in arr2 {
-            v := subArr[1]
-            if ((v!="") && !obj.has(v))
-                arrNew.push(subArr)
-            obj[v] := ""
+            subArr.push(A_Index)
+            arrNew.push(subArr)
         }
-    } else {
-        arrNew := arr2
     }
+    ;   去重(根据 subArr[1])
+    if (bDistinct)
+        arrNew := arrNew.filter((v,k)=>v[indexKey]!="", (v,k)=>v[indexKey])
+    ;记录 objRaw 最终返回用(因为有些对象不会在 ListView 显示)
     objRaw := map()
     for subArr in arr2
         objRaw[subArr[indexKey]] := subArr
-    ;msgbox(json.stringify(arrNew, 4))
     ;添加标题
     arrField := ["序号"]
-    for v in arrNew[1]
-        arrField.push("v" . A_Index)
+    loop(arrNew[1].length)
+        arrField.push("v" . string(A_Index))
     ;添加拼音
     if (bAddPy) {
         arrField.push("拼音")
-        for v in arrNew {
-            v.push(v[1].shouzimus())
-            ;sleep(1)
+        for arr in arrNew {
+            arr.push(arr[indexKey].shouzimus())
+            sleep(1)
         }
-        ;v.push(v[1])
     }
-    ;msgbox(json.stringify(arrField, 4))
-    ;msgbox(json.stringify(arrNew, 4))
+    ;OutputDebug(format("i#{1} {2}:arrNew={3}", A_LineFile,A_LineNumber,arrNew.toTable(",")))
     ;添加到 Gui
     oGui := gui("+resize")
     oGui.OnEvent("escape",doEscape)
@@ -1349,8 +1338,6 @@ hyf_selectByArr(arr2, indexKey:=1, bAddPy:=false, bDistinct:=false) {
     oEdit := oGui.add("Edit", "Lowercase section")
     oEdit.OnEvent("change", loadLV)
     oCB1 := oGui.Add("Checkbox", "yp checked", arrField[2])
-    ;if bAddPy
-    ;    oCB2 := oGui.Add("Checkbox", "yp", arrField[3])
     ;添加按键显示结果(点击复制)
     oButton1 := oGui.add("button", "w200 xs cRed")
     oButton1.OnEvent("click", (ctl, p*)=>A_Clipboard := ctl.text)
@@ -1377,35 +1364,28 @@ hyf_selectByArr(arr2, indexKey:=1, bAddPy:=false, bDistinct:=false) {
     ctl := ControlGetFocus() || WinGetID()
     PostMessage(0x50,, dllcall("LoadKeyboardLayout", "str","04090409", "uint",1), ctl) ;NOTE 美国英语要用"08040804" 若不放ctl 在TC帮助的查找窗口无法切换
     resGui := []
-    OnMessage(WM_KEYDOWN:=0x100, selectN)
+    OnMessage(0x100, selectN)
     WinWaitClose("ahk_id " . oGui.hwnd)
     return resGui
     doEscape(oGui, p*) {
-        OnMessage(WM_KEYDOWN, selectN, 0)
+        OnMessage(0x100, selectN, 0)
         oGui.destroy()
     }
     loadLV(ctl, p*) { ;中文则搜索第1个内容，否则搜索第2个内容
         oLv.delete()
         oLv.opt("-Redraw")
         ;获取匹配项
-        arrKeysMatch := []
-        if (oCB1.value)
-            arrKeysMatch.push(1)
-        ;if bAddPy && oCB2.value
-        ;    arrKeysMatch.push(2)
-        if (!arrKeysMatch.length)
-            return
-        ;msgbox(json.stringify(arrKeysMatch, 4))
+        ;if (oCB1.value == "")
+        ;    return
         sInput := ctl.text
-        arrKeysMatch[1] := (bAddPy && sInput ~= "[[:ascii:]]") ? arrNew[1].length : 1
-        ;msgbox(json.stringify(arrKeysMatch, 4))
+        ;NOTE 获取匹配的 idxMatch
+        idxMatch := (bAddPy && sInput ~= "[[:ascii:]]") ? -1 : 1
         i := 1
+        OutputDebug(format("i#{1} {2}:sInput={3} idxMatch={4}", A_LineFile,A_LineNumber,sInput,idxMatch))
         for subArr in arrNew {
-            for idx in arrKeysMatch {
-                if (sInput=="" || instr(subArr[idx], sInput)) {
-                    oLv.add(, i++, subArr*)
-                    break
-                }
+            if (sInput=="" || instr(subArr[idxMatch], sInput)) {
+                ;OutputDebug(format("i#{1} {2}:subArr={3}", A_LineFile,A_LineNumber,json.stringify(subArr)))
+                oLv.add(, i++, subArr*)
             }
         }
         ;搜网址有用没结果且只搜索标题，则搜索网址
@@ -1657,4 +1637,13 @@ reduce(fun, arr, v0:="") {
         res := fun.call(res, arr[A_Index+1])
     return res
 }
+
+;filter(fun, obj) {
+;    res := %type(obj)%()
+;    for k, v in obj {
+;        if (fun(k, v))
+;            (obj is array) ? res.push(v) : (res[k] := v)
+;    }
+;    return res
+;}
 

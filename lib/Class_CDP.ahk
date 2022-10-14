@@ -518,6 +518,29 @@ class CDP_Page extends WebSocket {
         super.close()
     }
 
+    ; https://chromedevtools.github.io/devtools-protocol/1-3/Runtime/#method-evaluate
+    ;判断null用 evaluate(js)["value"] is ComValue
+    ;ahk传入变量：直接修改 jsCode
+    ;TODO 生产订单列表，返回null，console测试正常 evaluate('console.log(document.querySelector(".main_Table"));')
+    evaluate(jsCode, key:="") {
+        response := this.call('Runtime.evaluate', {
+            expression: jsCode,
+            objectGroup: "console",
+            includeCommandLineAPI: JSON.true,
+            silent: JSON.false,
+            returnByValue: JSON.true, ;支持返回数组等格式
+            userGesture: JSON.true,
+            awaitPromise: JSON.false
+        })
+        if (response is map) {
+            if (response.has("ErrorDetails"))
+                throw error(response["result"]["description"],, JSON.stringify(response["ErrorDetails"]))
+            return (key != "") ? response["result"].get(key, "") : response["result"]
+        } else {
+            throw error(A_ThisFunc)
+        }
+    }
+
     setUrlJson(url) {
         this.objUrl := url.jsonUrl() ;url 会在后面被修改
         for k, v in this.objUrl
@@ -545,7 +568,7 @@ class CDP_Page extends WebSocket {
         ;_TC.runc(fp, 0, false)
     }
 
-    arrTitleUrl(bClean:=true) {
+    arrTitleUrl(bClean:=true, param:="") {
         fun := bClean ? titleClean : (x)=>x
         return [titleClean(this.title),this.href.urlClean()]
         titleClean(tt) {
@@ -562,24 +585,25 @@ class CDP_Page extends WebSocket {
     ;call("browser.close")
     call(DomainAndMethod, Params:='', WaitForResponse:=true) {
         if (this.readyState != 1)
-            throw error('Not connected to tab')
+            throw error("Not connected to tab")
         ; Use a temporary variable for ID in case more calls are made
         ; before we receive a response.
-        this.sendText(JSON.stringify(map('id', idx:=this.idx += 1, 'params', Params ? Params : {}, 'method', DomainAndMethod), 0))
+        this.sendText(JSON.stringify(map('id',idx:=this.idx+=1, 'params',Params?Params:{}, 'method',DomainAndMethod), 0))
         if (!WaitForResponse)
             return
         ; Wait for the response
         this.responses[idx] := false
-        while (this.readyState == 1 && !this.responses[idx])
-            Sleep(20)
+        while (this.readyState == 1 && !this.responses[idx]) {
+            sleep(20)
+        }
         ; Get the response, check if it's an error
-        response := this.responses.Delete(idx)
-        if (type(response) != 'Map')
+        response := this.responses.delete(idx)
+        if !(response is map)
             return
-        if (response.has('error'))
-            throw error('Chrome indicated error in response',, JSON.stringify(response['error']))
-        if (response.has('result'))
-            return response['result']
+        if (response.has("error"))
+            throw error("Chrome indicated error in response",, JSON.stringify(response['error']))
+        if (response.has("result"))
+            return response["result"]
     }
 
     ;event(EventName, Event) {
@@ -605,30 +629,6 @@ class CDP_Page extends WebSocket {
     ;        %fnClose%(this)
     ;    }
     ;}
-
-    ; https://chromedevtools.github.io/devtools-protocol/1-3/Runtime/#method-evaluate
-    ;判断null用 evaluate(js)["value"] is ComValue
-    ;NOTE JS代码arr不能当变量名
-    ;TODO 生产订单列表，返回null，console测试正常 evaluate('console.log(document.querySelector(".main_Table"));')
-    ;TODO ahk值如何传入 js
-    evaluate(JS, key:="") {
-        response := this.call('Runtime.evaluate', {
-            expression: JS,
-                objectGroup: "console",
-            includeCommandLineAPI: JSON.true,
-            silent: JSON.false,
-            returnByValue: JSON.true, ;支持返回数组等格式
-            userGesture: JSON.true,
-            awaitPromise: JSON.false
-        })
-        if (type(response) == "Map") {
-            if (response.has("ErrorDetails"))
-                throw error(response["result"]["description"],, JSON.stringify(response["ErrorDetails"]))
-            return key != "" ? response["result"][key] : response["result"]
-        } else {
-            throw error(A_ThisFunc)
-        }
-    }
 
     ;TODO
     translateType() {
@@ -656,8 +656,8 @@ class CDP_Page extends WebSocket {
     }
 
     WaitForLoad(DesiredState:="complete", Interval:=100) {
-        while (this.evaluate('document.readyState')['value'] != DesiredState)
-            sleep Interval
+        while (this.evaluate('document.readyState',"value") != DesiredState)
+            sleep(Interval)
     }
     onClose() {
         this.reconnect()

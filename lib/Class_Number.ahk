@@ -176,25 +176,26 @@ class _Number {
     }
 
     b2d() { ;2进制转十进制
-        num := this
-        b := strlen(num)
+        sNum := this
+        l := strlen(string(sNum))
         r := 0
-        loop parse, num
-            r |= A_LoopField << --b
+        loop parse, sNum
+            r |= A_LoopField << --l
         return r
     }
 
     b2h() { ;2进制转16进制
         sNum := string(this)
-        b := strlen(sNum)
+        l := strlen(sNum)
         r := 0
         loop parse, sNum
-            r |= A_LoopField << --b
+            r |= A_LoopField << --l
         return format("0x{:X}", r)
     }
 
     d2b(r:=2) { ;十进制转2进制
         num := this
+        res := ""
         while(num) {
             res := mod(num, r) . res
             num //= r
@@ -219,10 +220,10 @@ class _Number {
     }
 
     h2d() { ;16进制转十进制
-        num := this
-        if (instr(num, "0x") != 1)
-            num := "0x" . num
-        return format("{:d}", num)
+        sNum := string(this)
+        if (instr(sNum, "0x") != 1)
+            sNum := "0x" . sNum
+        return format("{:d}", sNum)
     }
 
     h2b() { ;16进制转二进制
@@ -273,5 +274,6 @@ class range {
         }
         return (varCount = 1) ? EnumElements : EnumIndexAndElements
     }
+
 }
 ;msgbox(30.toZhnum())
