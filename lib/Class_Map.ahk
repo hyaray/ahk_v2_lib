@@ -16,6 +16,28 @@ class _Map extends map {
         return super.toJson()
     }
 
+    ;参考python
+    keys() {
+        arr := []
+        for k, v in this
+            arr.push(k)
+        return arr
+    }
+
+    values() {
+        arr := []
+        for k, v in this
+            arr.push(v)
+        return arr
+    }
+
+    items() {
+        arr := []
+        for k, v in this
+            arr.push([k, v])
+        return arr
+    }
+
     ;转成表格字符串(方便查看)
     ;数据结构要统一
     /*
@@ -47,6 +69,15 @@ class _Map extends map {
             }
         }
         return rtrim(res, charItem) .  "`n"
+    }
+
+    filter(fun) {
+        objRes := map()
+        for k, v in this {
+            if (fun(k, v))
+                objRes[k] := v
+        }
+        return objRes
     }
 
     ;简单键值对的比较
@@ -164,28 +195,6 @@ class _Map extends map {
         }
         ;msgbox(json.stringify(arrRes, 4))
         return arrRes
-    }
-
-    ;参考python
-    keys() {
-        arr := []
-        for k, v in this
-            arr.push(k)
-        return arr
-    }
-
-    values() {
-        arr := []
-        for k, v in this
-            arr.push(v)
-        return arr
-    }
-
-    items() {
-        arr := []
-        for k, v in this
-            arr.push([k, v])
-        return arr
     }
 
 }
