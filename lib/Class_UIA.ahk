@@ -611,7 +611,6 @@ class UIA {
 
     ;ElementFromPoint 有时获取的是很大的父元素，此方法通过遍历来获取精确的子元素
     ;cm 0=window 1=screen
-    ;TODO 多层结构如何处理？
     static ElementFromPointEx(xScreen:=unset, yScreen:=unset, cm:=0) {
         if (!isset(xScreen) || !isset(yScreen)) {
             cmMouse := A_CoordModeMouse
@@ -626,28 +625,41 @@ class UIA {
         rvw := this.RawViewWalker()
         cond := this.CreateTrueCondition()
         ;优先从 ElementFromPoint 里搜索
-        elBase := this.ElementFromPoint() ;不一定在此框架内
-        return findInSons(elBase)
-        findInSons(elBase, mk:=0) {
-            try
-                rvw.GetFirstChildElement(elBase)
-            catch { ;没儿子
-                ;if (mk == 1)
-                ;    msgbox("no son",,0x40000)
-                return elBase
+        elParent := this.ElementFromPoint() ;不一定在此框架内
+        ;OutputDebug(format("i#{1} {2}:elParent={3}", A_LineFile,A_LineNumber,json.stringify(elParent.allProperty(),4)))
+        return findInSons(elParent)
+        findInSons(elParent, mk:=0) {
+            try {
+                elSon := rvw.GetFirstChildElement(elParent)
+                ;OutputDebug(format("i#{1} {2}:get elSon", A_LineFile,A_LineNumber))
+            } catch { ;没儿子
+                ;OutputDebug(format("i#{1} {2}:no son, return parent", A_LineFile,A_LineNumber))
+                return elParent ;NOTE 可能是最终结果，由后续的 equals 判断
             } else {
-                elSon := rvw.GetFirstChildElement(elBase)
-                loop {
-                    if (elSon.ContainXY(xScreen, yScreen, 1)) {
-                        el := findInSons(elSon, 1)
-                        if (el)
-                            return el
+                loop { ;在所有兄弟里找
+                    if (elSon.ContainXY(xScreen, yScreen, 1)) { ;包含坐标
+                        ;OutputDebug(format("d#{1} {2}:containXY=({3},{4}) elSon={5}", A_LineFile,A_LineNumber,xScreen,yScreen,json.stringify(elSon.allProperty(),4)))
+                        el := findInSons(elSon, 1) ;NOTE 递归查找最底层的元素
+                        if (el) {
+                            if (el.equals(elSon)) { ;NOTE 最终结果判断
+                                OutputDebug(format("d#{1} {2}:find this end", A_LineFile,A_LineNumber))
+                                if (el.GetBoundingRectangle()[4] < 40) ;暂时用高度判断
+                                    return el
+                            } else {
+                                return el
+                            }
+                        }
                     }
+                    ;父元素范围包含坐标，但所有子元素都不匹配，继续下面代码
+                    ;OutputDebug(format("d#{1} {2}:find son failed", A_LineFile,A_LineNumber))
+                    ;从后面兄弟里找
                     try {
                         elSon := rvw.GetNextSiblingElement(elSon)
+                        ;OutputDebug(format("i#{1} {2}:to elNext", A_LineFile,A_LineNumber))
                     } catch {
-                        if (elBase.CurrentName != "")
-                            return elBase ;TODO 儿子不全，返回父亲
+                        ;OutputDebug(format("d#{1} {2}:at last, name={3}", A_LineFile,A_LineNumber,elParent.CurrentName))
+                        if (elParent.CurrentName != "")
+                            return elParent ;TODO 儿子不全，返回父亲
                         break
                     }
                 }
