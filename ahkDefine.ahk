@@ -39,6 +39,7 @@ company := "My Company"
 #include lib\Class_Array.ahk
 #include lib\Class_Map.ahk
 
+#include lib\Class_Pinyin.ahk
 #include lib\hyaray.ahk
 #include lib\WebSocket.ahk
 #include lib\Class_Mouse.ahk

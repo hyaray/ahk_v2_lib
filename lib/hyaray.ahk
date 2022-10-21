@@ -60,6 +60,7 @@ hyf_getSelect(bVimNormal:=false, bInput:=false) {
             return res
         }
     } else if (WinActive("ahk_class #32770")) {
+        OutputDebug(format("i#{1} {2}:#32770", A_LineFile,A_LineNumber))
         res := getTextIn32770()
         if (res != "")
             return res
@@ -68,6 +69,7 @@ hyf_getSelect(bVimNormal:=false, bInput:=false) {
         WinExist("A")
         ctl := ControlGetClassNN(ControlGetFocus())
         if (ctl ~= "i)^Edit\d+$") { ;Edit 控件也无需复制内容
+            OutputDebug(format("i#{1} {2}:Edit", A_LineFile,A_LineNumber))
             sPos := buffer(4, 0)
             ePos := buffer(4, 0)
             SendMessage(EM_GETSEL:=0xB0, sPos, ePos, ctl)
@@ -86,6 +88,7 @@ hyf_getSelect(bVimNormal:=false, bInput:=false) {
     if (WinActive("ahk_class VirtualConsoleClass")) {
         send("{enter}")
     } else {
+        OutputDebug(format("i#{1} {2}:^c", A_LineFile,A_LineNumber))
         send("{ctrl down}c{ctrl up}")
     }
     if (ClipWait(0.2)) {
@@ -93,15 +96,19 @@ hyf_getSelect(bVimNormal:=false, bInput:=false) {
             res := trim(A_Clipboard) ;TODO 可能会耗时较长
         else
             res := A_Clipboard
+        OutputDebug(format("i#{1} {2}:res={3}", A_LineFile,A_LineNumber,res))
         A_Clipboard := clipSave
         return res
     } else {
+        OutputDebug(format("i#{1} {2}:copy failed clip={3}", A_LineFile,A_LineNumber,A_Clipboard))
         A_Clipboard := clipSave
         if (bInput) {
             res := inputbox("获取和复制失败，请手工输入内容")
             if (res.result=="Cancel" || (res.value == ""))
                 return
             return res.value
+        } else {
+            return ""
         }
     }
     ;暂时应用是选中多个标题名
@@ -1314,7 +1321,7 @@ hyf_selectByArr(arr2, indexKey:=1, bAddPy:=false, bDistinct:=false) {
         arrNew := arrNew.filter((v,k)=>v[indexKey]!="", (v,k)=>v[indexKey])
     ;记录 objRaw 最终返回用(因为有些对象不会在 ListView 显示)
     objRaw := map()
-    for subArr in arr2
+    for subArr in arrNew
         objRaw[subArr[indexKey]] := subArr
     ;添加标题
     arrField := ["序号"]
@@ -1323,9 +1330,10 @@ hyf_selectByArr(arr2, indexKey:=1, bAddPy:=false, bDistinct:=false) {
     ;添加拼音
     if (bAddPy) {
         arrField.push("拼音")
+        oPinyin := _Pinyin("A")
         for arr in arrNew {
-            arr.push(arr[indexKey].shouzimus())
-            sleep(1)
+            arr.push(oPinyin.main(arr[indexKey]))
+            ;sleep(1)
         }
     }
     ;OutputDebug(format("i#{1} {2}:arrNew={3}", A_LineFile,A_LineNumber,arrNew.toTable(",")))
@@ -1381,7 +1389,7 @@ hyf_selectByArr(arr2, indexKey:=1, bAddPy:=false, bDistinct:=false) {
         ;NOTE 获取匹配的 idxMatch
         idxMatch := (bAddPy && sInput ~= "[[:ascii:]]") ? -1 : 1
         i := 1
-        OutputDebug(format("i#{1} {2}:sInput={3} idxMatch={4}", A_LineFile,A_LineNumber,sInput,idxMatch))
+        ;OutputDebug(format("i#{1} {2}:sInput={3} idxMatch={4}", A_LineFile,A_LineNumber,sInput,idxMatch))
         for subArr in arrNew {
             if (sInput=="" || instr(subArr[idxMatch], sInput)) {
                 ;OutputDebug(format("i#{1} {2}:subArr={3}", A_LineFile,A_LineNumber,json.stringify(subArr)))
@@ -1448,7 +1456,9 @@ hyf_selectByArr(arr2, indexKey:=1, bAddPy:=false, bDistinct:=false) {
         ;    arrRes.push(oLv.GetText(r, A_Index+1))
         ;做任何事
         ;设置返回值
-        resGui := objRaw[oLv.GetText(r, indexKey+1)] ;TODO 增加了序号
+        key := oLv.GetText(r, indexKey+1)
+        ;OutputDebug(format("i#{1} {2}:r={3} indexKey={4} key={5}", A_LineFile,A_LineNumber,r,indexKey,key))
+        resGui := objRaw[key] ;TODO 增加了序号
         doEscape(oLv.gui)
     }
 }

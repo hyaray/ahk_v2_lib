@@ -152,7 +152,7 @@ class _Array extends Array {
     }
 
     ;转成表格字符串(方便查看)
-    ;数据结构要统一
+    ;NOTE 数据结构要统一
     /*
     arr := [
         [1,2],
@@ -178,10 +178,10 @@ class _Array extends Array {
         if (type(arr[1]) == "Array") {
             for arr1 in arr {
                 for v in arr1 {
-                    try
+                    if isobject(v)
+                        res .= "{}" . charItem
+                    else
                         res .= v . charItem
-                    catch
-                        msgbox(arr1[A_Index-1])
                 }
                 res := rtrim(res, charItem) .  "`n"
             }

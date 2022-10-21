@@ -1,5 +1,6 @@
 ﻿;多个数字的处理，可用 arr* 方式，使用 _Array 的功能
 ;NOTE 很多时候数字是当字符串用的，字符串不在此功能内
+;复杂运算可用 thqby 的 NTLCalc
 
 defprop := object.DefineProp.bind(number.prototype)
 proto := _Number.prototype
