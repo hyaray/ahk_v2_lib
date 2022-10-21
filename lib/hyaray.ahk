@@ -803,41 +803,32 @@ hyf_removeUSB(bUPan:=true) { ;移除U盘
         sql := "select * from Win32_DiskDrive where MediaType='External hard disk media'"
         return ComObjGet("winmgmts:").ExecQuery(sql).count ? [1] : []
     }
-    ; https://www.autohotkey.com/boards/viewtopic.php?&t=4491
+    ; https://www.autohotkey.com/boards/viewtopic.php?f=83&t=94113
     eject(drv, bCheck:=0, bEject:=1) {
-        objD := map()
-        objD.default := ""
         drv := substr(drv, 1, 1)
-        hVol := dllcall("CreateFile", "Str",format("\\.\{1}:",drv), "uint",0 ,"uint",0, "Ptr",0, "uint",OPEN_EXISTING:=3, "uint",0, "Ptr",0, "Ptr")
-        if (hVol == -1 )
+        ;1. CreateFile
+        hVolume := dllcall("CreateFile", "Str",format("\\.\{1}:",drv), "int",0 ,"int",0, "Ptr",0, "int",OPEN_EXISTING:=3, "int",0, "ptr",0, "ptr")
+        if (hVolume == -1 )
             return drv . " error"
-        STORAGE_DEVICE_NUMBER := buffer(12, 0)
-        dllcall("DeviceIoControl", "Ptr",hVol, "uint",IOCTL_STORAGE_GET_DEVICE_NUMBER:=0x2D1080, "int",0, "int",0, "Ptr",STORAGE_DEVICE_NUMBER, "int",12, "Ptr*",0, "Ptr",0)
-        dllcall("CloseHandle", "Ptr",hVol)
+        ;2. DEVICE_NUMBER
+        DEVICE_NUMBER := IOCTL_STORAGE_GET_DEVICE_NUMBER(hVolume)
+        dllcall("CloseHandle", "ptr",hVolume)
         ; https://docs.microsoft.com/en-us/windows/win32/cimwin32prov/win32-diskdrive
-        sql := format("select * from Win32_DiskDrive where DeviceID='\\\\.\\PHYSICALDRIVE{1}'", numget(STORAGE_DEVICE_NUMBER,4,"uint"))
-        for item in ComObjGet("winmgmts:").ExecQuery(sql) { ;._NewEnum()
-            objD["MediaType"] := item.MediaType
-            objD["PNPDeviceID"] := item.PNPDeviceID
-            break
-        }
+        sql := format("select * from Win32_DiskDrive where DeviceID='\\\\.\\PHYSICALDRIVE{1}'", DEVICE_NUMBER)
+        ComObjGet("winmgmts:").ExecQuery(sql)._NewEnum()(&DiskDrive)
         if (!bEject)
             return "needn't"
-        if !(bCheck || (objD["MediaType"] ~= "^(Removable Media|External hard disk media)"))
-            return objD["MediaType"]=="Fixed hard disk media" ?  "Media is a Fixed hard disk" : "Media type Unknown"
-        if !(dllcall("GetModuleHandle", "Str","SetupAPI.dll", "Ptr"))
-            dllcall("LoadLibrary", "Str","SetupAPI.dll", "Ptr")
-        dllcall("SetupAPI\CM_Locate_DevNode", "Ptr*",&nDID:=0, "Str",objD["PNPDeviceID"], "int",0)
-        dllcall("SetupAPI\CM_Get_Parent", "Ptr*",&nDID, "uint",nDID, "int",0)
-        if (0) {
-            VarSetStrCapacity(&var, 256)
-            dllcall("SetupAPI\CM_Request_Device_Eject" ,"uint",nDID, "Ptr*",&nVT:=1, "Str",var, "int",260, "int",0)
-        } else {
-            var := buffer(256)
-            dllcall("SetupAPI\CM_Request_Device_Eject" ,"uint",nDID, "Ptr*",&nVT:=1, "ptr",var, "int",260, "int",0)
-
+        if (bCheck) {
+            res := CheckMediaType(DiskDrive.MediaType)
+            if res
+                return res
         }
-        if (nVT) {
+        ;3. do
+        hSetupApi := dllcall("LoadLibrary", "Str","SetupAPI.dll", "ptr")
+        dllcall("SetupAPI\CM_Locate_DevNode", "ptr*",&nDeviceID:=0, "Str",DiskDrive.PNPDeviceID, "int",0)
+        dllcall("SetupAPI\CM_Get_Parent", "ptr*",&nDeviceID, "uint",nDeviceID, "int",0)
+        if dllcall("SetupAPI\CM_Request_Device_Eject" ,"uint",nDeviceID, "Ptr*",&nVetoType:=0, "str",nVetoType, "int",1, "int",0) {
+            dllcall("Kernel32.dll\FreeLibrary", "ptr",hSetupApi)
             return [
                 "PNP_VetoTypeUnknown`nThe specified operation was rejected for an unknown reason.",
                 "PNP_VetoLegacyDevice`nThe device does not support the specified PnP operation.",
@@ -852,9 +843,24 @@ hyf_removeUSB(bUPan:=true) { ;移除U盘
                 "PNP_VetoNonDisableable`nThe device cannot be disabled.",
                 "PNP_VetoLegacyDriver`nThe driver does not support the specified PnP operation.",
                 "PNP_VetoInsufficientRights`nThe caller has insufficient privileges to complete the operation.",
-                "PNP_VetoAlreadyRemoved`nThe device has been already removed"][nVT]
+                "PNP_VetoAlreadyRemoved`nThe device has been already removed"][nVetoType]
         }
+        ;while(DirExist(drv . ":")) ; wait for drive letter to disappear ..
+        ;    sleep(100)
+        dllcall("Kernel32.dll\FreeLibrary", "ptr",hSetupApi)
         return true
+        IOCTL_STORAGE_GET_DEVICE_NUMBER(hDevice) {
+            STORAGE_DEVICE_NUMBER := buffer(12, 0)
+            dllcall("DeviceIoControl", "Ptr",hDevice, "uint",0x2D1080, "int",0, "int",0, "ptr",STORAGE_DEVICE_NUMBER, "int",12, "ptr*",0, "ptr",0)
+            return numget(STORAGE_DEVICE_NUMBER, 4, "uint")
+        } 
+        CheckMediaType(MT) {
+            switch MT {
+                case "Removable Media", "External hard disk media":  return
+                case "Fixed hard disk media":                        return(MT)
+                default:                                             return("Media type Unknown")
+            }
+        }
     }
 }
 
