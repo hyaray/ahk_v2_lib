@@ -11,10 +11,9 @@ for k in proto.OwnProps() {
 
 class _String {
     static fileSZM := "d:\TC\hy\Rime\opencc\jiayin.txt"
-    static fileQP := A_LineFile . "\..\汉字拼音对照表.txt"
+    ;static fileQP := A_LineFile . "\..\汉字拼音对照表.txt"
     static fileTS := A_LineFile . "\..\繁体简体.txt"
     static regNum := "^-?\d+(\.\d+)?$"
-    static regHostname := "^[\w\-]+(\.[\w\-]+)+$"
     static regIP := "^(25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d?)(\.(25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d?)){3}$"
     static regSfz := "^\d{17}[\dXx]$" ;身份证
     static regSheng := "浙江|上海|北京|天津|重庆|黑龙江|吉林|辽宁|内蒙古|河北|新疆|甘肃|青海|陕西|宁夏|河南|山东|山西|安徽|湖北|湖南|江苏|四川|贵州|云南|广西|西藏|江西|广东|福建|台湾|海南|香港|澳门"
@@ -73,12 +72,15 @@ class _String {
         SplitPath(fp,, &dir)
         return dir
     }
-    ext() {
+    ext(toLower:=false) {
         fp := this
         if (instr(fp, "/"))
             fp := StrReplace(fp, "/", "\")
-        SplitPath(fp,,, &ext)
-        return ext
+        if instr(fp, ".")
+            SplitPath(fp,,, &ext)
+        else
+            ext := this
+        return toLower ? StrLower(ext) : ext
     }
     noExt() {
         fp := this
@@ -131,7 +133,7 @@ class _String {
     }
 
     count(str, caseSense:=0) {
-        StrReplace(this, str, "", caseSense, &cnt)
+        StrReplace(this, str,, caseSense, &cnt)
         return cnt
     }
 
@@ -297,12 +299,13 @@ class _String {
     }
 
     ;按行转成obj，key为 A_LoopField，值为个数n
-    toObj() {
+    toObj(hasEmpty:=false) {
         obj := map()
         obj.default := 0
         loop parse, rtrim(this,"`r`n"), "`n", "`r" {
-            if (A_LoopField != "")
-                obj[A_LoopField] += 1
+            if (A_LoopField=="" && !hasEmpty)
+                continue
+            obj[A_LoopField] += 1
         }
         return obj
     }
@@ -714,43 +717,15 @@ class _String {
         ;开始比较
         run(format('d:\TC\soft\BCompare\BCompare.exe /fv="text Compare" "{1}" "{2}"',p0,p1),,, &thisPid)
         WinWaitActive("ahk_pid " . thisPid)
-        if (WinActive("ahk_class TQuickCompareDialog")) ;相同内容
+        if (WinActive("ahk_class TQuickCompareDialog")) { ;相同内容
             WinClose()
-        else {
+        } else {
             tooltip("等待BCompare关闭后删除临时文件", 0, 0)
             WinWaitClose("ahk_pid " . thisPid)
             tooltip
         }
         FileDelete(p0)
         FileDelete(p1)
-    }
-
-    ;一般不要用，很傻
-    findFirstDiff(str0) {
-        str1 := this
-        if (str0 == str1)
-            return true
-        l0 := strlen(str0)
-        l1 := strlen(str1)
-        if (l0 > l1) {
-            arr := [str1, str0]
-            longer := 1
-        } else {
-            arr := [str0, str1]
-            longer := 0
-        }
-        loop parse, arr[2] {
-            if (substr(arr[1], A_Index, 1) != A_LoopField) {
-                obj := map(
-                    "longer",longer,
-                    "index",A_Index,
-                    "char0",A_LoopField,
-                    "char1",substr(arr[1], A_Index, 1)
-                )
-                msgbox(json.stringify(obj, 4))
-            }
-        }
-        return 0
     }
 
     ;繁体→简体
@@ -782,20 +757,15 @@ class _String {
     ;-----------------------多行-------------------------
     ;获取重复项
     getSame() {
-        res := map()
-        for k, v in this.toObj() {
-            if (v > 1)
-                res[k] := v
-        }
-        return res
+        return this.toObj().filter((k,v)=>v>1)
     }
-    deleteSame() {
+    deleteSame(hasEmpty:=false) {
         obj := map()
         obj.default := 0
         res := ""
         loop parse, rtrim(this,"`r`n"), "`n", "`r" {
             strLine := rtrim(A_LoopField)
-            if (strLine == "")
+            if (strLine == "" && !hasEmpty)
                 continue
             if !obj[strLine] {
                 res .= strLine . "`r`n"
@@ -805,36 +775,31 @@ class _String {
         return rtrim(res, "`r`n")
     }
     ;删除重复行
-    deleteSameOrderByObj() {
-        res := ""
-        for k, _ in this.toObj()
-            res .= k . "`n"
-        return substr(res, 1, strlen(res)-1)
+    deleteSameOrderByObj(hasEmpty:=false) {
+        return "`n".join(this.toObj(hasEmpty).keys())
     }
 
-    addIndex(i:=1) {
+    ;fun(A_LoopField, A_Index)
+    dealByLine(fun) {
         res := ""
         loop parse, this, "`n", "`r"
-            res .= format("{1}. {2}`n", string(A_Index+i-1),A_LoopField)
-        return res
-    }
-
-    index1234(i:=1) {
-        res := ""
-        loop parse, this, "`n", "`r"
-            res .= RegExReplace(A_LoopField, "^(\d+\.)?", A_Index+i-1) . "`n"
+            res .= format("{1}`n", fun(A_LoopField,A_Index))
         return res
     }
 
     ;批量普通替换
-    ;arr := [
+    ;obj := [
     ;   ["狐狸","懒狗"],
     ;   ["AAA","BBB"],
     ;}
-    replaces(arr) {
+    replaces(obj) {
         res := this
-        for arrTmp in arr  {
-            res := StrReplace(res, arrTmp[1], arrTmp[2])
+        if (obj is array) {
+            for arrTmp in obj
+                res := StrReplace(res, arrTmp*)
+        } else if (obj is map) {
+            for k, v in obj
+                res := StrReplace(res, k, v)
         }
         return res
     }
@@ -1465,241 +1430,6 @@ class _String {
         return RegExReplace(this, "^\d{1,2}([.、]\s*)?")
     }
 
-    ;判断拼音是否有效
-    ;比如yuan 或 yuan1
-    hasPy() {
-        py := StrLower(this)
-        sFile := StrReplace(fileread(_String.fileSZM, "utf-8"), "&nbsp", " ")
-        if (py ~= "\d") { ;有声调
-            py := py.py2sd()
-            return instr(sFile, py)
-        } else {
-            reg := format("\s{1}(\s|$)", py.py2reg())
-            res := (sFile ~= reg)
-            ;if !res
-            ;    msgbox(reg . "`n" . res . "`n" . substr(sFile, res, 9))
-            return res
-        }
-    }
-
-    ;判断拼音有哪些声调
-    ;for cell in ox().selection {
-    ;    if (cell.value == "")
-    ;        continue
-    ;    arr := cell.value.pyArrShengdiao()
-    ;    xl.ScreenUpdating := false
-    ;    if (arr.length < 5) {
-    ;        s := "12345"
-    ;        for v in arr
-    ;            s := StrReplace(s, v)
-    ;        ;msgbox(cell.address(false, false) . "`n" . s,,0x40000)
-    ;        Excel_Comment._addString(cell, s)
-    ;    }
-    ;    xl.ScreenUpdating := true
-    ;}
-    pyArrShengdiao() {
-        static sFile := StrReplace(fileread(_String.fileSZM, "utf-8"), "&nbsp", " ")
-        py := StrLower(this)
-        arr := []
-        loop(5) {
-            reg := format("\s{1}(\s|$)", py.py2reg(A_Index))
-            if (sFile ~= reg)
-                arr.push(A_Index)
-        }
-        return arr
-    }
-
-    ;拼音转成声调
-    ;xuan1 → xuān
-    py2sd() {
-        py := StrLower(this)
-        sd := (py ~= "\d") ? RegExReplace(py, "\D") : 5
-        reg := "[āáǎàōóǒòēéěèīíǐìūúǔùǖǘǚǜ]"
-        if (instr(py, "a"))
-            return StrReplace(py, "a", substr("āáǎàa", sd, 1))
-        else if (instr(py, "o"))
-            return StrReplace(py, "o", substr("ōóǒòo", sd, 1))
-        else if (instr(py, "e"))
-            return StrReplace(py, "e", substr("ēéěèe", sd, 1))
-        else if (py ~= "[iu]") {
-            l := strlen(py)
-            loop(l) { ;逆向遍历
-                char := substr(py, l-A_Index+1, 1)
-                if (char ~= "[iu]") {
-                    if (char == "i")
-                        return StrReplace(py, char, substr("īíǐìi", sd, 1))
-                    else if (char == "u")
-                        return StrReplace(py, char, substr("ūúǔùu", sd, 1))
-                }
-            }
-        } else { ;ü
-            return StrReplace(py, "ü", substr("ǖǘǚǜü", sd, 1))
-        }
-    }
-
-    ;拼音转成正则
-    ;xuan → xu[āáǎàa]n
-    py2reg(sd:=0) {
-        py := StrLower(this)
-        reg := "[āáǎàōóǒòēéěèīíǐìūúǔùǖǘǚǜ]"
-        if (instr(py, "a"))
-            return sd==0 ? StrReplace(py, "a", "[āáǎàa]") : StrReplace(py, "a", substr("āáǎàa", sd, 1))
-        else if (instr(py, "o"))
-            return sd==0 ? StrReplace(py, "o", "[ōóǒòo]") : StrReplace(py, "o", substr("ōóǒòo", sd, 1))
-        else if (instr(py, "e"))
-            return sd==0 ? StrReplace(py, "e", "[ēéěèe]") : StrReplace(py, "e", substr("ēéěèe", sd, 1))
-        else if (py ~= "[iu]") {
-            l := strlen(py)
-            loop(l) { ;逆向遍历
-                char := substr(py, l-A_Index+1, 1)
-                if (char ~= "[iu]") {
-                    if (char == "i")
-                        return sd==0 ? StrReplace(py, char, "[īíǐìi]") : StrReplace(py, char, substr("īíǐìi", sd, 1))
-                    else if (char == "u")
-                        return sd==0 ? StrReplace(py, char, "[ūúǔùu]") : StrReplace(py, char, substr("ūúǔùu", sd, 1))
-                }
-            }
-        } else { ;ü
-            return sd==0 ? StrReplace(py, "ü", "[ǖǘǚǜü]") : StrReplace(py, "ü", substr("ǖǘǚǜü", sd, 1))
-        }
-    }
-
-    shouzimu() { ;获取大写首字母(热键用)
-        firstChar := substr(this, 1, 1) ;获取第一个字作为关键字，搜索拼音首字母
-        if (firstChar.isZh()) {
-            if (RegExMatch(fileread(_String.fileSZM, "utf-8"), firstChar . "\s\K.", &c)) {
-                obj := map(
-                    "ā","a1",
-                    "á","a2",
-                    "ǎ","a3",
-                    "à","a4",
-                    "ō","o1",
-                    "ó","o2",
-                    "ǒ","o3",
-                    "ò","o4",
-                    "ē","e1",
-                    "é","e2",
-                    "ě","e3",
-                    "è","e4",
-                    "ī","i1",
-                    "í","i2",
-                    "ǐ","i3",
-                    "ì","i4",
-                    "ū","u1",
-                    "ú","u2",
-                    "ǔ","u3",
-                    "ù","u4",
-                    "ǖ","v1",
-                    "ǘ","v2",
-                    "ǚ","v3",
-                    "ǜ","v4",
-                )
-                if (obj.has(c[0]))
-                    return StrUpper(substr(c[0],1,1))
-                else
-                    return StrUpper(c[0])
-            }
-        } else
-            return StrUpper(firstChar)
-    }
-
-    shouzimus(isUpper:=1) { ;中文转拼音首字母（不支持多音字）
-        static sShouzimu := '
-(
-安案按爱阿奥岸澳埃艾碍啊癌暗昂傲鞍哀氨挨俺熬矮凹盎胺隘鳌铵谙庵蔼敖黯遨唉鏖袄皑哎坳翱嗷肮懊岙鹌霭捱嗄螯骜暧桉嫒獒嗳鏊吖瑷埯锕嗌媪廒聱犴揞锿砹 A
-不部报本北保表办并比步把标被别变百必备包布八便版边病白巴半班波编兵补宝帮币笔博般倍播遍板毕败宾背摆冰避暴闭奔杯颁伴勃拨拔胞贝薄邦伯爆滨吧玻饱壁捕抱拜辈搬搏悲堡斌榜碑坝辩爸柏泊舶霸弊彼逼罢碧剥渤饼彬炳斑鼻鲍鞭棒臂扮濒秉辨卜泵贬彪膀丙埠驳镑绑傍芭崩簿鳖哺怖蔽匾跋苯葆瀑豹扒殡叭卑脖璧蚌悖庇拌扁褒扳痹缤瓣膊惫摒毙憋笨蹦坂柄簸弼菠靶阪礴迸绊夯绷谤甭雹佰疤箔蓓匕鄙陛鬓卞槟镖梆孢裨掰铂汴苞裱陂煲笆钚辫亳贲钵浜帛敝鲅飚钡狈瘪呗砭禀膘飙蓖粑岜焙擘褓镳饽苄摈跛灞膑吡蝙捭篦嘣钹俾铋稗钣蒡碚钯瘢婊蹩毖筚趵荸薜婢檗舨哔卟褙鳊邴鸨跸骠弁玢锛瓿濞镔逋捌秕荜愎窆畚妣飑豳髌龅甏箅傧啵鹁晡庳髀笾鞴畀滗煸褊孛宀菝魃癍鹎坌狴萆嬖襞碥髟鳔醭疒茇勹邶鐾舭忭缏瘭踣钸 B
-产出成场长从次程厂此车持城村处常创查传才参采策财存础层承初称促超材春除充陈察措曾菜差吃测草藏川船彩朝筹彻冲潮偿残储裁昌册茶唱纯操错词乘穿诚沉床餐抽畅畜呈触楚撤辞窗倡崇虫池拆迟曹晨仓侧柴刺琛尝闯赤瓷粗臣惩绸磁蔡插尘丛炒吹串酬驰匆尺辰撑苍灿催寸聪肠厕慈阐衬惨崔脆垂磋沧擦愁钞茨翠蚕斥敞丑叉厨挫齿抄刹舱醇凑臭翅澄萃巢缠宠葱掺槽扯趁痴猜粹禅喘锤颤摧雏仇猖秤畴耻淳炊吵窜矗娼踩簇辍忱赐茬揣唇忡铲璀陲醋疮糙橙璨槌炽祠蝉骋岑绰稠橱嘲椿锄褚岔澈郴逞侈憧瞅戳雌弛搀瘁搓诧潺滁囱瞠蠢惭蹴睬踌躇撮掣叱猝嘈徜啻昶怅篡疵漕琮丞蟾捶碴馋嚓怵椽悴忖宸怆姹忏晁惆铛谌淙淬嫦绌鹑蹭杈搐蹉踹钗嗤恻涔埕墀刍粲汊碜塍蜍锉哧舛衩婵孱蹿嗔茌菖鲳厝嵯觇黜焯抻豉敕噌杵啜蹙豺痤枞皴搽槎榇舂伧棰阊笞饬钏蛏蹰龊辏踟柽啐伥苌鹚铖俦侪坼蚩嘬糍骢廛瘳亍遄谄谶酲茺樗憷莼撺镲谗踔苁砗铳楮蔟毳艹檫媸氚呲殂矬氅魑篪澶龀裎雠蝽腠刂骣羼耖褫彳艟璁爨榱螬虿瘥惝怊鸱螭瘛徂汆脞礤骖黪艚锸猹躔蒇冁鬯屮枨眵傺搋巛舡楱镩鹾膪 C
-的大地到对多定动等得电第代当度都点达道调导东党但队单带打德断段低担店吨待底独斗督贷读短登邓订岛顿典答档倒毒抵盾夺董丹端冬渡掉胆灯顶旦洞丁弟蛋迪杜淡递戴刀诞盗豆帝袋敦懂稻荡兑敌雕堆奠搭跌堤蒂冻吊锻蹈堵缔丢栋鼎歹甸碘赌淀殿钓呆睹滴朵挡垫涤盯肚叠逮悼蝶迭钉躲颠蹲抖锭氮兜镀叮郸陡滇墩耽娣岱凳傣笛碟逗铎捣窦咄棣爹荻渎怠囤瞪刁缎癫笃巅堕惦谍仃蹬侗谛掂瘩叨狄牒邸咚祷舵殆嘀垛黛沌惰钝铤殚炖宕貂凋甙嘟犊惮癜妒嗒町砥玷牍儋耋坻哆盹遁砀哒喋踱埭诋眈跺嫡蠹碓佃碉耷鞑裆趸疸峒噔鲷氡踮叼镝蚪凼恫掇剁澹酊掸碲靛靼啶煅痘砘钿碇亻嗲胴磴硐椴绐氘骶玳啖蔸菪嶝箪缍镫腚谠簟氐褡垌椟柢聃镦锝堞疔笪迨纛簦玎怛籴礅妲铥黩怼沲萏坫鸫篼簖裰哚帱瘅忉羝睇瓞鲽岽胨芏骀夂丶戥觌铞垤揲蹀耵髑憝卩赕 D
-而二尔额儿俄恩恶耳鹅遏鄂厄饿峨扼迩娥鳄饵洱蛾噩愕讹锷垩婀嗯鹗萼唔摁贰铒谔莪腭锇颚呃阏屙苊轭蒽珥佴鸸鲕诶 E
-发方法分放府费服风副反非负富份房防复范访飞福夫犯丰纷否妇奋幅繁饭付罚扶封纺泛肥父符翻附腐凡峰乏伐奉赴废返番佛粉凤芳锋贩仿浮覆辅冯菲氛傅芬伏抚赋逢辐腹缝坊烦弗肤蜂阜帆袱樊愤肺妨啡沸缚匪甫枫氟粪疯阀坟汾斐斧焚孚敷肪俯拂讽俘咐腑烽孵藩芙涪蜚釜妃诽扉酚翡矾梵筏霏蕃邡舫吩茯馥钒忿吠幡砝俸畈绂绯讣呋罘麸蝠匐腓沣痱芾蜉垡淝枋跗凫滏珐蝮鲂悱狒棼驸榧绋蚨酆砩桴赙砜鲱葑缶菔鼢钫攵犭蘩趺苻拊鲋蹯瀵怫燔偾稃郛幞篚镄鲼唪祓艴黻黼鳆 F
-国工个公高关过改各管规革广共干更果格给观构该供告港股光根感功购搞古钢顾馆官刚故贵歌够贯固鼓贡骨归岗挂攻估轨冠哥赶盖敢甘耕跟郭宫谷概稿沟惯桂瓜滚锅怪纲隔灌巩柜姑割孤阁肝狗戈杆罐钩雇圭葛赣刮龚冈溉鬼辜勾杠膏菇拐莞硅糕庚耿瑰逛裹棍鸽恭钙缸寡柑搁拱苟嘎躬跪尬尴龟竿帼弓秆橄梗沽胳棺垢舸闺噶卦咕丐呱镐辊疙犷亘乖皋汞铬锢矸钴埂诡羹枸哽旮骼伽箍淦汩褂咯羔圪胱赓肛篝癸尕梏痼镉赅锆崮倌炔杲苷郜轱罡佝睾媾擀酐鸪牯蛊呷鹳鳜艮诰蚣椁诂桧藁珙鳏盥皈鲑觥毂刽蝈绀虢咣晷篙肱傀泔硌鹘缟聒槁嗝剐诟掼钆岣菰罟嘏埚坩臌垓旰妫衮鬲膈疳彀胍磙缑诖炅鲧绠觚鸹涫戆纥哏鲠笱瞽庋簋刿掴猓陔筻蛄绲崞蜾栝澉槔袼搿茛鞲觏酤牿鲴宄匦呙馘尜戤塥哿虼遘桄 G
-和会行化合后好海还华活很划或回环话护户河花何货获黄号红火挥汇核湖换画航黑害欢互汉宏孩候洪乎呼哈韩惠怀胡含辉厚患衡坏荒缓伙恢婚混贺煌横毫豪徽皇杭忽耗绘虎滑旱寒浩毁汗喝赫慧淮荷灰狠轰涵贿侯恒唤函惑虹鸿弘喊焕沪魂霍盒糊憾罕幻焊鹤卉浑昏翰祸哄恨凰壶悔郝痕徊猴邯呵亨喉慌秽晃撼荟晖彗讳槐潢哗痪烘豁骅葫泓狐瀚蝴禾桦谎惶憨弧皓菏捍桓簧璜诲壑亥寰珲恍昊涣褐吼咳酣悍瑚骸幌湟蝗哼磺蒿诙浒宦涸嘿骇珩鹄壕荤蕙琥蛤隍徨晦扈灏猾唬麾阂滹阖氦嚎劾铧惚馄诃濠嗨鼾颌訇烩邗蚝踝颔嗬祜遑桁蚶囫茴晗喙逅洹浣豢沆奂颢蘅蕻肓蛔闳斛菡篁圜鳇讧笏蟥洄浍诨绗嚯藿曷嗥铪醐獾鲩虺顸薅翮猢怙唿戽鬟恚颃篌锪蠖槲觳萑癀蟪钬盍荭黉糇骺後鲎煳鹕冱瓠逭漶耠镬焓瘊虍岵鹱咴隳缋溷夥胲醢撖嚆薨堠烀轷锾缳擐阍劐攉砉 H
-军均君菌钧筠皲麇俊峻竣骏隽郡捃经家进建济加机就金技将基今记计教际及京决交结解价间界集件局级据江近几接见究精具积举极己仅境节较纪坚检九即奖届健竞继紧监居尽讲减景降介剧击阶假酒巨既久激绝警津角绩觉急简街救斤旧艰吉季借践兼鉴竟禁键疾叫佳架锦杰聚迹卷井距惊径渐疆脚静句洁鸡剂捐劲缴敬辑纠净籍截胶姐甲拒轿郊焦揭镜寄晋柬嘉捷挤蒋俱贾姜掘驾剑尖肩舰崛睛荐劫晶戒箭嫁剪皆谨菊圾冀筋夹骄俭巾碱浆竭拘颈亟寂暨浇浸脊跻椒炬荆肌稽忌桔饥兢匠酱礁僵靖佼茧祭稼眷娟蕉奸倦惧缉棘矩诫钾诀矶襟歼娇獗汲畸矫拣搅鞠姬绞舅窘捡酵煎秸炯驹抉爵锯贱睫泾剿灸嚼绢藉饺瘠靳窖跤挟踞疚桨咀蛟骥瑾拮憬镌鲸揪溅羁茎迥腈涓倔菁胫涧狡鹃妓讥稷迦蓟咎悸姣掬绛沮嫉芥笺岌韭厥蕨颊叽缰玖攫皎珏伎臼烬阱旌莒粳矍浃缙柩鲫诘楫赳谏痉橘戟钅箕蹶枷矜饯碣犟飓霁嵇锏茭戛鸠缄谲疽鄄觊镢荚鹫痂嗟颉蚧儆钜厩趄孑睑麂謇蹇觐啾踽腱镓遽畿玑婕琚笈笳菅龃噱珈犄翦铰椐芨戬醮疖唧桀毽迳屐讦婧苣髻裾笕堇馑荩榘豇狙岬胛桷鲛疥戢阄噘撅犍硷噤佶偈倨橛笄袈羯肼跽榉郏鞯徼孓葭牮礓苴讵蒺廑妗袷瘕枧洚桕雎蠲纟廴乩咭赍嵴铗湔槿赆僦虮掎鲣囝裥踺茳糨鹪狷齑殛鲚跏蛱搛缣鹣僬噍衿糸剞洎恝蒹谫僭艽挢敫卺扃锔窭锩觖劂丌墼蕺芰哜戋趼楗耩喈鲒骱刭弪獍鬏鞫犋屦醵桊爝 J
-开可科口看快况款克客考空困控康矿扩靠苦括卡库刻刊亏抗块课跨宽肯阔扣昆孔恐勘颗框堪垦凯慨坑狂哭渴酷喀壳烤坎裤夸奎愧柯砍坤恳棵咖魁馈枯窟侃捆溃垮坷扛慷楷旷啃眶恪匮廓苛寇炕叩匡亢筷筐葵窥磕抠拷糠槛恺铿瞰珂铐盔吭挎脍逵咔睽稞邝琨蒯揩髋伉馗聩阚喟瞌夔溘轲窠篑岿锴龛嗑锟鲲铠倥疴崆喹揆胯忾骷蝌侩蔻栲岢圹哐戡尻贶垲郐堀绔犒暌钪侉夼跬颏裉诳髁醌剀诓佧箜蒉蚵芤刳愦髡悃缂喾狯纩蛞氪骒哙悝蝰胩锎蒈莰闶钶锞眍筘阃 K
-了来理力利立量里两路领联老流论林李料率劳列拉律历类连落乐刘旅例六粮良令龙罗离兰留临略烈另陆楼疗录练励绿轮乱累零辆灵冷雷礼虑丽露鲁辽览亮梁浪络勒劣龄廉洛隆炼黎伦蓝卢莱陵篮炉履朗邻脸泪赖栏柳岭璃凌厉牢郎漏裂岚赁吕铝烂凉滥廊莲玲缆屡鹿铃揽恋垃垄厘捞笼粒猎俩廖瘤莉链睐琳磷腊啦禄涝逻辣澜赂聊蕾拦硫垒梨陋淋螺麟芦谅菱锣庐隶仑溜栗磊纶碌狼拢蜡寥氯骆聋荔萝喇帘懒沥霖陇卵擂琅缕掠僚怜犁漓裸沦榄滤鳞麓涟浏哩漯侣狸娄滦燎缭凛颅藜驴泸愣罹镭榴胧棱徕敛伶峦拎烙篱羚姥撂楞琉苓聆粱卤斓摞珑鲤潞剌佬晾砺馏吏搂澧俐鹭鸾撩冽肋骊琏溧栾辘遴榈旯蔺骡窿虏璐婪崂翎篓砾吝阑粼唠泠镰嘹莅茏抡榔锂笠瓴酪箩蠡遛銮靓蛎濂痢喽雳咙漉挛噜孪楝闾潦镂籁涞珞俪嶙砻傈螂叻垅偻咧褛醴栎鎏镣骝瘘郦踉躏戮褴阆鲢囹寮俚枥绫羸鲈囵锒赉趔捋掳橹耒濑洌呤荦棂殓髅轳逯喱逦廪绺渌癞蓼娌潋蛉酃崃罱痨儡鹂檩莨啉谰戾撸鸬雒砬唳辚椤醪坜疠椋邋耧蝼啷蒗蜊獠鬣黧猁钌镏铼嫘栌氇镙粝魉旒瘌镧铑鳓蓠呖跞裢裣埒捩鲮熘嵝瘰缧酹嘞疬臁膦泷蒌泺缡鲡鳢奁墚尥柃胪镥脔冫稂塄嫠詈蠊鹩躐鹨簏膂脶诔苈篥娈瞵锍栊癃舻辂稆猡漤铹栳耢仂泐檑轹蔹懔垆锊倮蠃 L
-民们面目明名门美没每贸么马模米命满买卖毛某密木亩棉煤免幕母蒙秘末牧盟梅矛冒莫吗摩麦谋敏麻码迈忙梦墨盲猛苗貌慢曼妈默灭迷媒漫穆磨枚孟鸣秒摸漠姆茂妹妙描墓脉慕茅膜帽埋玛弥庙铭眉绵缅魅牟牡猫魔茫募闽瞄勉蔓芒眠霉蜜沫嘛骂睦陌抹萌谜闷觅缪瞒髦寞靡昧蛮媚蚂玫沐酶泌镁氓蘑鳗暮锚馒冕拇湄朦闵莽冥摹眸锰懋寐渺谬莓袤蓦眯麋猕馍茉袂蔑檬皿楣谧泯谟茗娩淼咪牦岷卯勐铆耄钼糜懵腼悯溟峁宓渑幔酩嵋藐蟒汨谩珉螨秣霾醚湎瞑篾缈苜扪焖懑沔唛仫蟆邈貉抿邙瑁螟嘧弭蜢嫫犸暝虻熳黾镆缦殁蟊茆哞蝥缗呒镘脒荬颟旄泖镅蠓幂耱杩劢墁玟嬷昴瞀浼艨祢縻蘼芈眄鹋杪咩愍麽瘼鍪蛑甍艋敉眇蠛侔鞔硭漭猸鹛钔瞢礞喵苠鳘貊貘毪坶 M
-年能农内南难那女你念宁努纳拿尼脑男呢哪牛泥诺您纽娘乃凝奶浓扭耐暖拟闹弄鸟挪酿娜尿奈逆嫩囊聂倪怒恼妮奴挠虐楠腻捏钮匿钠呐霓辗碾涅拧镍瑙溺喃讷疟泞柠馁糯脓袅侬捺弩廿淖旎孽拗懦捻傩鼐撵昵拈咛蔫妞坭狞萘鲶埝蘖钕啮蹑铌馕嗫囡氖孬喏鲵鲇垴辇臬囔曩黏镊颞忸伲脲佞哝铙乜怩驽恁赧睨柰衲腩蝻呶搦廾硇猱茑镎肭艿蛲陧衄锘攮猊嬲聍甯狃耨孥胬恧 N
-欧偶殴呕藕讴鸥哦瓯噢沤耦怄 O
-品平批配评破牌培片排普票派贫判拍皮鹏篇坡盘迫跑朋怕聘偏赔凭铺浦频颇辟骗彭炮膨佩旁陪瓶朴潘攀葡蓬屏啤拼谱埔匹喷漂萍盼盆碰飘扑泡婆庞苹棚披疲帕抛乒拚爬沛泼捧魄乓坪畔仆剖僻徘蒲胖曝毗烹坯磅脾翩篷嫖叛譬溥刨裴劈媲莆澎袍圃胚屁璞湃濮趴菩粕瞥琶琵瓢螃鄱啪撇脯珀邳蹒葩抨磐硼痞癖怦丕蹼彷耙杷枇剽咆噼霹俳枰滂砰爿蟠哌逄颦缥疱匍嘭庖狍纰匏叵砒姘娉铍骈掊泮霈淠胼殍噗瞟郫旆埤蹁谝嘌袢帔睥苤嫔笸氆呸醅芘蚍圮榀筢耪辔牝冖襻鼙湓罴蜱俜鲆皤镨脬蟛貔仳犏钋莩堋庀擗甓螵钷攴蒎锫陴氕丿裒镤 P
-全企区前其起去强期情求取权确气青群清千钱切请却且七球亲器轻汽缺庆签桥奇券曲齐趋启秋勤抢渠潜旗倾侵乔泉穷趣棋侨迁秦妻欠弃圈墙枪巧恰牵钦琴驱悄拳洽歧浅禽劝顷丘欺琼屈骑契卿敲窃邱俏迄遣谦腔犬漆乾铅戚岂岐歉晴雀黔裙谴琦栖瞧氢琪泣酋躯芹嵌衢沁乞茄砌祁裘翘崎窍绮娶祺蹊寝祈凄倩峭擒擎祛锲囚钳淇杞铨痊瞿鹊茜锹虔氰锵脐撬怯麒圻岖诠憩呛阙荃掐堑惬穹羌荞芪噙钎跷醛骞樵遒罄憔龋觑阡瘸榷畦荠磬蜷蔷蜻耆鞘葺沏朐萋襁掮羟骐鳍跄箐綦妾蛐鳅讫橇嗪虬揿蚯峤癯蛆蕲钤泅屺邛樯挈戕扦颀亓碛芊茕柒颧郄阕溱荨芩逡汔诮楸阒绻髂仟芡谯湫悭缱衾鲭綮嫱筇犰佥箧跫萁苘逑诎劬蕖匚嘁蛴戗蛩巯悫炝愀蘧氍槭镪黢芑葜愆锓蠼筌鬈桤褰肷锖鞒吣黥俅璩悛辁蜞岍搴箝慊椠蜣硗劁缲檎螓圊檠謦銎赇鼽糗麴鸲磲畎 Q
-人日入如任然认热让容荣仍融染瑞润肉若仁软弱绕燃扰绒乳忍锐壤柔儒辱溶饶汝扔蓉韧阮熔刃纫惹冉攘茹戎饪榕嚷睿偌褥芮茸揉冗孺濡蕊闰嵘妊蠕糅荏苒鞣稔娆瓤蹂髯壬蕤仞轫嚅衽缛箬溽穰铷蚋朊禳桡洳枘蚺荛肜狨蝾薷襦颥蓐 R
-是上市生时实设社说事三司水省商十所术使收山世书四少手施深式数受税势视首思身斯色神识速屾师售史示石食始赛士失双算善素声随适试什审属苏损升送室岁树沙私胜输绍授索申诉顺死虽束甚述尚松摄伤散孙谁署盛似守涉塞射诗熟丝沈森殊萨厦缩塑肃宋蔬饰舍杀烧陕释俗赏寿圣酸桑扫锁刷驶剩伸饲氏舒衰闪睡硕逝牲丧寺洒慎疏衫湿擅撒讼碎稍鼠纱淑艘渗蛇叔帅汕暑扇枢砂绳啥搜蚀狮隧瘦颂邵爽莎兽墅骚遂瞬誓哨肆摔杉霜拾尸笋甩筛髓伞蒜傻肾舌曙匙抒穗晒耸梭韶珊瑟绥竖僧粟蜀烁仕柿朔薯奢涩溯梳撕诵舜嫂嗓琐矢栓泗耍隋慑煞删膳戍恕邃缮侍绅孰酥嵩夙捎莘噬勺嗜伺赡梢鄯拴笙嗣栅昇祀沭狩缫涮赎庶煽赦赊裳姗跚拭漱佘屎麝呻恃厮驷嘶荪鳝淞塾擞婶甥嗦娠砷嗽唆唢墒锶啬轼睢嬗畲祟嵊绶晌愫吮腮潸晟蟀铄俟鲨飒娑虱倏澍濉霎嗖簌蜃怂稣卅芍榫孀搔悚仨搡叟讪唰舢劭纾僳苫燧姝垧氵菽隼疝馊觞谡巳崧蓑蛳咝凇穑膻羧忪谇殇舐黍薮眭噻铯瘙痧竦厍裟挲叁臊钐腧闩菘鳃艄莳艏铩猞眚铈谥耜飕筲哂炻豕秫笥涑鲥狲桫蟮饣杓葚熵绱蛸螫毹妁嗾糁馓酾槊狻芟埏渖筮殳飧埽潲诜埘弑嗍蒴鸶缌澌姒蔌睃忄凵颡谂礻摅汜溲嗉荽灬丨脎毵磉鳋唼歃彡骟滠矧胂蓍鲺贳搠厶兕锼螋瞍觫宿 S
-他同体天提通题条特投统团台头推谈它土她铁突图太田态套听庭托讨探退停厅脱童堂途坦拓泰塔透贴唐痛挑跳摊弹陶腾拖炭糖坛替徒涛铜添滩偷填踏逃贪妥叹腿涂廷梯挺桃汤塘甜抬胎吐亭萄吞汰淘艇谭桶潭疼掏桐屠塌碳毯屯兔躺藤筒踢瘫趟滔惕滕倘棠驼烫剔榻蹄沓淌迢陀彤韬婷秃凸汀帖眺啼沱佟膛潼鸵钛荼檀痰捅苔恬湍袒獭褪驮坍搪酮豚覃颓薹蜕屉剃涕烃唾霆椭焘腆锑倜臀蜓忐坨忑昙肽砼挞饨瞳悌恸佗洮砣郯跎苕窕镗啕蹋跆舔邰忒疃傥仝逖嚏庹螳绦誊笤佻嗵柁钽钍钭抟暾阗忝橐趿遢鲐醍僮氽饕餮骰乇铊呔扌溏铽殄酞帑葶菟鳎绨粜锬羰鼗鹈畋髫萜堍溻饧樘醣酡缇梃彖鼍冂闼炱螗耥裼莛箨镡铴瑭慝掭祧龆蜩鲦茼酴煺柝 T
-为我外万务文位问委物无五完王望闻未往维稳武卫围网晚湾午温违吴舞威伟伍危味微污握瓦乌误忘亡唯谓屋旺伪玩挖慰汪尾窝魏晤碗娃顽韦悟沃翁卧吾挽纹雾弯胃畏帷喂芜丸歪巍萎蔚皖纬宛潍梧尉挝婉洼袜吻蛙腕渭惟蚊勿薇苇巫炜侮枉妄雯坞涡紊毋诬哇呜娓瘟诿蜿惋钨斡玮邬烷渥捂汶鹜幄兀婺嗡惘瓮妩琬蜗佤崴戊桅罔畹偎鹉豌喔逶倭娲猥剜浯蜈囗葳隗痿猬蓊骛纨涠嵬韪仵煨莴艉龌辋焐刎芴绾帏闱鋈脘洧肟魍庑菀沩鼯牾璺怃圬芄隈鲔硪忤痦亠蕹迕杌寤腽軎阌阢 W
-新学现下小心向些系西性项先相信县形效想销乡协需型消选兴许线续讯象席限息校须响香宣显修希险习星写训献像吸秀序喜鲜细血迅夏谢雄徐械析休寻晓笑雪戏享峡刑箱询洗悉辛祥鞋幸姓蓄循宪欣锡醒虚辖吁溪纤旋旬陷闲惜肖稀巡袭贤兄熊绪夕霞湘薪胁斜详削仙携胸懈叙衔晰悬昔汛孝萧牺橡巷袖卸掀勋邢咸凶绣翔谐烯薛虾潇泄旭杏熙襄嫌狭厢匈逊蟹馨轩穴邪吓朽羡歇鑫锈弦芯媳熏侠镶暇腺硝喧锌宵遐玄膝羞泻隙绚徇汹啸恤犀浚屑墟嚣栩絮忻圩硒兮瞎熄殉霄痫娴舷渲驯馅曦燮璇榭禧淆嬉腥酰婿蝎玺昕哮筱炫靴戌奚鲟胥汐匣逍嘘萱徙撷煦羲铣淅癣偕嗅漩嘻眩酗衅猩薰瑕飨岫歙暄溴熹冼荀浔悻涎暹籼箫矽蟋庥骁煊铉诩洵郗锨苋枭亵唏陉惺谑峋饷盱缃楔蚬骧蓿皙隰缬馐歆邂黠跹芗埙樨巽岘浠瀣藓鳕郇庠溆醺蜥楦恂勰檄芎硖罅燹泫翕阋踅窨鹇鲞舾屣狎哓绡咻洫葸氙谖螅顼泶蕈崤囟粞觋莶霰榍薤髹曛欷僖醯鼷跣枵擤勖痃碹穸饩舄禊猃绁渫廨獬硎荇鸺貅糈揎镟獯彐菥蓰柙祆筅葙蟓魈躞醑儇 X
-一有业要以用于月元也与员已应由意营议义因院原研运育又益样亿优易引亚严源医影验约艺养越央银游依油英远药余友阳预域演言眼印予云遇愿园音洋压迎扬杨永移拥语映右烟沿誉玉夜叶邮鱼延雨衣异伊跃仪尤宜硬饮勇遗野疑邀援盐雅羊盈渔牙裕涌忧圆液毅谊允赢幼炎亦愈泳娱燕摇欲阴押岩疫冶舆缘隐役宇忆耀阅抑羽颖袁犹诱乙译宴逾腰艳页遥氧颜岳爷悠姚鸭豫怨耶仰翼窑姻郁呀粤幽寓悦孕婴溢殷椅彦狱喻御蕴淫涯韵掩浴沂尹鹰淹阎庸衍愉瑶咬雁秧渊禹俞逸崖苑俑芽荫榆曰愚尧踊咽酝耘哑厌钥蚁吟渝夷焰佣淤荧邑佑怡瘾谣椰绎冤寅咏虞屿彝裔峪晕讶肴莹匀樱堰姨鸦瑛驭茵砚熠贻瑜矣媛雍烨唁禺芸蝇毓屹娅陨颐钰猿夭垣倚诣胰釉痒萦纭焉奕漾晏疡翌哟檐柚隅莺泱甬颍侥吆蜒镛铀鱿殃奄膺衙芋俨熨腌妍掖弈轶缨瀛瘀驿囿沅妖谚壹迂塬恙臃郧垸曳兖筵垠焱猗鸳煜鸯楹偃徉闫晔昱酉攸黝幺臆弋罂铱丫嫣旖谒於辕荥漪鄢鄞臾杳萤莠邕猷蚜湮盂赝迤胭佚鹦蛹聿琰腋滢蓥翊诒舀佯恿竽萸垭噎妪恽韫伢怿痍懿郢饴峄腴圄谕窈揖眙觎曜蚓鸢郓镒茔仡氤怏揄氲揶黟滟龉钺殒氩桠胤蝣瑗琊嘤疣炀烊肄龈谀靥咿翳挹缢慵呦呓俣愠阉刈壅馀庾蚴妤瘐魇酽咦嶷羿郾鹞钇殪痈揠邺鳙恹鬻爰崦芫荑薏莸欤鹬鼋樾喑墉昀爻蜴镱铟莜噫璎铕宥阈癔洇嵛剡鞅狺夤嬴瘿饔雩鹆橼鼹繇苡悒吲喁卣牖睚痖菸餍徭瘗唷圉蜮疋迓衤欹佾埸霪茚鼬伛谳轺铘圯纡窬窳饫蓣瀹蝤铫讠厣罨蛘鳐崾舣媵尢蚰侑狳螈龠阽哕肀岈砑珧酏劓堙撄潆舁蝓燠眢箢掾刖狁玥雲祎 Y
-在中这作展主资制政重自者之种总子着增正最组治质造专职只志战至指证织支张转准做争镇值走装众责州整知真则直再族占抓住周足照注助致字执洲站章终置止泽逐座早著征状综招针筑找罪召灾圳左债追植怎纸振障祖杂择赞驻朱租赵智钟庄宗珠郑涨浙载坐掌震壮忠珍扎祝折尊阵猪帐诸柱殖秩遭暂遵咨阻宅胀症竹昨仲纵赠钻赚诊寨炸旨址邹滞彰奏滋哲摘桌卓兆栽铸枝衷撞砖踪丈株瞩嘴仔脏舟姿紫侦挣骤芝肿咱昭兹撰妆葬脂轴崭诈帜枣幢宰醉蒸仗轧汁孜粘湛佐捉噪闸肇灶淄桩窄嘱砸贮赃籽渣昼肢挚蔗斋沾罩宙瞻遮燥琢煮睁臻贞糟凿铮躁漳坠稚筝咋钊乍詹枕翟斩沼藻皂棕灼粥攒澡纂缀皱拯椎浊酯贼踵梓掷烛樟哉峙鲻桢账杖辙酌榨篆赈盏炙臧楂卒拙绽谆栉侄肘苎璋祯辄帧札爪渍毡茁栈甄芷锥姊涿蛛拄铢斟啧洙窒咫竺拽蘸眨蛀峥渚吱攥伫缜咒咤匝杼箴赘憎趾柘祚疹痔秭镯柞恣冢唑蜘帚郅喳胄嶂仉崽绉粽侏锗鬃桎锃雉褶诏怔惴蚤俎蜇瘴祉盅啄蛰甾咂奘砧鳟诅揍蟑诛陟诤鹧谪昝赭狰孳纣獐幛榛偬铡濯簪訾茱滓鸩痣蛭糌倬帙馔蚱锱瓒枳啭樽箸仄炷妯躅擢轸甑踯翥啁稹徵诌隹砦蓁胝颛栀斫镞錾吒旃箦鄣摺钲贽缵祗豸辎趑龇酢磔胗肫赀眦椹赜潴骓缁诹怍笮舴罾棹鸷碡砟谵朕摭轵诼笫阝瘵畛卮轾彘觯锺邾槠谘嵫髭蕞辶茈趱驵缯揸笊絷跖舯螽籀舳粢驺陬阼馇昃痄搌浈埴黹酎橥缒窀菹拶唣迮帻谮哳齄嫜忮骘膣踬荮瘃麈疰丬浞禚觜耔腙鄹鲰躜撙胙 Z
-)'
-        static obj := map(
-            "ā","a1",
-            "á","a2",
-            "ǎ","a3",
-            "à","a4",
-            "ē","e1",
-            "é","e2",
-            "ě","e3",
-            "è","e4",
-            "ō","o1",
-            "ó","o2",
-            "ǒ","o3",
-            "ò","o4",
-            "ī","i1",
-            "í","i2",
-            "ǐ","i3",
-            "ì","i4",
-            "ū","u1",
-            "ú","u2",
-            "ǔ","u3",
-            "ù","u4",
-            "ǖ","v1",
-            "ǘ","v2",
-            "ǚ","v3",
-            "ǜ","v4",
-        )
-        str := this
-        if (str == "")
-            return
-        res := ""
-        loop parse, str {
-            if (A_LoopField ~= "[[:ascii:]]|（|）") {
-                res .= A_LoopField
-            } else {
-                if (RegExMatch(sShouzimu, A_LoopField . ".*\K\w", &m)) {
-                    if (obj.has(m[0]))
-                        res .= substr(obj[m[0]],1,1)
-                    else
-                        res .= isUpper ? StrUpper(m[0]) : StrLower(m[0])
-                } else {
-                    res .= A_LoopField
-                }
-                ;msgbox(A_LoopField . "`n没找到拼音")
-            }
-        }
-        return res
-    }
-
-    quanpins(tp:="T") { ;获取全拼
-        str := this
-        if (str == "")
-            return
-        strFile := fileread(_String.fileQP)
-        res := ""
-        loop parse, str {
-            if (A_LoopField ~= "[[:ascii:]]")
-                res .= A_LoopField
-            else {
-                if (RegExMatch(strFile, A_LoopField . ".*\s\K\w+", &c))
-                    res .= StrTitle(c[0])
-                else {
-                    msgbox(A_LoopField . "`n不在列表，请完善")
-                    run(_String.fileQP)
-                    res .= A_LoopField
-                }
-            }
-        }
-        return res
-    }
-
     ;250/年*116=29000/年*3=83520元
     ;TODO 待完善
     calc() {
@@ -1794,19 +1524,28 @@ class _String {
     }
 
     isText() { ;是否文本文件
-        return instr(this, ".") ? (this.ext() ~= _String.regText) : (this ~= _String.regText)
+        return (this.ext(1) ~= _String.regText)
+    }
+
+    isPdf() {
+        return (this.ext(1) ~= _String.regText)
     }
 
     isImage() { ;是否图片文件
-        return instr(this, ".") ? (this.ext() ~= _String.regImage) : (this ~= _String.regImage)
+        return (this.ext(1) ~= _String.regImage)
     }
 
     isAudio() {
-        return instr(this, ".") ? (this.ext() ~= _String.regAudeo) : (this ~= _String.regAudeo)
+        return (this.ext(1) ~= _String.regAudeo)
     }
 
     isVideo() { ;是否视频
-        return instr(this, ".") ? (this.ext() ~= _String.regVideo) : (this ~= _String.regVideo)
+        return (this.ext(1) ~= _String.regVideo)
+    }
+
+    isDoc() { ;是否文档
+        ext := this.ext(1)
+        return ext.isText() || ext.isPdf() || ext.isExcel() || ext.isWord() || ext.isPPT() || ext.isAudio() || ext.isVideo()
     }
 
     isZip() { ;是否压缩包
@@ -1814,9 +1553,9 @@ class _String {
     }
 
     isExcel() {
-        if (1)
-            return StrLower(this.ext()) ~= "i)^xls"
-        else {
+        if (1) {
+            return (this.ext(1) ~= "i)^xls")
+        } else {
             SplitPath(this, &fn, &dir)
             oFloder := ComObject("Shell.application").NameSpace(dir)
             return instr(oFloder.GetDetailsOf(oFloder.ParseName(fn), 2), "Microsoft Excel")
@@ -1824,9 +1563,9 @@ class _String {
     }
 
     isWord() {
-        if (1)
-            return (StrLower(this.ext()) ~= "i)^doc")
-        else {
+        if (1) {
+            return (this.ext(1) ~= "i)^doc")
+        } else {
             SplitPath(this, &fn, &dir)
             oFloder := ComObject("Shell.application").NameSpace(dir)
             return instr(oFloder.GetDetailsOf(oFloder.ParseName(fn), 2), "Microsoft Excel")
@@ -1834,7 +1573,7 @@ class _String {
     }
 
     isPPT() {
-        return (StrLower(this.ext()) ~= "i)^ppt")
+        return (this.ext(1) ~= "i)^ppt")
     }
 
     ; https://daringfireball.net/2010/07/improved_regex_for_matching_urls
