@@ -326,7 +326,8 @@ class _ListView extends _Ctrl {
         arr := []
         loop parse, ListViewGetContent(, this.hCtl), "`n", "`r"
             arr.push(RegExReplace(A_LoopField, "`t.*"))
-        arrRes := hyf_selectByArr(arr)
+        ;OutputDebug(format("i#{1} {2}:arr={3}", A_LineFile,A_LineNumber,json.stringify(arr,4)))
+        arrRes := hyf_selectByArr(arr,, 1)
         if (arrRes.length)
             this.selectByText(arrRes[i], i)
     }
@@ -497,15 +498,19 @@ class _TreeView extends _Ctrl {
 
     ;-------------以下为示例
     ;_TreeView("SysTreeView321", "A").selectByPath("安全设置\本地策略\用户权限分配")
-    selectByPath(path, bEnter:=false) {
+    selectByPath(path, bExpand:=false, bEnter:=false) {
         elParent := UIA.ElementFromHandle(this.hCtl) ;获取控件
         arrPath := StrSplit(path, "\")
         for i, v in arrPath {
-            if (instr(v, ":"))
-                v := format("{1} ({2})", DriveGetLabel(v),StrUpper(v))
-            ; tooltip(v)
-            ;查找下一级并展开
-            cond := UIA.CreateAndCondition(UIA.CreatePropertyCondition("ControlType","TreeItem"), UIA.CreatePropertyCondition("Name",v))
+            if (v == "*") {
+                cond := UIA.CreatePropertyCondition("ControlType","TreeItem")
+            } else {
+                if (instr(v, ":"))
+                    v := format("{1} ({2})", DriveGetLabel(v),StrUpper(v))
+                ; tooltip(v)
+                ;查找下一级并展开
+                cond := UIA.CreateAndCondition(UIA.CreatePropertyCondition("ControlType","TreeItem"), UIA.CreatePropertyCondition("Name",v))
+            }
             ;查找元素(按时间)
             endtime := A_TickCount + 3000
             loop {
@@ -516,13 +521,19 @@ class _TreeView extends _Ctrl {
             if (i == arrPath.length) { ;最后1项，直接选中结束
                 OutputDebug(format("i#{1} {2}:select-{3}", A_LineFile,A_LineNumber,v))
                 el.GetCurrentPattern("SelectionItem").Select()
+                if (bExpand) {
+                    op := el.GetCurrentPattern("ExpandCollapse")
+                    if (!op.CurrentExpandCollapseState) {
+                        op.Expand()
+                    }
+                }
             } else {
                 op := el.GetCurrentPattern("ExpandCollapse")
                 if (!op.CurrentExpandCollapseState) {
-                    OutputDebug(format("i#{1} {2}:expand-{3}", A_LineFile,A_LineNumber,v))
+                    ;OutputDebug(format("i#{1} {2}:expand-{3}", A_LineFile,A_LineNumber,v))
                     op.Expand()
                 } else { ;仅选中
-                    OutputDebug(format("i#{1} {2}:select-{3}", A_LineFile,A_LineNumber,v))
+                    ;OutputDebug(format("i#{1} {2}:select-{3}", A_LineFile,A_LineNumber,v))
                     el.GetCurrentPattern("SelectionItem").Select()
                     ;sleep(300)
                 }
