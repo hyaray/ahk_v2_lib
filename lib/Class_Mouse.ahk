@@ -242,26 +242,30 @@ class _Mouse {
     }
 
     ;获取指定坐标点的鼠标光标特征码
-    static shapeByWindow(x, y) {
+    static shapeByWindow(x, y, toStr:=0) {
         _Mouse.moveByWindow(x, y)
         MouseMove(X, Y, 0, "R")
-        return _Mouse.shapeResult(_Mouse.shapeBase())
+        return _Mouse.shapeResult(_Mouse.shapeBase(), toStr:=0)
     }
 
     ;获取指定坐标点的鼠标光标特征码
-    static shapeR(x, y) {
+    static shapeR(x, y, toStr:=0) {
         MouseMove(X, Y, 0, "R")
-        return _Mouse.shapeResult(_Mouse.shapeBase())
+        return _Mouse.shapeResult(_Mouse.shapeBase(), toStr)
     }
 
     ;shapeBase结果简化
-    static shapeResult(n) {
-        if (n = 126898458)
-            return 1 ;按钮或超链接
-        else if (n = 161920)
-            return 2 ;输入状态
-        else
-            return 3
+    static shapeResult(n, toStr:=false) {
+        switch n {
+            case 126898458:
+                return toStr ? "button" : 1
+            case 161920:
+                return toStr ? "input" : 2
+            case 130504298:
+                return toStr ? "normal" : 3
+            default:
+                return toStr ? "other" : 4
+        }
     }
 
     ;获取鼠标所在位置的光标特征码，by nnrxin
@@ -272,8 +276,8 @@ class _Mouse {
     ;144310 Excel实心十字架
     static shapeBase() {
         PCURSORINFO := buffer(20, 0) ;为鼠标信息 结构 设置出20字节空间
-        numput("UPtr", 20, PCURSORINFO, 0, "uint")  ;*声明出 结构 的大小cbSize = 20字节
-        dllcall("GetCursorInfo", "ptr", &PCURSORINFO) ;获取 结构-光标信息
+        numput("uint", 20, PCURSORINFO, 0)  ;*声明出 结构 的大小cbSize = 20字节
+        dllcall("GetCursorInfo", "ptr",PCURSORINFO) ;获取 结构-光标信息
         ; msgbox(numget(PCURSORINFO, 8, "uint")) ;含义是什么？
         if (numget(PCURSORINFO, 4, "uint")=="0") ;当光标隐藏时，直接输出特征码为0
             return 0
@@ -289,8 +293,9 @@ class _Mouse {
             dllcall("GetBitmapBits", "ptr", numget(ICONINFO, 16), "uint", 4096, "uint", &lpvColorBits)  ;读取 数组-色图信息
             loop(256) ;色图码
                 ColorCode += numget(lpvColorBits, A_Index*16-3, "UChar")  ;累加拼合
-        } else
+        } else {
             ColorCode := "0"
+        }
         dllcall("DeleteObject", "ptr",numget(ICONINFO,12))  ; *清理掩图
         dllcall("DeleteObject", "ptr",numget(ICONINFO,16))  ; *清理色图
         PCURSORINFO := buffer(0) ;清空 结构-光标信息

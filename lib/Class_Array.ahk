@@ -170,12 +170,12 @@ class _Array extends Array {
         ),
     ]
     */
-    toTable(charItem:="`t") {
+    toTable(charItem:="`t", arrKey:=unset) {
         arr := this
         if (!arr.length)
             return ""
         res := ""
-        if (type(arr[1]) == "Array") {
+        if (arr[1] is array) {
             for arr1 in arr {
                 for v in arr1 {
                     if isobject(v)
@@ -183,16 +183,18 @@ class _Array extends Array {
                     else
                         res .= v . charItem
                 }
-                res := rtrim(res, charItem) .  "`n"
+                res := rtrim(res, charItem) . "`n"
             }
-        } else if (type(arr[1]) == "Map") {
-            ;title
-            arrTitle := []
-            for k, v in arr[1] {
-                arrTitle.push(k)
-                res .= k . charItem
+        } else if (arr[1] is map) {
+            ;arrTitle
+            if isset(arrKey) {
+                arrTitle := arrKey
+            } else {
+                arrTitle := []
+                for k, v in arr[1]
+                    arrTitle.push(k)
             }
-            res := rtrim(res, charItem) .  "`n"
+            res := arrTitle.join(charItem) . "`n"
             ;data
             for map1 in arr {
                 for v in arrTitle
@@ -200,7 +202,7 @@ class _Array extends Array {
                 res := rtrim(res, charItem) . "`n"
             }
         }
-        return res
+        return rtrim(res, "`n")
     }
 
     sum() {

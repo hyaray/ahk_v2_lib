@@ -96,11 +96,11 @@ hyf_getSelect(bVimNormal:=false, bInput:=false) {
             res := trim(A_Clipboard) ;TODO 可能会耗时较长
         else
             res := A_Clipboard
-        OutputDebug(format("i#{1} {2}:res={3}", A_LineFile,A_LineNumber,res))
+        ;OutputDebug(format("i#{1} {2}:res={3}", A_LineFile,A_LineNumber,res))
         A_Clipboard := clipSave
         return res
     } else {
-        OutputDebug(format("i#{1} {2}:copy failed clip={3}", A_LineFile,A_LineNumber,A_Clipboard))
+        OutputDebug(format("d#{1} {2}:copy failed clip={3}", A_LineFile,A_LineNumber,A_Clipboard))
         A_Clipboard := clipSave
         if (bInput) {
             res := inputbox("获取和复制失败，请手工输入内容")
@@ -804,6 +804,7 @@ hyf_removeUSB(bUPan:=true) { ;移除U盘
         return ComObjGet("winmgmts:").ExecQuery(sql).count ? [1] : []
     }
     ; https://www.autohotkey.com/boards/viewtopic.php?f=83&t=94113
+    ; https://www.autohotkey.com/boards/search.php?keywords=&terms=all&author=SKAN&fid%5B%5D=83&sc=0&sf=firstpost&sr=topics&sk=t&sd=d&st=0&ch=0&t=0&submit=Search
     eject(drv, bCheck:=0, bEject:=1) {
         drv := substr(drv, 1, 1)
         ;1. CreateFile
@@ -845,8 +846,6 @@ hyf_removeUSB(bUPan:=true) { ;移除U盘
                 "PNP_VetoInsufficientRights`nThe caller has insufficient privileges to complete the operation.",
                 "PNP_VetoAlreadyRemoved`nThe device has been already removed"][nVetoType]
         }
-        ;while(DirExist(drv . ":")) ; wait for drive letter to disappear ..
-        ;    sleep(100)
         dllcall("Kernel32.dll\FreeLibrary", "ptr",hSetupApi)
         return true
         IOCTL_STORAGE_GET_DEVICE_NUMBER(hDevice) {

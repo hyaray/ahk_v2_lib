@@ -30,8 +30,13 @@ class _Number {
         return ceil(ceil(mb/n) * n)
     }
 
+    ;用NTLCalc(str)
+    floatErr() {
+        return string(this).floatErr()
+    }
+
     delete0() {
-        num := string(this).delete0()
+        return string(this).delete0()
     }
 
     zfill(l) { ;左边填充0
@@ -142,22 +147,8 @@ class _Number {
     ;--------------------------进制转换--------------------------------
     ;其他进制可用十进制中转
 
-    ;r进制转十进制
-    r2d(r:=2) {
-        oSC := ComObject("ScriptControl")
-        oSC.Language := "JavaScript"
-        return oSC.eval(format("parseInt({1},{2})",this,r))
-    }
-
-    ;十进制转r进制
-    d2r(r:=2) {
-        oSC := ComObject("ScriptControl")
-        oSC.Language := "JavaScript"
-        return oSC.eval(format('{1}.toString("{2}")',this,r))
-    }
-
     ;10进制转r进制，numA默认10(同16进制)
-    d2r1(r, numA:=10) {
+    d2r(r, numA:=10) {
         num := this
         obj := map()
         if (numA == 10) {
@@ -174,24 +165,6 @@ class _Number {
             num := (num-md) // r
         }
         return res
-    }
-
-    b2d() { ;2进制转十进制
-        sNum := this
-        l := strlen(string(sNum))
-        r := 0
-        loop parse, sNum
-            r |= A_LoopField << --l
-        return r
-    }
-
-    b2h() { ;2进制转16进制
-        sNum := string(this)
-        l := strlen(sNum)
-        r := 0
-        loop parse, sNum
-            r |= A_LoopField << --l
-        return format("0x{:X}", r)
     }
 
     d2b(r:=2) { ;十进制转2进制
@@ -218,24 +191,6 @@ class _Number {
         else if (tp == "0XX")
             f := "0X{:X}"
         return format(f, this)
-    }
-
-    h2d() { ;16进制转十进制
-        sNum := string(this)
-        if (instr(sNum, "0x") != 1)
-            sNum := "0x" . sNum
-        return format("{:d}", sNum)
-    }
-
-    h2b() { ;16进制转二进制
-        sNum := string(this)
-        if (sNum ~= "i)^0x")
-            sNum := substr(sNum, 3)
-        obj := map("0","0000","1","0001","2","0010","3","0011","4","0100","5","0101","6","0110","7","0111","8","1000","9","1001","A","1010","B","1011","C","1100","D","1101","E","1110","F","1111")
-        r := ""
-        loop parse, sNum
-            r .= obj[A_LoopField]
-        return ltrim(r, "0")
     }
 
 }

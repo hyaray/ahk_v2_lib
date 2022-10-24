@@ -170,6 +170,10 @@ class _GDIP {
 
     ;屏幕区域保存为文件
     static rect2fp(aRect, fp:="") {
+        if (aRect is integer) { ;hwnd
+            WinGetPos(&x, &y, &w, &h, "ahk_id " . aRect)
+            aRect := [x,y,w,h]
+        }
         if (fp == "")
             fp := format("{1}\{2}.png", A_Desktop,A_Now)
         oPBitmap := GDIP_PBitmap(aRect)

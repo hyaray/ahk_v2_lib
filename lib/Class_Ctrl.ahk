@@ -257,8 +257,8 @@ class _ListBox extends _Ctrl {
     ;选中第 idx 个
     selectByIndex(idx:=unset) {
         if (!isset(idx)) {
-            str := hyf_selectByArr(ControlGetItems(this.ctl, "ahk_id " . this.hwnd))
-            msgbox(str)
+            arrRes := hyf_selectByArr(ControlGetItems(this.ctl, "ahk_id " . this.hwnd))
+            idx := arrRes[-1]
         }
         if (!idx)
             throw ValueError("idx == 0")

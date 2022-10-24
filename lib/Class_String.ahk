@@ -333,9 +333,12 @@ class _String {
         str := trim(this)
         nums := str.grem("\d+(\.\d+)?")
         arr := []
-        for v in nums
-            arr.push(v[0])
-        ;hyf_objView(arr, arr[2]-arr[1])
+        for v in nums {
+            if instr(v, ".")
+                arr.push(float(v[0]))
+            else
+                arr.push(integer(v[0]))
+        }
         return arr
     }
 
@@ -431,18 +434,13 @@ class _String {
         obj["RGB"]["hex"][3] := "#" . strRGB
         obj["RGB"]["hex"][4] := "0x" . strRGB
         obj["RGB"]["hex"]["BGR"] := b . g . r
-        obj["RGB"]["十进制"][1][1] := h2d(r)
-        obj["RGB"]["十进制"][1][2] := h2d(g)
-        obj["RGB"]["十进制"][1][3] := h2d(b)
-        obj["RGB"]["十进制"][2] := h2d(strRGB)
-        obj["RGB"]["十进制"]["BGR"] := h2d(b . g . r)
+        obj["RGB"]["十进制"][1][1] := r.h2d()
+        obj["RGB"]["十进制"][1][2] := g.h2d()
+        obj["RGB"]["十进制"][1][3] := b.h2d()
+        obj["RGB"]["十进制"][2] := strRGB.h2d()
+        obj["RGB"]["十进制"]["BGR"] := (format("{1}{2}{3}", b,g,r)).h2d()
         ;strBGR := b . g . r
         return obj
-        h2d(num) { ;16进制转十进制
-            if (instr(num, "0x") != 1)
-                num := "0x" . num
-            return format("{:d}", num)
-        }
     }
 
     ;根据 fp 批量删除文件
@@ -694,38 +692,6 @@ class _String {
             ;msgbox(nThis)
         }
         return (max > atLeast) ? res : ""
-    }
-
-    ;当前字符串和str0比较
-    ;精确匹配参考 findFirstDiff
-    compareByBC(str0, ext:="txt") {
-        ;获取文本 str0 str1
-        str0 := rtrim(str0, "`r`n")
-        str1 := rtrim(this, "`r`n")
-        ;生成ext文件路径 p0和p1
-        fn := A_Now
-        p0 := format("{1}\{2}a.{3}",A_Desktop,fn,ext)
-        p1 := format("{1}\{2}b.{3}",A_Desktop,fn,ext)
-        ;保存剪切板内容到临时文件
-        objEncode :=  map(
-            "ah1", "`n utf-8",
-            "ahk", "`n utf-8",
-        )
-        objEncode.default := ""
-        FileAppend(str0, p0, objEncode[ext])
-        FileAppend(str1, p1, objEncode[ext])
-        ;开始比较
-        run(format('d:\TC\soft\BCompare\BCompare.exe /fv="text Compare" "{1}" "{2}"',p0,p1),,, &thisPid)
-        WinWaitActive("ahk_pid " . thisPid)
-        if (WinActive("ahk_class TQuickCompareDialog")) { ;相同内容
-            WinClose()
-        } else {
-            tooltip("等待BCompare关闭后删除临时文件", 0, 0)
-            WinWaitClose("ahk_pid " . thisPid)
-            tooltip
-        }
-        FileDelete(p0)
-        FileDelete(p1)
     }
 
     ;繁体→简体
@@ -1450,33 +1416,6 @@ class _String {
         return char0.join(arrMain)
     }
 
-    ;n1 := 3.06
-    ;n2 := 2.14
-    ;msgbox((n1+n2) . "`n" . (n1+n2).floatErr())
-    ;msgbox((n1-n2) . "`n" . (n1-n2).floatErr())
-    floatErr() {
-        return round(this+0.00000001,6).delete0() ;+号为了解决全是9的问题
-    }
-
-    ; arr := [
-    ;     0.01,
-    ;     1.0100,
-    ;     2.10010,
-    ;     3.19999999996,
-    ; ]
-    ;arrV要用这个方法 整数可用 integer() 代替
-    ;NOTE 日期表示为 3.20，会影响实际数据
-    delete0() {
-        num := this
-        if (num ~= "^-?\d+\.\d+$") {
-            if (num ~= "\.\d{8,}$") ;小数位太多的异常
-                num := round(num+0.00000001, 6)
-            return rtrim(RegExReplace(num, "\.\d*?\K0+$"), ".")
-        } else {
-            return num
-        }
-    }
-
     isZh() { ;是否中文
         return (this ~= "^[\x{4E00}-\x{9FA5}]")
     }
@@ -1787,7 +1726,7 @@ class _String {
     encode(enc:="CP65001", charSeparate:="", toString:=true) {
         str := this
         if (enc == "base64") {
-            oBuf := buffer(strlen(str), 0)
+            oBuf := buffer(strlen(str), 0) ;fileread(fp, "raw")
             strput(str, oBuf,, "utf-8")
             dllcall("crypt32\CryptBinaryToString", "Ptr",oBuf, "UInt",oBuf.size, "UInt",0x40000001, "Ptr",0, "uint*",&nSize:=0)
             b64 := buffer(nSize << 1, 0)
@@ -2085,6 +2024,101 @@ class _String {
     }
 
     */
+
+    ;-----------------------------------num-----------------------------------
+    b2d() { ;2进制转十进制
+        sNum := this
+        l := strlen(string(sNum))
+        r := 0
+        loop parse, sNum
+            r |= A_LoopField << --l
+        return r
+    }
+
+    b2h() { ;2进制转16进制
+        sNum := this
+        l := strlen(sNum)
+        r := 0
+        loop parse, sNum
+            r |= A_LoopField << --l
+        return format("0x{:X}", r)
+    }
+
+    ;NOTE 十进制还在 Class_Num.ahk
+    d2b(r:=2) { ;十进制转2进制
+        num := integer(this)
+        res := ""
+        while(num) {
+            res := mod(num, r) . res
+            num //= r
+        }
+        return res
+    }
+
+    ;TODO 返回数字还是字符串？
+    h2d() { ;16进制转十进制
+        num := this
+        if !(instr(num, "0x"))
+            num := integer("0x" . num)
+        return format("{:d}", num)
+    }
+
+    h2b() { ;16进制转二进制
+        sNum := StrUpper(this)
+        if (sNum ~= "i)^0x")
+            sNum := substr(sNum, 3)
+        obj := map(
+            "0","0000",
+            "1","0001",
+            "2","0010",
+            "3","0011",
+            "4","0100",
+            "5","0101",
+            "6","0110",
+            "7","0111",
+            "8","1000",
+            "9","1001",
+            "A","1010",
+            "B","1011",
+            "C","1100",
+            "D","1101",
+            "E","1110",
+            "F","1111",
+        )
+        r := ""
+        loop parse, sNum
+            r .= obj[A_LoopField]
+        return ltrim(r, "0")
+    }
+
+    ;n1 := 3.06
+    ;n2 := 2.14
+    ;msgbox((n1+n2) . "`n" . (n1+n2).floatErr())
+    ;msgbox((n1-n2) . "`n" . (n1-n2).floatErr())
+    floatErr() {
+        OutputDebug(format("i#{1} {2}:round={3}", A_LineFile,A_LineNumber,round(number(this)+0.00000001,6)))
+        OutputDebug(format("i#{1} {2}:res={3}", A_LineFile,A_LineNumber,string(round(number(this)+0.00000001,6)).delete0()))
+        return round(number(this)+0.00000001,6).delete0() ;+号为了解决全是9的问题
+    }
+
+    ; arr := [
+    ;     0.01,
+    ;     1.0100,
+    ;     2.10010,
+    ;     3.19999999996,
+    ; ]
+    ;arrV要用这个方法 整数可用 integer() 代替
+    ;NOTE 日期表示为 3.20，会影响实际数据
+    delete0() {
+        sNum := this
+        if (sNum ~= "^-?\d+\.\d+$") {
+            if (sNum ~= "\.\d{8,}$") ;小数位太多的异常
+                sNum := round(sNum+0.00000001, 6)
+            return rtrim(RegExReplace(sNum, "\.\d*?\K0+$"), ".")
+        } else {
+            return sNum
+        }
+    }
 
 }
 

@@ -1600,10 +1600,12 @@ class IUIAutomationElement extends IUIABase {
             funGetValue := (el)=>el.GetCurrentPropertyValue("ValueValue")
         else
             funGetValue := (el)=>el.CurrentName
-        if (tp == 2)
-            arr2 := [arrField]
-        else if (tp == 1)
-            arr2 := []
+        switch tp {
+            case 2:
+                arr2 := [arrField]
+            case 1:
+                arr2 := []
+        }
         loop {
             if (tp == 0) {
                 obj := map()
