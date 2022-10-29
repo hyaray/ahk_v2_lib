@@ -1,4 +1,5 @@
 ﻿/*
+类似实现 https://github.com/Xeo786/Rufaydium-Webdriver
 CDP https://chromedevtools.github.io/devtools-protocol/1-3/Page
 原理：
 1.this.detect(true)
@@ -102,7 +103,6 @@ class _CDP {
                     arrRes.push(A_Index . urlOpen)
                     objOpen := urlOpen.jsonUrl()
                     hostThis := objOpen["host"]
-                    ;msgbox(json.stringify(objOpen, 4))
                     ;激活匹配的标签
                     if (this.objSingleHost.has(hostThis) && objPage.has(hostThis)) {
                         activeTab(objPage[hostThis][1]["id"])
@@ -171,20 +171,20 @@ class _CDP {
         run(format("{1} {2} {3}", _CDP.CliEscape(this.ChromePath),this.sParam,sUrl),,, &pid) ;--ignore-certificate-errors
         this.pid := pid
         this.hwnd := WinWait("ahk_class Chrome_WidgetWin_1 ahk_pid " . this.pid)
-        tooltip("自动运行浏览器")
-        SetTimer(tooltip, -1000)
+        OutputDebug(format("i#{1} {2}:自动运行浏览器 hwnd={3}", A_LineFile,A_LineNumber,this.hwnd))
         WinActivate
         WinMaximize
     }
 
     ;核实并获取Chrome的 pid 和 hwnd
-    ;0 检测
-    ;1 检测不到则关闭
-    ;2 检测不到则关闭并打开浏览器
-    static detect(tp:=false) {
+    ;0 不检测
+    ;1 检测不到则关闭当前浏览器
+    ;2 检测不到则关闭并正确打开浏览器
+    ;返回 hwnd
+    static detect(tp:=0) {
         if (this.hwnd && ProcessExist(this.pid))
             return this.hwnd
-        if (ProcessExist(this.exeName)) {
+        if (ProcessExist(this.exeName)) { ;可能脚本重启等原因丢失了数据
             this.pid := this.FindInstances().get("pid", 0)
             if (this.pid) {
                 saveDetect := A_DetectHiddenWindows
@@ -196,32 +196,29 @@ class _CDP {
                         continue
                     if (titleLoop ~= "\S") {
                         this.hwnd := winHwnd
-                        tooltip(format("detect重新获取chrome.hwnd={1}", this.hwnd))
-                        SetTimer(tooltip, -1000)
                         break
                     }
                 }
                 DetectHiddenWindows(saveDetect)
+                if (this.hwnd) {
+                    tooltip(format("detect重新获取chrome.hwnd={1}", this.hwnd))
+                    SetTimer(tooltip, -1000)
+                    return this.hwnd
+                } else if (tp) {
+                    ;NOTE 找不到，是否结束所有进程
+                    for item in ComObjGet("winmgmts:").ExecQuery(format("select ProcessId from Win32_Process where name='{1}'", this.exeName))
+                        ProcessClose(item.ProcessId)
+                    if (tp == 2) {
+                        this.runChrome()
+                        return true
+                    }
+                }
             } else {
-                tooltip("重新检测chrome失败")
+                tooltip("待完善：通用pid检测hwnd失败")
                 SetTimer(tooltip, -1000)
             }
-            if (this.hwnd) {
-                return this.hwnd
-            } else if (tp) {
-                ;NOTE 找不到，是否结束所有进程
-                for item in ComObjGet("winmgmts:").ExecQuery(format("select ProcessId from Win32_Process where name='{1}'", this.exeName))
-                    ProcessClose(item.ProcessId)
-                if (tp == 2) {
-                    this.runChrome()
-                    return true
-                } else {
-                    return false
-                }
-            }
-        } else {
-            return false
         }
+        return false
     }
 
     ;pathname前面要带 /
@@ -458,6 +455,7 @@ class _CDP {
         return format('"{1}"', RegExReplace(Param, '(\\*)"', '$1$1\"'))
     }
 
+    ;通用命令行参数获取 pid
     static FindInstances() {
         for item in ComObjGet('winmgmts:').ExecQuery(format("SELECT CommandLine,ProcessId FROM Win32_Process WHERE Name = '{1}'", this.exeName)) {
             if (RegExMatch(item.CommandLine, '--remote-debugging-port=(\d+)', &m))

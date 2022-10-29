@@ -138,16 +138,6 @@ TODO 对win7的Chrome，UIA支持不好
 
 #include ComVar.ahk
 
-; BSTR wrapper, convert BSTR to AHK string and free it
-BSTR(ptr) {
-    static _ := dllcall("LoadLibrary", "str","oleaut32.dll")
-    if (ptr) {
-        s := strget(ptr)
-        dllcall("oleaut32\SysFreeString", "ptr",ptr)
-        return s
-    }
-}
-
 ; NativeArray is C style array, zero-based index, it has `__item` and `__Enum` property
 class NativeArray {
     __new(ptr, count, type:="ptr") {
@@ -427,7 +417,7 @@ class UIA {
     ;arrFind 为 FindElement 所有参数
     static FindAndSetChecked(hwnd, arrFind, bChecked, method:="") {
         if (el := this.FindElement(hwnd, arrFind*)) {
-            el.SetChecked(bChecked)
+            el.SetChecked(bChecked, method)
             return el
         }
     }
@@ -1080,18 +1070,10 @@ class IUIAutomationElement extends IUIABase {
     GetParent(tp:=0) { ;NOTE 用 tp=0 会比较好理解
         return this._ViewWalker(tp, "GetParentElement")
     }
-    GetNext(tp:=0) {
-        return this._ViewWalker(tp, "GetNextSiblingElement")
-    }
-    GetPrev(tp:=0) {
-        return this._ViewWalker(tp, "GetPreviousSiblingElement")
-    }
-    GetFirst(tp:=0) {
-        return this._ViewWalker(tp, "GetFirstChildElement")
-    }
-    GetLast(tp:=0) {
-        return this._ViewWalker(tp, "GetLastChildElement")
-    }
+    GetNext(tp:=0) => this._ViewWalker(tp, "GetNextSiblingElement")
+    GetPrev(tp:=0) => this._ViewWalker(tp, "GetPreviousSiblingElement")
+    GetFirst(tp:=0) => this._ViewWalker(tp, "GetFirstChildElement")
+    GetLast(tp:=0) => this._ViewWalker(tp, "GetLastChildElement")
     ;TODO 找不到出错无法用 try，如何先判断是否有 Next
     _ViewWalker(tp, method) {
         switch tp {
@@ -1106,13 +1088,6 @@ class IUIAutomationElement extends IUIABase {
         for v in arr
             res .= format("{:X}", v) . ","
         return rtrim(res, ",")
-    }
-    ;arrFind 为 FindControl的所有参数
-    FindAndSetChecked(arrFind, bChecked, method:="") {
-        if (el := this.FindControl(arrFind*)) {
-            el.SetChecked(bChecked, method)
-            return el
-        }
     }
     ;点击Text右侧以激活 Edit控件，并设置值
     ;arrFind 用于 FindControl 的所有参数
@@ -1135,14 +1110,22 @@ class IUIAutomationElement extends IUIABase {
         }
         return elFocus
     }
+    ;这个方法专门用在下拉框选择上：前面需要点击，后面需要确定选择
     ComboboxSelectListItem(name) {
-        this.ClickByControl()
+        this.ClickByControl() ;NOTE 有时需要先点击才会出现列表(比如Excel的数据验证窗口)
         sleep(100)
         elListItem := this.FindControl("ListItem", name)
         if (!elListItem)
             throw ValueError(format('failed to find ListItem of "{1}"', name))
         elListItem.GetCurrentPattern("SelectionItem").select()
         send("{enter}") ;TODO 如何优化
+    }
+    ;arrFind 为 FindControl的所有参数
+    FindAndSetChecked(arrFind, bChecked, method:="") {
+        if (el := this.FindControl(arrFind*)) {
+            el.SetChecked(bChecked, method)
+            return el
+        }
     }
     ;NOTE NOTE NOTE method 一般用 ClickByControl ClickByMouse 备用
     SetChecked(bChecked, method:="") {
@@ -1157,7 +1140,7 @@ class IUIAutomationElement extends IUIABase {
         } else if (this.GetControlType() ~= "i)^(ListItem|TabItem)$") {
             if (this.GetCurrentPropertyValue("SelectionItemIsSelected") != bChecked)
                 if (method == "")
-                    this.GetCurrentPattern("SelectionItem").Select()
+                    this.GetCurrentPattern("SelectionItem").select()
                 else
                     this.%method%() ;作为补充
         }
@@ -1637,9 +1620,7 @@ class IUIAutomationElement extends IUIABase {
     ;TODO 待完善
     ;判断两个元素是否相同
     ; https://docs.microsoft.com/zh-cn/dotnet/api/system.windows.automation.automationelement.equals
-    equals(el) {
-        return this.GetRuntimeIdEx() == el.GetRuntimeIdEx()
-    }
+    equals(el) => this.GetRuntimeIdEx() == el.GetRuntimeIdEx()
 
     ; Sets the keyboard focus to this UI Automation element.
     SetFocus() => comcall(3, this)
@@ -2957,14 +2938,25 @@ IUIA_EventHandler(funcobj) {
 IUIA_RuntimeIdToString(runtimeId) {
     str := ""
     for v in runtimeId
-        str .= "." Format("{:X}", v)
-    return LTrim(str, ".")
+        str .= "." format("{:X}", v)
+    return ltrim(str, ".")
 }
 
 IUIA_RuntimeIdFromString(str) {
     t := StrSplit(str, ".")
-    arr := ComObjArray(3, t.Length)
+    arr := ComObjArray(3, t.length)
     for v in t
         arr[A_Index - 1] := integer("0x" v)
     return arr
 }
+
+; BSTR wrapper, convert BSTR to AHK string and free it
+BSTR(ptr) {
+    static _ := dllcall("LoadLibrary", "str","oleaut32.dll")
+    if (ptr) {
+        s := strget(ptr)
+        dllcall("oleaut32\SysFreeString", "ptr",ptr)
+        return s
+    }
+}
+

@@ -19,6 +19,7 @@ class WebSocket {
     HINTERNETs := []
     waiting := false
     recdata := buffer(0)
+
     __new(url, Events:=0, Async:=true, Headers:='') {
         this.HINTERNETs := []
         this.async := !!Async
@@ -127,6 +128,7 @@ class WebSocket {
             }
         }
     }
+
     __Delete() {
         this.close()
         while (this.HINTERNETs.Length)
@@ -141,6 +143,7 @@ class WebSocket {
         else if (this.readyState > 1)
             return {status: 1006, reason: ''}
     }
+
     send(eBufferType, pvBuffer, dwBufferLength) {
         if (this.readyState != 1)
             throw Error('websocket已断开')

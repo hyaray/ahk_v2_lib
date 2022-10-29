@@ -227,11 +227,9 @@ class _ListBox extends _Ctrl {
         }
     }
 
-    getIndexByText(strOrFun) {
-        if (!isobject(strOrFun))
-            strOrFun := (sLine)=>(sLine==strOrFun)
+    getIndexByText(str) {
         for sLine in ControlGetItems(this.ctl, "ahk_id " . this.hwnd) {
-            if (strOrFun(sLine))
+            if (sLine == str)
                 return A_Index
         }
         throw ValueError("value not matched")
@@ -268,9 +266,11 @@ class _ListBox extends _Ctrl {
             ControlChooseIndex(idx, this.ctl, "ahk_id " . this.hwnd) ;选中项可能显示在末行
     }
 
-    selectByText(strOrFun) {
-        OutputDebug(format("i#{1} {2}:strOrFun={3}", A_LineFile,A_LineNumber,strOrFun))
-        idx := this.getIndexByText(strOrFun)
+    ;elCombobox.ComboboxSelectListItem(ComValue(0xB,-1))
+    selectByText(fun) {
+        ;if (fun is string)
+        ;    fun := (p)=>(p==fun)
+        idx := this.getIndexByText(fun)
         this.selectByIndex(idx)
     }
 

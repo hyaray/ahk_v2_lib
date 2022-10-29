@@ -103,37 +103,28 @@ class _Array extends Array {
         return obj
     }
 
-    ;参考 python
-    ;每个元素根据fun处理
-    map(fun) {
-        arr := this
-        for v in arr
-            arr[A_Index] := fun.call(v)
-        return arr
-    }
-
     ;funDistinct 返回值当 key 用来筛选
     ;参数都是(v,k)
     ;arr.filter((v,k)=>v[1]!="", (v,k)=>v[1])
-    filter(fun, funDistinct:=unset) {
-        arrRes := []
-        if (!isset(funDistinct)) {
-            for k, v in this {
-                if (fun(k, v))
-                    arrRes.push(v)
-            }
-        } else {
-            obj := map()
-            for k, v in this {
-                key := funDistinct(v,k)
-                if (fun(v,k) && !obj.has(key)) {
-                    arrRes.push(v)
-                    obj[key] := ""
-                }
-            }
-        }
-        return arrRes
-    }
+    ;filter(fun, funDistinct:=unset) {
+    ;    arrRes := []
+    ;    if (!isset(funDistinct)) {
+    ;        for k, v in this {
+    ;            if (fun(k, v))
+    ;                arrRes.push(v)
+    ;        }
+    ;    } else {
+    ;        obj := map()
+    ;        for k, v in this {
+    ;            key := funDistinct(v,k)
+    ;            if (fun(v,k) && !obj.has(key)) {
+    ;                arrRes.push(v)
+    ;                obj[key] := ""
+    ;            }
+    ;        }
+    ;    }
+    ;    return arrRes
+    ;}
 
     reduce(fun, v0:=unset) {
         arr := this
@@ -197,8 +188,21 @@ class _Array extends Array {
             res := arrTitle.join(charItem) . "`n"
             ;data
             for map1 in arr {
-                for v in arrTitle
-                    res .= map1[v] . charItem
+                for v in arrTitle {
+                    if (isobject(map1[v])) {
+                        switch type(map1[v]) {
+                            case "Array":
+                                vThis := map1[v].toJson()
+                            case "Map":
+                                vThis := "{}"
+                            default:
+                                vThis := format("{{1}}", type(map1[v]))
+                        }
+                    } else {
+                        vThis := map1[v]
+                    }
+                    res .= vThis . charItem
+                }
                 res := rtrim(res, charItem) . "`n"
             }
         }

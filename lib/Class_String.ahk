@@ -23,7 +23,7 @@ class _String {
     static regImage := "i)^(bmp|jpe|jpeg|jpg|png|gif|ico|psd|tif|tiff)$"
     ;   编程源代码
     static regCode := "i)^(ah[k2]|js|vim|html?|wxml|css|wxss|lua|hh[cpk])$"
-    static regText := "i)^(ah[k2]|js|vim|html?|wxml|css|wxss|lua|hh[cpk]|csv|json|txt|ini)$"
+    static regText := "i)^(ah[k2]|js|log|vim|md|html?|wxml|css|wxss|lua|hh[cpk]|csv|json|txt|ini)$"
     static regAudeo := "i)^(wav|mp3|m4a|wma)$"
     static regVideo := "i)^(mp4|wmv|mkv|m4a|rm(vb)?|flv|mpeg|avi)$"
     static regZip := "i)^(7z|zip|rar|iso|img|gz|cab|jar|arj|lzh|ace|tar|GZip|uue|bz2)$"
@@ -104,9 +104,7 @@ class _String {
         SplitPath(dir, &dirName)
         return dirName
     }
-    extRep(extNew) {
-        return RegExReplace(this, "\.\K\w+$", extNew)
-    }
+    extRep(extNew) => RegExReplace(this, "\.\K\w+$", extNew)
 
     ;在arr里的第1个序号
     index(arr) {
@@ -117,15 +115,9 @@ class _String {
         return false
     }
 
-    upper() {
-        return StrUpper(this)
-    }
-    lower() {
-        return StrLower(this)
-    }
-    capitalize() {
-        return StrTitle(this)
-    }
+    upper() => StrUpper(this)
+    lower() => StrLower(this)
+    capitalize() => StrTitle(this)
 
     trim() { ;删除头尾的大小空格、tab和换行符，以及重复的大小空格和tab ;全角空格unicode码为\u3000，用正则表示为\x{3000}
         return trim(this, "　`t`r`n ")
@@ -137,9 +129,7 @@ class _String {
         return cnt
     }
 
-    json() {
-        return json.parse(this)
-    }
+    json() => json.parse(this)
 
     ;hyf_GuiMsgbox(".三.四".chengyu())
     ;NOTE 包含多个字 (?=.*高)(?=.*山)
@@ -271,9 +261,7 @@ class _String {
         return res
     }
 
-    toIframe() {
-        return format('<iframe src="{1}"></iframe>', this)
-    }
+    toIframe() => format('<iframe src="{1}"></iframe>', this)
 
     ;charLine为不空，则行
     toArr(charLine:="", arrIdx:="", funLineFilter:="") {
@@ -343,17 +331,11 @@ class _String {
     }
 
     ;\转成/
-    toSlash() {
-        return StrReplace(this, "\", "/")
-    }
+    toSlash() => StrReplace(this, "\", "/")
     ;/转成\
-    toBackslash() {
-        return StrReplace(this, "/", "\")
-    }
+    toBackslash() => StrReplace(this, "/", "\")
     ;\或/转成\\
-    toBackslash2() {
-        return RegExReplace(this, "\/|\\", "\\")
-    }
+    toBackslash2() => RegExReplace(this, "\/|\\", "\\")
 
     toUrlLnk(fn, dir:="") {
         if (dir == "")
@@ -410,37 +392,6 @@ class _String {
             }
         }
         return rtrim(res, "`r`n")
-    }
-
-    ;16进制rgb
-    colorShow() {
-        ;strRGB := substr(strRGB, 3)
-        strRGB := RegExReplace(this, "^(0x|\$|#)")
-        r := substr(strRGB, 1, 2)
-        g := substr(strRGB, 3, 2)
-        b := substr(strRGB, 5, 2)
-        ;定义
-        obj := map()
-        obj["RGB"] := map()
-        obj["RGB"]["hex"] := map()
-        obj["RGB"]["hex"][1] := map()
-        obj["RGB"]["十进制"] := map()
-        obj["RGB"]["十进制"][1] := map()
-        ;开始写入
-        obj["RGB"]["hex"][1][1] := r
-        obj["RGB"]["hex"][1][2] := g
-        obj["RGB"]["hex"][1][3] := b
-        obj["RGB"]["hex"][2] := strRGB
-        obj["RGB"]["hex"][3] := "#" . strRGB
-        obj["RGB"]["hex"][4] := "0x" . strRGB
-        obj["RGB"]["hex"]["BGR"] := b . g . r
-        obj["RGB"]["十进制"][1][1] := r.h2d()
-        obj["RGB"]["十进制"][1][2] := g.h2d()
-        obj["RGB"]["十进制"][1][3] := b.h2d()
-        obj["RGB"]["十进制"][2] := strRGB.h2d()
-        obj["RGB"]["十进制"]["BGR"] := (format("{1}{2}{3}", b,g,r)).h2d()
-        ;strBGR := b . g . r
-        return obj
     }
 
     ;根据 fp 批量删除文件
@@ -606,16 +557,6 @@ class _String {
         return vDSC
     }
 
-    ;字符串
-    rgb2bgr() {
-        return substr(this,5,2) . substr(this,3,2) . substr(this,1,2) ;字符串FF00BB
-        ; return (nColor & 0xFF) << 16 | nColor & 0x0000FF00 | nColor >> 16 ;数字 0x12345678 或 0x123456
-    }
-
-    argb2abgr() {
-        return (this & 0xFF)<<16 | (this & 0xFF00) | (this & 0xFF0000)>>16 | (this & 0xFF000000) >> 24
-    }
-
     ;备用(较慢)
     ;计算两个字符串相似度，返回值范围0-1
     similaritySlow(str2) {
@@ -722,9 +663,7 @@ class _String {
 
     ;-----------------------多行-------------------------
     ;获取重复项
-    getSame() {
-        return this.toObj().filter((k,v)=>v>1)
-    }
+    getSame() => this.toObj().filter((k,v)=>v>1)
     deleteSame(hasEmpty:=false) {
         obj := map()
         obj.default := 0
@@ -741,9 +680,7 @@ class _String {
         return rtrim(res, "`r`n")
     }
     ;删除重复行
-    deleteSameOrderByObj(hasEmpty:=false) {
-        return "`n".join(this.toObj(hasEmpty).keys())
-    }
+    deleteSameOrderByObj(hasEmpty:=false) => "`n".join(this.toObj(hasEmpty).keys())
 
     ;fun(A_LoopField, A_Index)
     dealByLine(fun) {
@@ -852,9 +789,7 @@ class _String {
     }
 
     ;user.forWifi(pwd)
-    forWifi(pwd) {
-        return format("WIFI:T:WPA;S:{1};P:{2};;", this, pwd)
-    }
+    forWifi(pwd) => format("WIFI:T:WPA;S:{1};P:{2};;", this, pwd)
 
     parseVar() { ;把%var%(只匹配\w的字符串)转换成变量的值
         str := this
@@ -1304,9 +1239,7 @@ class _String {
 
     ;参考python
     ;左边补0
-    zfill(l) {
-        return format(format("{:0{1}s}",l), this)
-    }
+    zfill(l) => format(format("{:0{1}s}",l), this)
 
     ;左边补全(根据__)
     ;比如__为1000，则5变成1005，50→1050
@@ -1392,9 +1325,7 @@ class _String {
     }
 
     ;删除文件名前面的序号
-    noIndex() {
-        return RegExReplace(this, "^\d{1,2}([.、]\s*)?")
-    }
+    noIndex() => RegExReplace(this, "^\d{1,2}([.、]\s*)?")
 
     ;250/年*116=29000/年*3=83520元
     ;TODO 待完善
@@ -1454,33 +1385,14 @@ class _String {
     ; AA:BB:CC:DD:EE:FF
     ; AABB-CCDD-EEFF
     ; AABBCCDDEEFF
-    isMAC() { ;判断字符串是否为路径格式
-        return (this ~= _String.regMAC)
-    }
+    isMAC() => (this ~= _String.regMAC)
 
-    isIP() {
-        return (this ~= _String.regIP)
-    }
-
-    isText() { ;是否文本文件
-        return (this.ext(1) ~= _String.regText)
-    }
-
-    isPdf() {
-        return (this.ext(1) ~= _String.regText)
-    }
-
-    isImage() { ;是否图片文件
-        return (this.ext(1) ~= _String.regImage)
-    }
-
-    isAudio() {
-        return (this.ext(1) ~= _String.regAudeo)
-    }
-
-    isVideo() { ;是否视频
-        return (this.ext(1) ~= _String.regVideo)
-    }
+    isIP() => (this ~= _String.regIP)
+    isText() => (this.ext(1) ~= _String.regText)
+    isPdf() => (this.ext(1) ~= _String.regText)
+    isImage() => (this.ext(1) ~= _String.regImage) ;是否图片文件
+    isAudio() => (this.ext(1) ~= _String.regAudeo)
+    isVideo() => (this.ext(1) ~= _String.regVideo)
 
     isDoc() { ;是否文档
         ext := this.ext(1)
@@ -1511,9 +1423,7 @@ class _String {
         }
     }
 
-    isPPT() {
-        return (this.ext(1) ~= "i)^ppt")
-    }
+    isPPT() => (this.ext(1) ~= "i)^ppt")
 
     ; https://daringfireball.net/2010/07/improved_regex_for_matching_urls
     ; Thanks dperini - https://gist.github.com/dperini/729294
@@ -1563,13 +1473,9 @@ class _String {
         return url
     }
     ;比如 a/b 转成 https://github.com/a/b.git
-    githubForClone(tp:="github"){
-        return format("{1}.git", this.githubUrl(tp)) ;TODO 增加 .git 的作用
-    }
+    githubForClone(tp:="github")=> format("{1}.git", this.githubUrl(tp)) ;TODO 增加 .git 的作用
     ;比如 a/b 转成 git clone https://github.com/a/b.git --depth 1
-    githubCloneCmd(tp:="github") {
-        return format("git clone {1} --depth 1", this.githubForClone()) ; --single-branch
-    }
+    githubCloneCmd(tp:="github") => format("git clone {1} --depth 1", this.githubForClone()) ; --single-branch
 
     githubToggle() {
         url := this
@@ -2095,11 +2001,7 @@ class _String {
     ;n2 := 2.14
     ;msgbox((n1+n2) . "`n" . (n1+n2).floatErr())
     ;msgbox((n1-n2) . "`n" . (n1-n2).floatErr())
-    floatErr() {
-        OutputDebug(format("i#{1} {2}:round={3}", A_LineFile,A_LineNumber,round(number(this)+0.00000001,6)))
-        OutputDebug(format("i#{1} {2}:res={3}", A_LineFile,A_LineNumber,string(round(number(this)+0.00000001,6)).delete0()))
-        return round(number(this)+0.00000001,6).delete0() ;+号为了解决全是9的问题
-    }
+    floatErr() => number(this).floatErr() ;+号为了解决全是9的问题
 
     ; arr := [
     ;     0.01,

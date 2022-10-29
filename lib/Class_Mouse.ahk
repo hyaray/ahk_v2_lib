@@ -269,40 +269,56 @@ class _Mouse {
     }
 
     ;获取鼠标所在位置的光标特征码，by nnrxin
-    ;130504298 普通状态
-    ;161920 说明是输入状态
-    ;126898458 说明是按钮或超链接
-    ;135470 Excel空心十字架
-    ;144310 Excel实心十字架
-    static shapeBase() {
-        PCURSORINFO := buffer(20, 0) ;为鼠标信息 结构 设置出20字节空间
-        numput("uint", 20, PCURSORINFO, 0)  ;*声明出 结构 的大小cbSize = 20字节
-        dllcall("GetCursorInfo", "ptr",PCURSORINFO) ;获取 结构-光标信息
-        ; msgbox(numget(PCURSORINFO, 8, "uint")) ;含义是什么？
-        if (numget(PCURSORINFO, 4, "uint")=="0") ;当光标隐藏时，直接输出特征码为0
+    shapeBase() {
+        size := 16 + A_PtrSize
+        pCursorInfo := buffer(size, 0)
+        numput("uint", size, pCursorInfo, 0)  ;*声明出 结构 的大小cbSize = 20字节
+        ; https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getcursorinfo
+        dllcall("GetCursorInfo", "ptr",pCursorInfo, "int") ;获取 结构-光标信息
+        ; msgbox(numget(pCursorInfo, 8, "uint")) ;含义是什么？
+        if (!numget(pCursorInfo, 4, "uint")) ;当光标隐藏时，直接输出特征码为0
             return 0
-        ICONINFO := buffer(20, 0) ;创建 结构-图标信息
-        dllcall("GetIconInfo", "ptr", numget(PCURSORINFO, 8), "ptr", &ICONINFO)  ;获取 结构-图标信息
-        lpvMaskBits := buffer(128, 0) ;创造 数组-掩图信息（128字节）
-        dllcall("GetBitmapBits", "ptr", numget(ICONINFO, 12), "uint", 128, "uint", &lpvMaskBits)  ;读取数组-掩图信息
-        MaskCode := 0
-        loop(128) ;掩图码
-            MaskCode += numget(lpvMaskBits, A_Index, "UChar")  ;累加拼合
-        if (numget(ICONINFO, 16, "uint") != "0") { ;颜色图不为空时（彩色图标时）
-            lpvColorBits := buffer(4096, 0)  ;创造 数组-色图信息（4096字节）
-            dllcall("GetBitmapBits", "ptr", numget(ICONINFO, 16), "uint", 4096, "uint", &lpvColorBits)  ;读取 数组-色图信息
-            loop(256) ;色图码
-                ColorCode += numget(lpvColorBits, A_Index*16-3, "UChar")  ;累加拼合
-        } else {
-            ColorCode := "0"
-        }
-        dllcall("DeleteObject", "ptr",numget(ICONINFO,12))  ; *清理掩图
-        dllcall("DeleteObject", "ptr",numget(ICONINFO,16))  ; *清理色图
-        PCURSORINFO := buffer(0) ;清空 结构-光标信息
-        ICONINFO := buffer(0) ;清空 结构-图标信息
-        lpvMaskBits := buffer(0)  ;清空 数组-掩图
-        lpvColorBits := buffer(0)  ;清空 数组-色图
-        return MaskCode//2 . ColorCode  ;输出特征码
+        obj := map(
+            65541, "normal",
+            65543, "input",
+            65569, "click",
+            1705339, "excel_normal",
+            2951675, "excel_fill",
+            94309089, "excel_move",
+        )
+        code := numget(pCursorInfo, 8, "Ptr")
+        if obj.has(code)
+            return obj[code]
+        msgbox(code . "`n未定义",,0x40000)
+        return code
+        ;hIcon := buffer(size, 0) ;创建 结构-图标信息
+        ; https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-geticoninfo
+        ;dllcall("GetIconInfo", "ptr",hIcon, "ptr",pCursorInfo, "int") ;获取 结构-图标信息
+        ;lpvMaskBits := buffer(128, 0) ;创造 数组-掩图信息（128字节）
+        ;dllcall("GetBitmapBits", "ptr", numget(hIcon, 12), "uint", 128, "uint", &lpvMaskBits)  ;读取数组-掩图信息
+        ;MaskCode := 0
+        ;loop(128) ;掩图码
+        ;    MaskCode += numget(lpvMaskBits, A_Index, "UChar")  ;累加拼合
+        ;if (numget(hIcon, 16, "uint") != "0") { ;颜色图不为空时（彩色图标时）
+        ;    lpvColorBits := buffer(4096, 0)  ;创造 数组-色图信息（4096字节）
+        ;    dllcall("GetBitmapBits", "ptr", numget(hIcon, 16), "uint", 4096, "uint", &lpvColorBits)  ;读取 数组-色图信息
+        ;    loop(256) ;色图码
+        ;        ColorCode += numget(lpvColorBits, A_Index*16-3, "UChar")  ;累加拼合
+        ;} else {
+        ;    ColorCode := "0"
+        ;}
+        ;dllcall("DeleteObject", "ptr",numget(hIcon,12))  ; *清理掩图
+        ;dllcall("DeleteObject", "ptr",numget(hIcon,16))  ; *清理色图
+        ;pCursorInfo := buffer(0) ;清空 结构-光标信息
+        ;hIcon := buffer(0) ;清空 结构-图标信息
+        ;lpvMaskBits := buffer(0)  ;清空 数组-掩图
+        ;lpvColorBits := buffer(0)  ;清空 数组-色图
+        ;130504298 普通状态
+        ;161920 说明是输入状态
+        ;126898458 说明是按钮或超链接
+        ;135470 Excel空心十字架
+        ;144310 Excel实心十字架
+        ;return MaskCode//2 . ColorCode  ;输出特征码
     }
 
     ;获取当前鼠标的Window坐标

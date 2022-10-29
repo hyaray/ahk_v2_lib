@@ -67,20 +67,40 @@ class _GDIP {
     static __new() {
         if (this != _GDIP)
             return
-        ;if !dllcall("GetModuleHandle", "str","gdiplus", "ptr")
-        ;    dllcall("LoadLibrary", "str", "gdiplus")
-        bufSi := buffer(8+A_PtrSize*2, 0)
-        numput("UInt", 1, bufSi)
-        dllcall("gdiplus\GdiplusStartup","ptr*",&pToken:=0, "Ptr",bufSi, "Ptr",0)
-        this.pToken := pToken
+		this.RefCount := 0
+		this.hModule := 0
+        this.startup()
     }
 
-    __delete() {
-        dllcall("gdiplus\GdiplusShutdown", "ptr",this.pToken)
-        if (hModule := dllcall("GetModuleHandle", "str","gdiplus", "ptr"))
-            dllcall("FreeLibrary", "ptr",hModule)
-        return 0
-    }
+	static startup() {
+        if (!this.RefCount) {
+            if (!this.hModule && !dllcall("GetModuleHandle", "Str", "gdiplus", "Ptr"))
+                this.hModule := dllcall("LoadLibrary", "Str", "gdiplus")
+            bufSi := buffer(8+A_PtrSize*2, 0)
+            numput("UInt", 1, bufSi)
+            dllcall("gdiplus\GdiplusStartup","ptr*",&pToken:=0, "Ptr",bufSi, "Ptr",0)
+            this.pToken := pToken
+        }
+		this.RefCount += 1
+        return this.pToken
+	}
+
+	static shutdown() {
+		this.RefCount -= 1
+		if (this.RefCount > 0)
+			return 0
+        if (this.pToken) {
+            dllcall("gdiplus\GdiplusShutdown", "Ptr",this.pToken)
+            this.pToken := 0
+        }
+        if (this.hModule) {
+            dllcall("FreeLibrary", "Ptr",this.hModule)
+            this.hModule := 0
+        }
+		return 0
+	}
+
+    __delete() => _GDIP.shutdown()
 
     ; https://docs.microsoft.com/en-us/windows/win32/api/gdiplustypes/ne-gdiplustypes-status
     ;见 gdiplustypes.h
@@ -181,31 +201,30 @@ class _GDIP {
         return fp
     }
 
+    ;NOTE 进一步抽象见 _UIADo.rectControls
     ;aRect 画框
     ;oGui := _GDIP.rectMark(el.GetBoundingRectangle())
     ;oGui := _GDIP.rectMark(_Win.toRect("ahk_id " . this.winInfo["winID"]))
     ;标窗口
     ;WinGetPos(&x, &y, &w, &h, "ahk_id " . hwnd)
     ;_GDIP.rectMark([x,y,w,h])
-    static rectMark(aRects, arrStyle:=unset, keyWaitClose:="") {
-        if !isobject(aRects[1])
+    static rectMark(aRects, keyWaitClose:="", arrStyle:=unset) {
+        if (!isobject(aRects[1]))
             aRects := [aRects]
         if (!isset(arrStyle))
-            arrStyle := []
-        clPen := arrStyle.length >= 1 ? arrStyle[1] : 0xffFF0000
-        wPen := arrStyle.length >= 2 ? arrStyle[2] : 2
-        bOut := arrStyle.length >= 3 ? arrStyle[3] : false
+            arrStyle := [0xffFF0000, 2, 0] ;clPen, wPen
         w := sysget(78)
         h := sysget(79)
         oHBitmap := GDIP_HBitmap(w,h)
         oGraphics := GDIP_Graphics(oHBitmap)
         oGraphics.GdipSetSmoothingMode(4)
-        oPen := GDIP_Pen(clPen, wPen)
+        oPen := GDIP_Pen(arrStyle[1], arrStyle[2])
         oGui := gui("-Caption +E0x80000 +LastFound +AlwaysOnTop +ToolWindow +OwnDialogs")
         oGui.Show("NA")
+        bOut := arrStyle.length >= 3 ? arrStyle[3] : false ;边框放在外面，而不是居中
         for k, aRect in aRects {
-            if (bOut && wPen > 1) { ;TODO 什么意思？
-                n := wPen//2
+            if (bOut && arrStyle[2] > 1) {
+                n := arrStyle[2]//2
                 aRect[1] -= n
                 aRect[2] -= n
                 aRect[3] += 2*n
@@ -215,14 +234,16 @@ class _GDIP {
         }
         oGraphics.UpdateLayeredWindow(oGui.hwnd, [0,0,w,h])
         oGraphics.SelectObject()
-        if isobject(keyWaitClose) {
-            if (keyWaitClose is gui) {
-                WinWaitClose("ahk_id " . keyWaitClose.hwnd)
+        if (isset(keyWaitClose)) {
+            if (keyWaitClose is string) {
+                KeyWait(keyWaitClose, "D")
                 oGui.destroy()
+            } else if (isobject(keyWaitClose)) {
+                if (keyWaitClose is gui) { ;等待 gui 关闭则结束
+                    WinWaitClose("ahk_id " . keyWaitClose.hwnd)
+                    oGui.destroy()
+                }
             }
-        } else if (keyWaitClose != "") {
-            KeyWait(keyWaitClose, "D")
-            oGui.destroy()
         } else {
             return oGui
         }
@@ -257,6 +278,7 @@ class _GDIP {
     ;TODO IrfanView 里不用
     ;TODO 会崩溃
     static gesture(funAction) {
+        ;this.startup()
         cmMouse := A_CoordModeMouse
         CoordMode("Mouse", "screen")
         MouseGetPos(&x0, &y0, &hwnd, &ctl)
@@ -344,6 +366,7 @@ class _GDIP {
             ;tooltip(format("{1}`n{2}不匹配", toTable(arrRecord),resAll), 10,0)
             ;SetTimer(tooltip, -1000)
         }
+        ;this.shutdown()
         return resAll
         waitMove() {
             bMoved := false
@@ -470,9 +493,7 @@ class _GDIP {
         }
     }
 
-    static DeleteObject(hObject) {
-        return dllcall("DeleteObject", "ptr",hObject)
-    }
+    static DeleteObject(hObject) => dllcall("DeleteObject", "ptr",hObject)
 
     static StretchBlt(ddc, aRectTo, sdc, aRectFrom, Raster:=0x00CC0020) {
         return dllcall("gdi32\StretchBlt"
@@ -491,9 +512,7 @@ class _GDIP {
     }
 
     ;数组 aRect 转成 struct
-    static CreateRect(&bufRect, aRect) {
-        numput("uint",aRect[1],"uint",aRect[2],"uint",aRect[3],"uint",aRect[4], bufRect:=buffer(16))
-    }
+    static CreateRect(&bufRect, aRect) => numput("uint",aRect[1],"uint",aRect[2],"uint",aRect[3],"uint",aRect[4], bufRect:=buffer(16))
 
     ; ======================================================================================================================
     ; Multiple Display Monitors Functions -> msdn.microsoft.com/en-us/library/dd145072(v=vs.85).aspx
@@ -538,9 +557,7 @@ class _GDIP {
     ; ======================================================================================================================
     ;  Retrieves the display monitor that has the largest area of intersection with a specified window.
     ; ======================================================================================================================
-    static MDMF_FromHWND(hwnd) {
-        return dllcall("User32.dll\MonitorFromWindow", "Ptr",hwnd, "uint",0, "ptr")
-    }
+    static MDMF_FromHWND(hwnd) => dllcall("User32.dll\MonitorFromWindow", "Ptr",hwnd, "uint",0, "ptr")
     ; ======================================================================================================================
     ; Retrieves the display monitor that contains a specified point.
     ; if either X or Y is empty, the function will use the current cursor position for this value.
@@ -636,9 +653,7 @@ class GDIP_PBitmap extends _GDIP {
     }
 
     ;出错，可排查释放顺序
-    __delete() {
-        dllcall("gdiplus\GdipDisposeImage", "ptr",this)
-    }
+    __delete() => dllcall("gdiplus\GdipDisposeImage", "ptr",this)
 
     GdipCreateBitmapFromScan0(w, h, PixelFormat:=0x26200A) {
         dllcall("gdiplus\GdipCreateBitmapFromScan0", "int",w, "int",h, "int",0, "int",PixelFormat, "ptr",0, "ptr*",&pBitmap:=0)
@@ -814,9 +829,7 @@ class GDIP_PBitmap extends _GDIP {
         dllcall("gdiplus\GdipBitmapGetPixel", "Ptr",this, "int",x, "int",y, "Uint*",&ARGB:=0)
         return ARGB
     }
-    setPixel(x, y, ARGB) {
-        return dllcall("gdiplus\GdipBitmapSetPixel", "Ptr",this, "int",x, "int",y, "int",&ARGB)
-    }
+    setPixel(x, y, ARGB) => dllcall("gdiplus\GdipBitmapSetPixel", "Ptr",this, "int",x, "int",y, "int",&ARGB)
 
     ; http://www.autohotkey.com/community/viewtopic.php?p=477333
     ; returns resized bitmap. By Learning one.
@@ -992,7 +1005,7 @@ class GDIP_PBitmap extends _GDIP {
     ;Quality 0-100
     GdipSaveImageToFile(fp, quality:=100) {
         SplitPath(fp,,, &ext)
-        if !(ext ~= "^(?i:bmp|dib|rle|jpg|jpeg|jpe|jfif|gif|tif|tiff|png)$")
+        if !(ext ~= "^(?i:bmp|ico|dib|rle|jpg|jpeg|jpe|jfif|gif|tif|tiff|png)$")
             return -1
         this.select_codec(ext, quality)
         return dllcall("gdiplus\GdipSaveImageToFile","ptr",this, "ptr",strptr(fp), "ptr",this.pCodec, "ptr",this.EncoderParameter) ? -5 : 0
@@ -1028,13 +1041,9 @@ class GDIP_PBitmap extends _GDIP {
     }
 
     ;获取的可能是 agrb
-    getLockBitPixel(Scan0, x, y, Stride) {
-        return numget(Scan0, (x*4)+(y*Stride), "UInt")
-    }
+    getLockBitPixel(Scan0, x, y, Stride) => numget(Scan0, (x*4)+(y*Stride), "UInt")
 
-    GdipBitmapUnlockBits(bufBitmapData) {
-        return dllcall("Gdiplus\GdipBitmapUnlockBits", "ptr",this, "ptr",bufBitmapData)
-    }
+    GdipBitmapUnlockBits(bufBitmapData) => dllcall("Gdiplus\GdipBitmapUnlockBits", "ptr",this, "ptr",bufBitmapData)
 
     ;-----------------------------------ImagePut-----------------------------------
     ;判断输入的图片类型
@@ -1348,9 +1357,7 @@ class GDIP_PBitmap extends _GDIP {
     }
 
     ;this.toStream()
-    getBase64FromStream(pStream) {
-        return this.setStringByStream(pStream, 0x40000001) ; CRYPT_STRING_NOCRLF | CRYPT_STRING_BASE64
-    }
+    getBase64FromStream(pStream) => this.setStringByStream(pStream, 0x40000001) ; CRYPT_STRING_NOCRLF | CRYPT_STRING_BASE64
 
     ;this.toStream()
     ;ext: 用jpg还是tif
@@ -1362,23 +1369,20 @@ class GDIP_PBitmap extends _GDIP {
     ;主要生成
     ;this.pCodec
     ;this.EncoderParameter
-    ;this.CodecInfo
-    ;this.bufCodecInfo
-    ;TODO 目的是什么
     select_codec(ext, quality:=100) {
         dllcall("gdiplus\GdipGetImageEncodersSize", "uint*",&nCount:=0, "uint*",&nSize:=0)
-        this.bufCodecInfo := buffer(nSize)
-        dllcall("gdiplus\GdipGetImageEncoders", "uint",nCount, "uint",this.bufCodecInfo.size, "ptr",this.bufCodecInfo)
+        bufCodecInfo := buffer(nSize)
+        dllcall("gdiplus\GdipGetImageEncoders", "uint",nCount, "uint",bufCodecInfo.size, "ptr",bufCodecInfo)
         ; struct ImageCodecInfo - http://www.jose.it-berater.org/gdiplus/reference/structures/imagecodecinfo.htm
         ;获取 idx
         loop {
             if (A_Index > nCount)
                 throw Error("Could not find a matching encoder for the specified file format.")
             idx := (48+7*A_PtrSize) * (A_Index-1)
-        } until instr(strget(numget(this.bufCodecInfo, idx+32+3*A_PtrSize, "ptr"), "UTF-16"), ext)
+        } until instr(strget(numget(bufCodecInfo, idx+32+3*A_PtrSize, "ptr"), "UTF-16"), ext)
         ;idx →pCodec
-        this.pCodec := this.bufCodecInfo.ptr + idx ; ClassID
-        if (quality ~= "^\d+$") && ("image/jpeg" == strget(numget(this.bufCodecInfo, idx+32+4*A_PtrSize, "ptr"), "UTF-16")) { ; MimeType
+        this.pCodec := bufCodecInfo.ptr + idx ; ClassID
+        if (quality ~= "^\d+$") && ("image/jpeg" == strget(numget(bufCodecInfo, idx+32+4*A_PtrSize, "ptr"), "UTF-16")) { ; MimeType
             numput("uint", quality, this.bufQuality:=buffer(4))
             ; struct EncoderParameter - http://www.jose.it-berater.org/gdiplus/reference/structures/encoderparameter.htm
             ; enum ValueType - https://docs.microsoft.com/en-us/dotnet/api/system.drawing.imaging.encoderparametervaluetype
@@ -1413,13 +1417,9 @@ class GDIP_HBitmap extends _GDIP {
         }
     }
 
-    __delete() {
-        _GDIP.DeleteObject(this.ptr)
-    }
+    __delete() => _GDIP.DeleteObject(this.ptr)
 
-    CreateCompatibleBitmap(hdc, w, h) {
-        return DllCall("gdi32\CreateCompatibleBitmap", "Ptr", hdc, "int", w, "int", h)
-    }
+    CreateCompatibleBitmap(hdc, w, h) => dllcall("gdi32\CreateCompatibleBitmap", "Ptr", hdc, "int", w, "int", h)
 
     getFromRect(aRect) {
         x := aRect[1]
@@ -1602,22 +1602,16 @@ class GDIP_Graphics extends _GDIP {
     }
 
     ;用 color 清除当前内容
-    GdipGraphicsClear(color:=0) {
-        return dllcall("gdiplus\GdipGraphicsClear", "Ptr",this, "uint",color)
-    }
+    GdipGraphicsClear(color:=0) => dllcall("gdiplus\GdipGraphicsClear", "Ptr",this, "uint",color)
 
-    GdipResetClip() {
-        dllcall("gdiplus\GdipResetClip", "Ptr",this)
-    }
+    GdipResetClip() => dllcall("gdiplus\GdipResetClip", "Ptr",this)
 
     ; default = 0
     ; HighSpeed = 1
     ; HighQuality = 2
     ; None = 3
     ; AntiAlias = 4 边缘平滑
-    GdipSetSmoothingMode(smoothingMode:=4) {
-        return dllcall("gdiplus\GdipSetSmoothingMode", "Ptr",this, "int",smoothingMode)
-    }
+    GdipSetSmoothingMode(smoothingMode:=4) => dllcall("gdiplus\GdipSetSmoothingMode", "Ptr",this, "int",smoothingMode)
 
     ; default = 0
     ; LowQuality = 1
@@ -1627,9 +1621,7 @@ class GDIP_Graphics extends _GDIP {
     ; NearestNeighbor = 5
     ; HighQualityBilinear = 6
     ; HighQualityBicubic = 7
-    GdipSetInterpolationMode(interpolationMode:=7) {
-        return dllcall("gdiplus\GdipSetInterpolationMode", "Ptr",this, "int",interpolationMode)
-    }
+    GdipSetInterpolationMode(interpolationMode:=7) => dllcall("gdiplus\GdipSetInterpolationMode", "Ptr",this, "int",interpolationMode)
 
     ;TextRenderingHintSystemDefault              = 0,
     ;TextRenderingHintSingleBitPerPixelGridFit   = 1,
@@ -1637,9 +1629,7 @@ class GDIP_Graphics extends _GDIP {
     ;TextRenderingHintAntiAliasGridFit           = 3,
     ;TextRenderingHintAntiAlias                  = 4,
     ;TextRenderingHintClearTypeGridFit           = 5
-    GdipSetTextRenderingHint(TextRenderingHint:=0) {
-        return dllcall("gdiplus\GdipSetTextRenderingHint", "Ptr",this, "uint",textRenderingHint)
-    }
+    GdipSetTextRenderingHint(TextRenderingHint:=0) => dllcall("gdiplus\GdipSetTextRenderingHint", "Ptr",this, "uint",textRenderingHint)
 
     ;------------------------------------------------rotate------------------------------------------------
     ;旋转相关
@@ -1654,28 +1644,20 @@ class GDIP_Graphics extends _GDIP {
     ;垂直翻转(以下线翻转)
     ;   GdipScaleWorldTransform(1, -1)
     ;   GdipTranslateWorldTransform(0, -h)
-    GdipScaleWorldTransform(xScale, yScale, MatrixOrder:=0) {
-        return dllcall("gdiplus\GdipScaleWorldTransform", "Ptr",this, "float",xScale, "float",yScale, "int",MatrixOrder)
-    }
+    GdipScaleWorldTransform(xScale, yScale, MatrixOrder:=0) => dllcall("gdiplus\GdipScaleWorldTransform", "Ptr",this, "float",xScale, "float",yScale, "int",MatrixOrder)
 
     ;偏移坐标(新-旧)
     ;NOTE 要在 GdipRotateWorldTransform 之后运行
-    GdipTranslateWorldTransform(xOffset, yOffset, MatrixOrder:=0) {
-        return dllcall("gdiplus\GdipTranslateWorldTransform", "Ptr",this, "float",xOffset, "float",yOffset, "int",MatrixOrder)
-    }
+    GdipTranslateWorldTransform(xOffset, yOffset, MatrixOrder:=0) => dllcall("gdiplus\GdipTranslateWorldTransform", "Ptr",this, "float",xOffset, "float",yOffset, "int",MatrixOrder)
 
     ;回收
-    GdipResetWorldTransform() {
-        return dllcall("gdiplus\GdipResetWorldTransform", "Ptr",this)
-    }
+    GdipResetWorldTransform() => dllcall("gdiplus\GdipResetWorldTransform", "Ptr",this)
 
     ;旋转 angle 度
     ;TODO MatrixOrder = 0; The operation is applied before the old operation.
     ; MatrixOrder = 1; The operation is applied after the old operation.
     ;NOTE 要在 GdipTranslateWorldTransform 等调整好之后再运行
-    GdipRotateWorldTransform(angle:=90, MatrixOrder:=0) {
-        return dllcall("gdiplus\GdipRotateWorldTransform", "Ptr",this, "float",angle, "int",MatrixOrder)
-    }
+    GdipRotateWorldTransform(angle:=90, MatrixOrder:=0) => dllcall("gdiplus\GdipRotateWorldTransform", "Ptr",this, "float",angle, "int",MatrixOrder)
 
     ;------------------------------------------------draw------------------------------------------------
 
@@ -1732,19 +1714,13 @@ class GDIP_Graphics extends _GDIP {
         return ImageAttr
     }
 
-    GdipDrawRectangle(pPen, aRect) {
-        return dllcall("gdiplus\GdipDrawRectangle", "Ptr",this, "Ptr",pPen, "float",aRect[1],"float",aRect[2],"float",aRect[3],"float",aRect[4])
-    }
+    GdipDrawRectangle(pPen, aRect) => dllcall("gdiplus\GdipDrawRectangle", "Ptr",this, "Ptr",pPen, "float",aRect[1],"float",aRect[2],"float",aRect[3],"float",aRect[4])
 
-    GdipDrawEllipse(pPen, aRect) {
-        return dllcall("gdiplus\GdipDrawEllipse", "Ptr",this, "Ptr",pPen, "float",aRect[1],"float",aRect[2],"float",aRect[3],"float",aRect[4])
-    }
+    GdipDrawEllipse(pPen, aRect) => dllcall("gdiplus\GdipDrawEllipse", "Ptr",this, "Ptr",pPen, "float",aRect[1],"float",aRect[2],"float",aRect[3],"float",aRect[4])
 
     ; Pen:		the pen used to draw the line
     ; points		[x1,y1,x2,y2]
-    GdipDrawLine(pPen, points) {
-        return dllcall("gdiplus\GdipDrawLine", "Ptr",this, "Ptr",pPen, "float",points[1], "float",points[2], "float",points[3], "float",points[4])
-    }
+    GdipDrawLine(pPen, points) => dllcall("gdiplus\GdipDrawLine", "Ptr",this, "Ptr",pPen, "float",points[1], "float",points[2], "float",points[3], "float",points[4])
 
     ;[[x1,y1],[x2,y2]]
     GdipDrawLines(pPen, points) {
@@ -2051,9 +2027,7 @@ class GDIP_Graphics extends _GDIP {
     ;     return E
     ; }
 
-    GdipFillRectangle(pBrush, aRect) {
-        return dllcall("gdiplus\GdipFillRectangle", "Ptr",this, "Ptr",pBrush, "float",aRect[1], "float",aRect[2], "float",aRect[3], "float",aRect[4])
-    }
+    GdipFillRectangle(pBrush, aRect) => dllcall("gdiplus\GdipFillRectangle", "Ptr",this, "Ptr",pBrush, "float",aRect[1], "float",aRect[2], "float",aRect[3], "float",aRect[4])
 
     GdipFillEllipse(pBrush, aRect) {
         if (!pBrush)
@@ -2071,13 +2045,9 @@ class GDIP_Graphics extends _GDIP {
     }
 
     ; 起始角度(右边为0), 阴影角度
-    GdipFillPie(pBrush, aRect, angles) {
-        return dllcall("gdiplus\GdipFillPie", "Ptr",this, "Ptr",pBrush, "float",aRect[1],"float",aRect[2],"float",aRect[3],"float",aRect[4], "float",angles[1], "float",angles[2])
-    }
+    GdipFillPie(pBrush, aRect, angles) => dllcall("gdiplus\GdipFillPie", "Ptr",this, "Ptr",pBrush, "float",aRect[1],"float",aRect[2],"float",aRect[3],"float",aRect[4], "float",angles[1], "float",angles[2])
 
-    GdipFillPath(pGraphics, pBrush, pPath) {
-        return dllcall("gdiplus\GdipFillPath", "ptr",pGraphics, "ptr",pBrush, "ptr",pPath)
-    }
+    GdipFillPath(pGraphics, pBrush, pPath) => dllcall("gdiplus\GdipFillPath", "ptr",pGraphics, "ptr",pBrush, "ptr",pPath)
 
     GdipCreateRegion() {
         dllcall("gdiplus\GdipCreateRegion", "UInt*",&region:=0)
@@ -2091,30 +2061,20 @@ class GDIP_Graphics extends _GDIP {
         return this.region
     }
 
-    GdipSetClipRect(aRect, CombineMode:=0) {
-        return dllcall("gdiplus\GdipSetClipRect",  "ptr",this, "float",aRect[1],"float",aRect[2],"float",aRect[3],"float",aRect[4], "int",CombineMode)
-    }
+    GdipSetClipRect(aRect, CombineMode:=0) => dllcall("gdiplus\GdipSetClipRect",  "ptr",this, "float",aRect[1],"float",aRect[2],"float",aRect[3],"float",aRect[4], "int",CombineMode)
 
-    GdipSetClipRegion(CombineMode:=0) {
-        return dllcall("gdiplus\GdipSetClipRegion", "ptr",this, "ptr",this.region, "int",CombineMode)
-    }
+    GdipSetClipRegion(CombineMode:=0) => dllcall("gdiplus\GdipSetClipRegion", "ptr",this, "ptr",this.region, "int",CombineMode)
 
-    GdipDeleteRegion() {
-        return dllcall("gdiplus\GdipDeleteRegion", "ptr",this.region)
-    }
+    GdipDeleteRegion() => dllcall("gdiplus\GdipDeleteRegion", "ptr",this.region)
 
     GdipCreatePath(BrushMode:=0) {
         dllcall("gdiplus\GdipCreatePath", "int",BrushMode, "ptr*",&pPath:=0)
         return pPath
     }
 
-    GdipAddPathRectangle(pPath, aRect) {
-        return dllcall("gdiplus\GdipAddPathRectangle",A_PtrSize ? "ptr" : "UInt",pPath, "float",aRect[1],"float",aRect[2],"float",aRect[3],"float",aRect[4])
-    }
+    GdipAddPathRectangle(pPath, aRect) => dllcall("gdiplus\GdipAddPathRectangle",A_PtrSize ? "ptr" : "UInt",pPath, "float",aRect[1],"float",aRect[2],"float",aRect[3],"float",aRect[4])
 
-    GdipAddPathPie(pPath, aRect, StartAngle, SweepAngle) {
-        return dllcall("gdiplus\GdipAddPathPie", "ptr",pPath, "float",aRect[1],"float",aRect[2],"float",aRect[3],"float",aRect[4], "float",StartAngle, "float",SweepAngle)
-    }
+    GdipAddPathPie(pPath, aRect, StartAngle, SweepAngle) => dllcall("gdiplus\GdipAddPathPie", "ptr",pPath, "float",aRect[1],"float",aRect[2],"float",aRect[3],"float",aRect[4], "float",StartAngle, "float",SweepAngle)
 
     Gdip_AddPathBeziers(pPath, Points) {
         Points := StrSplit(Points, "|")
@@ -2129,9 +2089,9 @@ class GDIP_Graphics extends _GDIP {
 
     ; Adds a Bézier spline to the current figure of this path
     GdipAddPathBezier(pPath, x1, y1, x2, y2, x3, y3, x4, y4) {
-        return dllcall("gdiplus\GdipAddPathBezier", "ptr", pPath
-            , "float", x1, "float", y1, "float", x2, "float", y2
-            , "float", x3, "float", y3, "float", x4, "float", y4)
+        return dllcall("gdiplus\GdipAddPathBezier", "ptr",pPath
+            , "float",x1, "float",y1, "float",x2, "float",y2
+            , "float",x3, "float",y3, "float",x4, "float",y4)
     }
 
     ;#####################################################################################
@@ -2153,29 +2113,19 @@ class GDIP_Graphics extends _GDIP {
         return dllcall("gdiplus\GdipAddPathLine2", "ptr",pPath, "ptr",bufPointF, "int",Points.length)
     }
 
-    Gdip_AddPathLine(pPath, aRect) {
-        return dllcall("gdiplus\GdipAddPathLine", "ptr", pPath, "float",aRect[1],"float",aRect[2],"float",aRect[3],"float",aRect[4])
-    }
+    Gdip_AddPathLine(pPath, aRect) => dllcall("gdiplus\GdipAddPathLine", "ptr",pPath, "float",aRect[1],"float",aRect[2],"float",aRect[3],"float",aRect[4])
 
-    GdipAddPathArc(pPath, aRect, StartAngle, SweepAngle) {
-        return dllcall("gdiplus\GdipAddPathArc", "ptr", pPath, "float",aRect[1],"float",aRect[2],"float",aRect[3],"float",aRect[4], "float", StartAngle, "float", SweepAngle)
-    }
+    GdipAddPathArc(pPath, aRect, StartAngle, SweepAngle) => dllcall("gdiplus\GdipAddPathArc", "ptr",pPath, "float",aRect[1],"float",aRect[2],"float",aRect[3],"float",aRect[4], "float",StartAngle, "float",SweepAngle)
 
     ; Starts a figure without closing the current figure. Subsequent points added to this path are added to the figure.
-    GdipStartPathFigure(pPath) {
-        return dllcall("gdiplus\GdipStartPathFigure", "ptr", pPath)
-    }
+    GdipStartPathFigure(pPath) => dllcall("gdiplus\GdipStartPathFigure", "ptr",pPath)
 
     ; Closes the current figure of this path.
-    GdipClosePathFigure(pPath) {
-        return dllcall("gdiplus\GdipClosePathFigure", "ptr", pPath)
-    }
+    GdipClosePathFigure(pPath) => dllcall("gdiplus\GdipClosePathFigure", "ptr",pPath)
 
 
     ; Replaces this path with curves that enclose the area that is filled when this path is drawn by a specified pen. This method also flattens the path.
-    GdipWidenPath(pPath, pPen, Matrix:=0, Flatness:=1) {
-        return dllcall("gdiplus\GdipWidenPath", "ptr", pPath, "uint", pPen, "ptr", Matrix, "float", Flatness)
-    }
+    GdipWidenPath(pPath, pPen, Matrix:=0, Flatness:=1) => dllcall("gdiplus\GdipWidenPath", "ptr", pPath, "uint", pPen, "ptr", Matrix, "float", Flatness)
 
     GdipClonePath(pPath) {
         dllcall("gdiplus\GdipClonePath", "ptr",pPath, "ptr*",&pPathClone:=0)
@@ -2189,13 +2139,9 @@ class GDIP_Graphics extends _GDIP {
     ; pPen Pointer to a pen
     ; pPath Pointer to a Path
     ; return status enumeration. 0 = success
-    GdipDrawPath(pPen, pPath) {
-        return dllcall("gdiplus\GdipDrawPath", "ptr",this, "ptr",pPen, "ptr",pPath)
-    }
+    GdipDrawPath(pPen, pPath) => dllcall("gdiplus\GdipDrawPath", "ptr",this, "ptr",pPen, "ptr",pPath)
 
-    GdipDeletePath(pPath) {
-        return dllcall("gdiplus\GdipDeletePath", "ptr",pPath)
-    }
+    GdipDeletePath(pPath) => dllcall("gdiplus\GdipDeletePath", "ptr",pPath)
 
     ;oDC 相关方法
 
@@ -2216,10 +2162,7 @@ class GDIP_Graphics extends _GDIP {
     ;     Ptr := A_PtrSize ? "ptr" : "uint"
     ;     return this.hDC := dllcall("GetDCEx",ptr,hwnd, ptr,hrgnClip, "int",flags)
     ; }
-
-    release(hwnd:=0) {
-        return dllcall("ReleaseDC", "ptr",hwnd, "ptr",this.hDC)
-    }
+    release(hwnd:=0) => dllcall("ReleaseDC", "ptr",hwnd, "ptr",this.hDC)
 
     ;TODO
     ; Raster
@@ -2256,9 +2199,9 @@ class GDIP_Graphics extends _GDIP {
     ; https://docs.microsoft.com/en-us/windows/win32/api/wingdi/nf-wingdi-selectobject
     SelectObject(oGdiObj:="") {
         if (oGdiObj) {
-            if (!this.pSelectObject) { ;只记录一次(原始对象)
+            if (!this.pSelectObject) ;只记录一次(原始对象)
                 return this.pSelectObject := dllcall("SelectObject", "ptr",this.hDC, "ptr",oGdiObj)
-            } else
+            else
                 return dllcall("SelectObject", "ptr",this.hDC, "ptr",oGdiObj)
         } else { ;还原
             pOld := this.pSelectObject
@@ -2293,13 +2236,6 @@ class GDIP_Graphics extends _GDIP {
             , "uint*", alpha<<16|1<<24
             , "uint", 2)
     }
-
-    ;TODO
-    ; show() {
-    ;     oGui := gui("-Caption +E0x80000 +LastFound +AlwaysOnTop +ToolWindow +OwnDialogs")
-    ;     oGui.Show("NA")
-    ;     this.UpdateLayeredWindow(oGui.hwnd, [0, 0, A_ScreenWidth, A_ScreenHeight])
-    ; }
 
 }
 
@@ -2344,17 +2280,13 @@ class GDIP_Pen extends _GDIP {
         dllcall("gdiplus\GdipGetPenWidth", "ptr",this, "float*",&width:=0)
         return width
     }
-    GdipSetPenWidth(width) {
-        return dllcall("gdiplus\GdipSetPenWidth", "ptr",this, "float",width)
-    }
+    GdipSetPenWidth(width) => dllcall("gdiplus\GdipSetPenWidth", "ptr",this, "float",width)
 
     GdipGetPenColor() {
         dllcall("gdiplus\GdipGetPenColor", "ptr",this, "uint*",&color:=0)
         return color
     }
-    GdipSetPenColor(color) {
-        return dllcall("gdiplus\GdipSetPenColor", "ptr",this, "uint",color)
-    }
+    GdipSetPenColor(color) => dllcall("gdiplus\GdipSetPenColor", "ptr",this, "uint",color)
 
     ; getBrush() {
     ;     return this.ptr
@@ -2471,9 +2403,7 @@ class GDIP_Brush extends _GDIP {
         return pBrushClone
     }
 
-    SetColor(argb) {
-        dllcall("gdiplus\GdipSetSolidFillColor", "ptr",this, "uint",argb)
-    }
+    SetColor(argb) => dllcall("gdiplus\GdipSetSolidFillColor", "ptr",this, "uint",argb)
 
 
     getColor() {
@@ -2507,9 +2437,7 @@ class GDIP_Font extends _GDIP {
             msgbox(A_ThisFunc)
     }
 
-    __delete() {
-        dllcall("gdiplus\GdipDeleteFont", "ptr",this)
-    }
+    __delete() => dllcall("gdiplus\GdipDeleteFont", "ptr",this)
 
     ; Regular = 0
     ; Bold = 1
@@ -2535,9 +2463,7 @@ class GDIP_FontFamily {
         this.ptr := pFontFamily
     }
 
-    __delete() {
-        dllcall("gdiplus\GdipDeleteFontFamily", "ptr",this)
-    }
+    __delete() => dllcall("gdiplus\GdipDeleteFontFamily", "ptr",this)
 
 }
 
@@ -2562,13 +2488,9 @@ class GDIP_StringFormat extends _GDIP {
     I don't actually know any besides 0 which is LANG_NEUTRAL and represents the users language - further research is necessary.
     */
 
-    __new(formatFlags:=0, langId:=0) {
-        this.GdipCreateStringFormat(formatFlags, langId)
-    }
+    __new(formatFlags:=0, langId:=0) => this.GdipCreateStringFormat(formatFlags, langId)
 
-    __delete() {
-        dllcall("gdiplus\GdipDeleteStringFormat", "ptr",this)
-    }
+    __delete() => dllcall("gdiplus\GdipDeleteStringFormat", "ptr",this)
 
     GdipCreateStringFormat(formatFlags, langId) {
         res := dllcall("gdiplus\GdipCreateStringFormat", "uint",formatFlags, "UShort",langId, "ptr*",&pStringFormat:=0)
@@ -2580,8 +2502,6 @@ class GDIP_StringFormat extends _GDIP {
     ; Near = 0
     ; Center = 1
     ; Far = 2
-    GdipSetStringFormatAlign(align:=1) {
-        return dllcall("gdiplus\GdipSetStringFormatAlign", "ptr",this, "int",align)
-    }
+    GdipSetStringFormatAlign(align:=1) => dllcall("gdiplus\GdipSetStringFormatAlign", "ptr",this, "int",align)
 
 }

@@ -31,21 +31,13 @@ class _Number {
     }
 
     ;用NTLCalc(str)
-    floatErr() {
-        return string(this).floatErr()
-    }
+    floatErr() => number(string(round(this+0.00000001,6)).delete0())
+    delete0() => string(this).delete0()
 
-    delete0() {
-        return string(this).delete0()
-    }
+    ;左边填充0
+    zfill(l) => format(format("{:0{1}s}",l), string(this))
 
-    zfill(l) { ;左边填充0
-        return format(format("{:0{1}s}",l), string(this))
-    }
-
-    mod1(num, m) {
-        return mod(num-1, m)+1
-    }
+    mod1(num, m) => mod(num-1, m)+1
 
     ;转换
     ;Excel的列号
