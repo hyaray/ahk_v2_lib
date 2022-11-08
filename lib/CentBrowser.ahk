@@ -1,9 +1,7 @@
 ﻿class _CB extends _CDP {
     static winTitle := "ahk_class Chrome_WidgetWin_1 ahk_exe chrome.exe"
 
-    static __new() {
-        this.init("s:\CentBrowser\chrome.exe", 9222)
-    }
+    static __new() => this.init("s:\CentBrowser\chrome.exe", 9222)
 
     ;只是为了方便打开网页
     __new(url:="", funAfterDo:=false) {
@@ -11,17 +9,11 @@
             _CB.tabOpenLink(url, funAfterDo)
     }
 
-    static update() {
-        _CB.tabOpenLink("http://www.centbrowser.cn/history.html")
-    }
+    static update() => _CB.tabOpenLink("http://www.centbrowser.cn/history.html")
 
-    static tabLeft(tp:=1) {
-        send("{ctrl down}{shift down}{tab}{shift up}{ctrl up}")
-    }
+    static tabLeft(tp:=1) => send("{ctrl down}{shift down}{tab}{shift up}{ctrl up}")
 
-    static tabRight() {
-        send("{ctrl down}{tab}{ctrl up}")
-    }
+    static tabRight() => send("{ctrl down}{tab}{ctrl up}")
 
     static onekey() {
         if (WinActive(_CB.winTitle)) {

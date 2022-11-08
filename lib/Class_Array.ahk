@@ -22,9 +22,7 @@ class _Array extends Array {
         }
     }
 
-    toString() {
-        return this.toJson()
-    }
+    toString() => this.toJson()
 
     ;获取
     count(value) {
@@ -44,9 +42,7 @@ class _Array extends Array {
         return 0
     }
 
-    hasValue(value) {
-        return this.index(value) > 0
-    }
+    hasValue(value) => this.index(value) > 0
 
     extend(arr) {
         arr0 := this
@@ -105,26 +101,26 @@ class _Array extends Array {
 
     ;funDistinct 返回值当 key 用来筛选
     ;参数都是(v,k)
-    ;arr.filter((v,k)=>v[1]!="", (v,k)=>v[1])
-    ;filter(fun, funDistinct:=unset) {
-    ;    arrRes := []
-    ;    if (!isset(funDistinct)) {
-    ;        for k, v in this {
-    ;            if (fun(k, v))
-    ;                arrRes.push(v)
-    ;        }
-    ;    } else {
-    ;        obj := map()
-    ;        for k, v in this {
-    ;            key := funDistinct(v,k)
-    ;            if (fun(v,k) && !obj.has(key)) {
-    ;                arrRes.push(v)
-    ;                obj[key] := ""
-    ;            }
-    ;        }
-    ;    }
-    ;    return arrRes
-    ;}
+    ;arr.filter2((v,k)=>v[1]!="", (v,k)=>v[1])
+    filter2(fun, funDistinct:=unset) {
+        arrRes := []
+        if (!isset(funDistinct)) {
+            for k, v in this {
+                if (fun(k, v))
+                    arrRes.push(v)
+            }
+        } else {
+            obj := map()
+            for k, v in this {
+                key := funDistinct(v,k)
+                if (fun(v,k) && !obj.has(key)) {
+                    arrRes.push(v)
+                    obj[key] := ""
+                }
+            }
+        }
+        return arrRes
+    }
 
     reduce(fun, v0:=unset) {
         arr := this

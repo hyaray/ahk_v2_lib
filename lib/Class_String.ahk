@@ -12,7 +12,7 @@ for k in proto.OwnProps() {
 class _String {
     static fileSZM := "d:\TC\hy\Rime\opencc\jiayin.txt"
     ;static fileQP := A_LineFile . "\..\汉字拼音对照表.txt"
-    static fileTS := A_LineFile . "\..\繁体简体.txt"
+    static fileTS := "d:\BB\lib\繁体简体.txt"
     static regNum := "^-?\d+(\.\d+)?$"
     static regIP := "^(25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d?)(\.(25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d?)){3}$"
     static regSfz := "^\d{17}[\dXx]$" ;身份证
@@ -23,7 +23,7 @@ class _String {
     static regImage := "i)^(bmp|jpe|jpeg|jpg|png|gif|ico|psd|tif|tiff)$"
     ;   编程源代码
     static regCode := "i)^(ah[k2]|js|vim|html?|wxml|css|wxss|lua|hh[cpk])$"
-    static regText := "i)^(ah[k2]|js|log|vim|md|html?|wxml|css|wxss|lua|hh[cpk]|csv|json|txt|ini)$"
+    static regText := "i)^(ah[k2]|js|sh|log|vim|md|html?|wxml|css|wxss|lua|hh[cpk]|csv|json|txt|ini)$"
     static regAudeo := "i)^(wav|mp3|m4a|wma)$"
     static regVideo := "i)^(mp4|wmv|mkv|m4a|rm(vb)?|flv|mpeg|avi)$"
     static regZip := "i)^(7z|zip|rar|iso|img|gz|cab|jar|arj|lzh|ace|tar|GZip|uue|bz2)$"

@@ -1532,6 +1532,20 @@ class IUIAutomationElement extends IUIABase {
         return arr
     }
 
+    focusTabItem(name) {
+        ;获取 elTab
+        if (this.CurrentControlType == UIA.ControlType.Tab)
+            elTab := this
+        else if (this.CurrentControlType == UIA.ControlType.TabItem)
+            elTab := this.GetParent()
+        for el in elTab.FindAll(UIA.CreateTrueCondition(), 2) {
+            if (el.CurrentName == name) {
+                el.GetCurrentPattern("SelectionItem").select()
+                return el
+            }
+        }
+    }
+
     ;使用的场景不规范，不好转到 getSiblingItems
     getTreeDataByDataItem() {
         oRV := UIA.RawViewWalker()

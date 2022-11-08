@@ -280,7 +280,7 @@ inputboxEX(tips, sDefaluet:="", sTitle:="", bEmpty:=false) {
     ; oGui.AddButton("xp+300", "取消(&C)").OnEvent("click", btnCancle)
     oGui.show("w800 h600")
     res := oEdit.text
-    WinWaitClose("ahk_id " . oGui.Hwnd)
+    WinWaitClose(oGui)
     if (!bEmpty && (res == "")) {
         msgbox("错误：为空",,0x40000)
         exit
@@ -376,7 +376,7 @@ hyf_inputOption(arr, sTips:="", bOne:=false) {
     objRes := map() ;空白值不返回
     objRes.default := ""
     oGui.show()
-    WinWaitClose("ahk_id " . oGui.hwnd)
+    WinWaitClose(oGui)
     return objRes
     editChange(ctl, p*) {
         if (bOne) {
@@ -404,9 +404,7 @@ hyf_inputOption(arr, sTips:="", bOne:=false) {
         }
         oGui.destroy()
     }
-    doEscape(oGui, p*) {
-        oGui.destroy()
-    }
+    doEscape(oGui, p*) => oGui.destroy()
 }
 
 ;line
@@ -434,7 +432,7 @@ hyf_runByVim(fp, line:=0, params:="--remote-tab-silent") { ;用文本编辑器�
     ;检查多进程 TODO 原因？？
     objPid := map()
     for hwnd in WinGetList("ahk_class Vim")
-        objPid[WinGetPID("ahk_id " . hwnd)] := 1
+        objPid[WinGetPID(hwnd)] := 1
     if (objPid.count > 1)
         msgbox("注意：gvim 有两个进程",,0x40000)
 }
@@ -453,8 +451,8 @@ hyf_runByIE(url:="") { ;关闭当前窗口
 }
 
 ;arrNoExt 从后向前找第一个匹配的文件路径
+;如果是文件夹，找不到就返回空，如果是文件，找不到就返回文件路径
 hyf_findFile(dirIn, arrNoExt, ext:="") {
-    ;如果是文件夹，找不到就返回空，如果是文件，找不到就返回文件路径
     if (DirExist(dirIn)) {
         dir := dirIn
         res := ""
@@ -554,14 +552,10 @@ hyf_average(arr*) {
 }
 
 ;1-n默认对4求余，结果为1230循环，而我们往往需要0-3或1-4
-hyf_mod(n, m) {
-    return mod(n-1, m)+1
-}
+hyf_mod(n, m) => mod(n-1, m)+1
 
 ;求整除(1-10整数10，结果为1，11才为1)
-hyf_div(n, m) {
-    return ((n-1) // m)+1
-}
+hyf_div(n, m) => ((n-1) // m)+1
 
 ;最小公倍数
 hyf_zxgbs(num*) {
@@ -711,26 +705,28 @@ hyf_getDocumentPath(winTitle:="") { ;获取当前窗口编辑文档的路径
     }
 }
 
-;funHwnd 处理 winHwnd 为 true 则添加
-;hyf_hwnds("ahk_exe a.exe", (p)=>substr(WinGetClass("ahk_id " . p"),1,4) == "Afx:")[1]
+;funHwnd 处理 hwnd 为 true 则添加
+;hyf_hwnds("ahk_exe a.exe", (p)=>substr(WinGetClass(p"),1,4) == "Afx:")[1]
 ;hyf_hwnds("ahk_class Chrome_WidgetWin_1 ahk_exe chrome.exe")
 hyf_hwnds(winTitle, funHwnd:="") {
     saveDetect := A_DetectHiddenWindows
     DetectHiddenWindows(true)
     arr := []
-    for winHwnd in WinGetList(winTitle) {
+    for hwnd in WinGetList(winTitle) {
         try
-            titleLoop := WinGetTitle("ahk_id " . winHwnd)
+            titleLoop := WinGetTitle(hwnd)
         catch
             continue
         if (isobject(funHwnd)) {
-            if (funHwnd.call(winHwnd))
-                arr.push(winHwnd)
-        } else if (instr(winTitle, "ahk_class") && titleLoop ~= "\S") { ;指定了 ahk_class 则非空标题就添加
-            arr.push(winHwnd)
+            if (funHwnd.call(hwnd))
+                arr.push(hwnd)
+        } else if (instr(winTitle, "ahk_class")) {
+            if (titleLoop ~= "\S") ;指定了 ahk_class 则非空标题就添加
+                arr.push(hwnd)
+        } else {
+            arr.push(hwnd)
         }
     }
-    ; hyf_objView(arr, arr.length)
     DetectHiddenWindows(saveDetect)
     return arr
 }
@@ -927,9 +923,7 @@ hyf_cmd(strCode, callback:="", encode:="CP936") { ;  GAHK32 ; Modified version :
     return isobject(callback) ? callback.call(0,sRes) : sRes
 }
 
-hyf_powershell(cmd) {
-    return hyf_cmd(format("PowerShell -Command `"& {{1}}`"", cmd))
-}
+hyf_powershell(cmd) => hyf_cmd(format("PowerShell -Command `"& {{1}}`"", cmd))
 
 ;msgbox(_Web.isPing("50.1"))
 hyf_isPing(ip, ms:=200) {
@@ -1044,13 +1038,13 @@ hyf_getWorkbook(fp, bActive:=false) {
     ;已打开
     SplitPath(fp, &fn)
     for hwnd in WinGetList("ahk_class XLMAIN") { ;可能有多个Excel进程
-        xl := ox("ahk_id " . hwnd)
+        xl := ox(hwnd)
         try { ;可能是进程残留
             for wb in xl.workbooks {
                 SplitPath(wb.name,,,, &noExt)
                 if (wb.name = fn || noExt = fn) { ;为什么要 noExt？
                     if (bActive)
-                        WinActivate("ahk_id " . hwnd)
+                        WinActivate(hwnd)
                     return wb
                 }
             }
@@ -1061,8 +1055,8 @@ hyf_getWorkbook(fp, bActive:=false) {
     wb := ComObject("Excel.application").workbooks.open(fp)
     if (bActive) {
         wb.parent.visible := -1
-        WinWait("ahk_id " . wb.application.hwnd)
-        WinActivate
+        WinWait(wb.application)
+        WinActivate(wb.application)
         tooltip
     }
     return wb
@@ -1183,6 +1177,7 @@ hyjson2arr(obj, mark:=1) {
 ;WM_COPYDATA_send("aaa")
 ;TODO  "`n`n" 这种字符串不兼容
 ;也可见 DynaRun.ahk https://www.autohotkey.com/board/topic/56141-ahkv2-dynarun-run-autohotkey-process-dynamically
+;来源 run 的帮助文件
 hyf_pipeRun(code, fn:="", callback:=0) {
     if (fn == "")
         fn := A_ScriptDir
@@ -1323,7 +1318,7 @@ hyf_selectByArr(arr2, indexKey:=1, bAddPy:=false, bDistinct:=false) {
     }
     ;   去重(根据 subArr[1])
     if (bDistinct)
-        arrNew := arrNew.filter((v,k)=>v[indexKey]!="", (v,k)=>v[indexKey])
+        arrNew := arrNew.filter2((v,k)=>v[indexKey]!="", (v,k)=>v[indexKey])
     ;记录 objRaw 最终返回用(因为有些对象不会在 ListView 显示)
     objRaw := map()
     for subArr in arrNew
@@ -1373,12 +1368,12 @@ hyf_selectByArr(arr2, indexKey:=1, bAddPy:=false, bDistinct:=false) {
     tooltip
     oGui.title := format("读取耗时 {1} 加载到Gui耗时 {2}", nLoad,nGui)
     oGui.show()
-    WinWaitActive("ahk_id " . oGui.hwnd)
-    ctl := ControlGetFocus() || WinGetID()
-    PostMessage(0x50,, dllcall("LoadKeyboardLayout", "str","04090409", "uint",1), ctl) ;NOTE 美国英语要用"08040804" 若不放ctl 在TC帮助的查找窗口无法切换
+    WinWaitActive(oGui)
+    ctl := ControlGetFocus(oGui) || WinGetID()
+    PostMessage(0x50,, dllcall("LoadKeyboardLayout", "str","04090409", "uint",1), ctl)
     resGui := []
     OnMessage(0x100, selectN)
-    WinWaitClose("ahk_id " . oGui.hwnd)
+    WinWaitClose(oGui)
     return resGui
     doEscape(oGui, p*) {
         OnMessage(0x100, selectN, 0)
@@ -1408,7 +1403,7 @@ hyf_selectByArr(arr2, indexKey:=1, bAddPy:=false, bDistinct:=false) {
         ;            oLv.add(, i++, subArr[1], subArr[2], subArr[3])
         ;    }
         ;}
-        oLv.ModifyCol(, "+AutoHdr +center")
+        oLv.ModifyCol()
         oLv.ModifyCol(1, "48")
         oLv.opt("+Redraw")
         if (oLv.GetCount() == 1) { ;单结果
@@ -1500,9 +1495,7 @@ hyf_GuiMsgbox(obj, title:="", defButton:="", oGui:="", times:=0) {
         hyf_setClip(ctl.text)
         ctl.gui.destroy()
     }
-    doEscape(oGui) {
-        oGui.destroy()
-    }
+    doEscape(oGui) => oGui.destroy()
 }
 
 ;defButton是默认按钮前面的text内容
@@ -1535,9 +1528,7 @@ hyf_GuiListView(arr2, arrCol:="") {
     oLv.opt("+Redraw")
     oGui.show(format("w{1} center", wCol*cntCol+20))
     return oGui
-    doEscape(oGui) {
-        oGui.destroy()
-    }
+    doEscape(oGui) => oGui.destroy()
     do(oLV, r, p*) { ;NOTE 要做的事
         ;获取当前行整行内容
         arrRes := []
@@ -1613,10 +1604,6 @@ hyf_tooltip(str) {
     tooltip(str)
     hyf_input()
     tooltip
-}
-
-hyf_objClip(obj, str:="", char:="`n", n:=0) {
-    A_Clipboard := hyf_obj2Str(obj, "`n")
 }
 
 ;*************以下为函数配套的子程序*****************

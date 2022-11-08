@@ -38,6 +38,7 @@ company := "My Company"
 #include lib\Class_Number.ahk
 #include lib\Class_Array.ahk
 #include lib\Class_Map.ahk
+#include lib\Class_Yaml.ahk
 
 ;#include lib\Class_Socket.ahk
 #include lib\WebSocket.ahk
@@ -48,6 +49,7 @@ company := "My Company"
 #include lib\Class_UIA.ahk
 #include lib\Class_Gdip.ahk
 
+#include lib\Explorer.ahk
 #include lib\Class_CDP.ahk
 #include lib\CentBrowser.ahk
 

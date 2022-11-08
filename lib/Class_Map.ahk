@@ -12,9 +12,7 @@ class _Map extends map {
     ;CaseSense := 0
     ;Default := ""
 
-    toString() {
-        return super.toJson()
-    }
+    toString() => super.toJson()
 
     ;参考python
     keys() {

@@ -63,39 +63,39 @@
 #dllload gdiplus.dll
 
 class _GDIP {
+    static RefCount := 0
+    static hModule := 0
 
     static __new() {
         if (this != _GDIP)
             return
-		this.RefCount := 0
-		this.hModule := 0
-        this.startup()
+        _GDIP.startup()
     }
 
 	static startup() {
-        if (!this.RefCount) {
-            if (!this.hModule && !dllcall("GetModuleHandle", "Str", "gdiplus", "Ptr"))
-                this.hModule := dllcall("LoadLibrary", "Str", "gdiplus")
+        if (!_GDIP.RefCount) {
+            if (!_GDIP.hModule && !dllcall("GetModuleHandle", "Str","gdiplus", "Ptr"))
+                _GDIP.hModule := dllcall("LoadLibrary", "Str","gdiplus")
             bufSi := buffer(8+A_PtrSize*2, 0)
             numput("UInt", 1, bufSi)
             dllcall("gdiplus\GdiplusStartup","ptr*",&pToken:=0, "Ptr",bufSi, "Ptr",0)
-            this.pToken := pToken
+            _GDIP.pToken := pToken
         }
-		this.RefCount += 1
-        return this.pToken
+		_GDIP.RefCount += 1
+        return _GDIP.pToken
 	}
 
 	static shutdown() {
-		this.RefCount -= 1
-		if (this.RefCount > 0)
+		_GDIP.RefCount -= 1
+		if (_GDIP.RefCount > 0)
 			return 0
-        if (this.pToken) {
-            dllcall("gdiplus\GdiplusShutdown", "Ptr",this.pToken)
-            this.pToken := 0
+        if (_GDIP.pToken) {
+            dllcall("gdiplus\GdiplusShutdown", "Ptr",_GDIP.pToken)
+            _GDIP.pToken := 0
         }
-        if (this.hModule) {
-            dllcall("FreeLibrary", "Ptr",this.hModule)
-            this.hModule := 0
+        if (_GDIP.hModule) {
+            dllcall("FreeLibrary", "Ptr",_GDIP.hModule)
+            _GDIP.hModule := 0
         }
 		return 0
 	}
@@ -137,22 +137,6 @@ class _GDIP {
         return bufBI
     }
 
-    ; aRect := [100,200,(arrWH)=>0.3*arrWH[1]+20, (arrWH)=>0.4*arrWH[2]]
-    ; arrWH := [300,400]
-    ;aRect的每个项目都可以是函数，参数是图片的[宽，高] arrWH
-    ;转成 [100, 200, 110, 160]
-    static rectDeal(aRect, arrWH) {
-        for k, v in aRect {
-            if (isobject(v))
-                aRect[k] := v.call(arrWH)
-            else if (v < 0)
-                aRect[k] := arrWH[mod(k-1,2)+1] + v ;1,3转成 w+v, 2,4转成 h+v
-            else if (v < 1)
-                aRect[k] := integer(arrWH[mod(k-1,2)+1] * v) ;1,3转成 w*v, 2,4转成 h*v
-        }
-        return aRect
-    }
-
     ;确认鼠标选择区域
     ;aRect := _GDIP.getRect((p*)=>GetKeyState(RegExReplace(A_ThisLabel, ".*\s"), "P"))
     static getRect(funDo:="") {
@@ -165,7 +149,7 @@ class _GDIP {
         ;记录初始位置
         CoordMode("Mouse", "screen")
         MouseGetPos(&x0, &y0)
-        while(funDo.call()) { ;鼠标按住不放
+        while(funDo()) { ;鼠标按住不放
             sleep(10)
             MouseGetPos(&x1, &y1)
             x := min(x0, x1)
@@ -182,10 +166,29 @@ class _GDIP {
         return [x,y,w,h]
     }
 
+    ; aRect := [100,200,(arrWH)=>0.3*arrWH[1]+20, (arrWH)=>0.4*arrWH[2]]
+    ; arrWH := [300,400]
+    ;aRect的每个项目都可以是函数，参数是图片的[宽，高] arrWH
+    ;转成 [100, 200, 110, 160]
+    static rectDeal(aRect, arrWH) {
+        for k, v in aRect {
+            if (isobject(v))
+                aRect[k] := v.call(arrWH)
+            else if (v < 0)
+                aRect[k] := arrWH[mod(k-1,2)+1] + v ;1,3转成 w+v, 2,4转成 h+v
+            else if (v < 1)
+                aRect[k] := integer(arrWH[mod(k-1,2)+1] * v) ;1,3转成 w*v, 2,4转成 h*v
+        }
+        return aRect
+    }
+
     ;屏幕区域转成 base64
     static rect2base64(aRect) {
+        _GDIP.startup()
         oPBitmap := GDIP_PBitmap(aRect)
-        return oPBitmap.toBase64()
+        res := oPBitmap.toBase64()
+        _GDIP.shutdown()
+        return res
     }
 
     ;屏幕区域保存为文件
@@ -196,8 +199,10 @@ class _GDIP {
         }
         if (fp == "")
             fp := format("{1}\{2}.png", A_Desktop,A_Now)
+        _GDIP.startup()
         oPBitmap := GDIP_PBitmap(aRect)
         oPBitmap.GdipSaveImageToFile(fp)
+        _GDIP.shutdown()
         return fp
     }
 
@@ -209,6 +214,7 @@ class _GDIP {
     ;WinGetPos(&x, &y, &w, &h, "ahk_id " . hwnd)
     ;_GDIP.rectMark([x,y,w,h])
     static rectMark(aRects, keyWaitClose:="", arrStyle:=unset) {
+        _GDIP.startup()
         if (!isobject(aRects[1]))
             aRects := [aRects]
         if (!isset(arrStyle))
@@ -234,18 +240,17 @@ class _GDIP {
         }
         oGraphics.UpdateLayeredWindow(oGui.hwnd, [0,0,w,h])
         oGraphics.SelectObject()
-        if (isset(keyWaitClose)) {
-            if (keyWaitClose is string) {
-                KeyWait(keyWaitClose, "D")
+        _GDIP.shutdown()
+        if (keyWaitClose is string) {
+            if (keyWaitClose == "")
+                return oGui
+            KeyWait(keyWaitClose, "D")
+            oGui.destroy()
+        } else if (isobject(keyWaitClose)) {
+            if (keyWaitClose is gui) { ;等待 gui 关闭则结束
+                WinWaitClose("ahk_id " . keyWaitClose.hwnd)
                 oGui.destroy()
-            } else if (isobject(keyWaitClose)) {
-                if (keyWaitClose is gui) { ;等待 gui 关闭则结束
-                    WinWaitClose("ahk_id " . keyWaitClose.hwnd)
-                    oGui.destroy()
-                }
             }
-        } else {
-            return oGui
         }
     }
 
@@ -751,7 +756,7 @@ class GDIP_PBitmap extends _GDIP {
         width  := NumGet(Rect, 8, "int")
         height := NumGet(Rect, 12, "int")
         hdc := dllcall("CreateCompatibleDC", "ptr",0, "ptr")
-        bi := _GDIP._bufBitmapInfoHeader()(width, -height)
+        bi := _GDIP._bufBitmapInfoHeader(width, -height)
         hbm := dllcall("CreateDIBSection", "ptr",hdc,"ptr",bi, "uint",0, "ptr*",&pBits:=0, "ptr",0, "uint",0, "ptr")
         obm := dllcall("SelectObject", "ptr", hdc, "ptr", hbm, "ptr")
         ; Print the window onto the hBitmap using an undocumented flag. https://stackoverflow.com/a/40042587
@@ -1005,7 +1010,7 @@ class GDIP_PBitmap extends _GDIP {
     ;Quality 0-100
     GdipSaveImageToFile(fp, quality:=100) {
         SplitPath(fp,,, &ext)
-        if !(ext ~= "^(?i:bmp|ico|dib|rle|jpg|jpeg|jpe|jfif|gif|tif|tiff|png)$")
+        if !(ext ~= "^(?i:bmp|dib|rle|jpg|jpeg|jpe|jfif|gif|tif|tiff|png)$")
             return -1
         this.select_codec(ext, quality)
         return dllcall("gdiplus\GdipSaveImageToFile","ptr",this, "ptr",strptr(fp), "ptr",this.pCodec, "ptr",this.EncoderParameter) ? -5 : 0

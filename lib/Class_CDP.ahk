@@ -86,6 +86,7 @@ class _CDP {
     ;NOTE 有些页面只限制打开1个，规则在哪里指定
     ;往往在 __new 里被调用 或见 Chrome_Do.openUrl()
     static tabOpenLink(arrUrl:='', funAfterDo:="", bActive:=true) { ;about:blank chrome://newtab
+        OutputDebug(format("i#{1} {2}:A_ThisFunc={3}", A_LineFile,A_LineNumber,A_ThisFunc))
         if (!isobject(arrUrl))
             arrUrl := (arrUrl == "") ? [] : [arrUrl]
         ;msgbox(json.stringify(arrUrl, 4))
@@ -119,19 +120,18 @@ class _CDP {
                 }
             }
             try {
-                WinShow("ahk_id " . this.hwnd)
+                WinShow(this.hwnd)
             } catch {
                 OutputDebug(format("i#{1} {2}:not found hwnd={3} ", A_LineFile,A_LineNumber,this.hwnd))
             } else {
-                WinActivate("ahk_id " . this.hwnd)
-                WinMaximize("ahk_id " . this.hwnd)
+                WinActivate(this.hwnd)
+                WinMaximize(this.hwnd)
             }
         } else { ;新打开
-            sUrl := ''
+            urls := ''
             for url in arrUrl
-                sUrl .= ' ' . url ;this.CliEscape(url)
-            ;msgbox(format("{1} {2} {3}", this.CliEscape(this.ChromePath),this.sParam,sUrl))
-            this.runChrome(sUrl)
+                urls .= ' ' . url ;this.CliEscape(url)
+            this.runChrome(urls)
         }
         if (arrUrl.length == 1 && bActive) {
             oPage := CDP_Page(this)
@@ -158,7 +158,7 @@ class _CDP {
         CoordMode("Mouse", cmMouse)
         cond := UIA.CreatePropertyCondition("ControlType", "Tooltip")
         for hwnd in WinGetList("ahk_class Chrome_WidgetWin_1") {
-            WinGetPos(&x, &y,,, "ahk_id " . hwnd)
+            WinGetPos(&x, &y,,, hwnd)
             if ((x-xMouse)**2 + (y-yMouse)**2 <= 100**2) { ;离鼠标近
                 el := UIA.ElementFromHandle(hwnd).GetFirst()
                 if (el.CurrentControlType == UIA.ControlType.Tooltip)
@@ -167,11 +167,12 @@ class _CDP {
         }
     }
 
-    static runChrome(sUrl:="") {
-        run(format("{1} {2} {3}", _CDP.CliEscape(this.ChromePath),this.sParam,sUrl),,, &pid) ;--ignore-certificate-errors
+    static runChrome(urls:="") {
+        sCmd := format("{1} {2} {3}", _CDP.CliEscape(this.ChromePath),this.sParam,urls)
+        run(sCmd,,, &pid) ;--ignore-certificate-errors
         this.pid := pid
         this.hwnd := WinWait("ahk_class Chrome_WidgetWin_1 ahk_pid " . this.pid)
-        OutputDebug(format("i#{1} {2}:自动运行浏览器 hwnd={3}", A_LineFile,A_LineNumber,this.hwnd))
+        OutputDebug(format("i#{1} {2}:自动运行浏览器 hwnd={3} sCmd={}", A_LineFile,A_LineNumber,this.hwnd,sCmd))
         WinActivate
         WinMaximize
     }
@@ -186,12 +187,11 @@ class _CDP {
             return this.hwnd
         if (ProcessExist(this.exeName)) { ;可能脚本重启等原因丢失了数据
             this.pid := this.FindInstances().get("pid", 0)
+            OutputDebug(format("i#{1} {2}:this.pid={3}", A_LineFile,A_LineNumber,this.pid))
             if (this.pid) {
-                saveDetect := A_DetectHiddenWindows
-                DetectHiddenWindows(true)
                 for winHwnd in WinGetList("ahk_class Chrome_WidgetWin_1 ahk_pid " . this.pid) {
                     try
-                        titleLoop := WinGetTitle("ahk_id " . winHwnd)
+                        titleLoop := WinGetTitle(winHwnd)
                     catch
                         continue
                     if (titleLoop ~= "\S") {
@@ -199,7 +199,6 @@ class _CDP {
                         break
                     }
                 }
-                DetectHiddenWindows(saveDetect)
                 if (this.hwnd) {
                     tooltip(format("detect重新获取chrome.hwnd={1}", this.hwnd))
                     SetTimer(tooltip, -1000)
@@ -289,10 +288,8 @@ class _CDP {
                     obj["index"] := A_Index
                     obj["json"] := objUrl
                     ;返回结果额外增加 href 的key
-                    ;msgbox(json.stringify(objUrl, 4))
                     objRes.has(objUrl[keyJson]) ? objRes[objUrl[keyJson]].push(obj) : objRes[objUrl[keyJson]] := [obj]
                     objRes.has(objUrl["href"]) ? objRes[objUrl["href"]].push(obj) : objRes[objUrl["href"]] := [obj]
-                    ;msgbox(json.stringify(objRes, 4))
                 }
             }
         }
@@ -336,9 +333,7 @@ class _CDP {
     ;}
 
     ;Firefox UIA.ElementFromHandle(WinActive("A")).FindFirst(UIA.CreatePropertyCondition("AutomationId", "urlbar-input")).GetCurrentPropertyValue("ValueValue")
-    static getUrl() {
-        return this.getCurrentPage()["url"]
-    }
+    static getUrl() => this.getCurrentPage()["url"]
 
     ;https://player.bilibili.com/player.html?aid=976962208&bvid=BV1244y1Y7VR&cid=457445567&page=1
     ;<iframe src="//player.bilibili.com/player.html?aid=720241593&bvid=BV1KQ4y1a7pd&cid=401115360&page=1" scrolling="no" border="0" frameborder="no" framespacing="0" allowfullscreen="true"> </iframe>
@@ -388,9 +383,7 @@ class _CDP {
     ;}
 
     ;删除末尾的 - Cent Browser
-    static title(bClean:=true) {
-        return this.getCurrentPage()["title"]
-    }
+    static title(bClean:=true) => this.getCurrentPage()["title"]
 
     ;移到次显示器并全屏播放
     static moveToSubScreen(winTitle:="", full:=true) {
@@ -399,9 +392,7 @@ class _CDP {
             send("{F11}")
     }
 
-    static deleteCache() {
-        send("{ctrl down}{shift down}{delete}{shift up}{ctrl up}")
-    }
+    static deleteCache() => send("{ctrl down}{shift down}{delete}{shift up}{ctrl up}")
 
     static errScroll() { ;无法滚动的问题
         WinWaitActive("ahk_exe Chrome.exe")
@@ -451,19 +442,21 @@ class _CDP {
     }
 
     ;Escape a string in a manner suitable for command line parameters
-    static CliEscape(Param) {
-        return format('"{1}"', RegExReplace(Param, '(\\*)"', '$1$1\"'))
-    }
+    static CliEscape(Param) => format('"{1}"', RegExReplace(Param, '(\\*)"', '$1$1\"'))
 
     ;通用命令行参数获取 pid
     static FindInstances() {
         for item in ComObjGet('winmgmts:').ExecQuery(format("SELECT CommandLine,ProcessId FROM Win32_Process WHERE Name = '{1}'", this.exeName)) {
-            if (RegExMatch(item.CommandLine, '--remote-debugging-port=(\d+)', &m))
+            if (RegExMatch(item.CommandLine, '--remote-debugging-port=(\d+)', &m)) {
+                OutputDebug(format("d#{1} {2}:return CommandLine={3}", A_LineFile,A_LineNumber,item.CommandLine))
                 return map(
                     "DebugPort", m[1],
                     "CommandLine", item.CommandLine,
                     "pid", item.ProcessId,
                 )
+            } else {
+                OutputDebug(format("d#{1} {2}:not matched CommandLine={3}", A_LineFile,A_LineNumber,item.CommandLine))
+            }
         }
         return map()
     }
@@ -629,21 +622,15 @@ class CDP_Page extends WebSocket {
     ;}
 
     ;TODO
-    translateType() {
-        msgbox(this("Page.TransitionType"))
-    }
-    activate() {
-        this.cls.httpOpen(format("/activate/{1}",this.id))
-    }
+    translateType() => msgbox(this("Page.TransitionType"))
+    activate() => this.cls.httpOpen(format("/activate/{1}",this.id))
     close() {
         super.close()
         this.cls.httpOpen(format("/close/{1}",this.id))
     }
 
     ;TODO
-    getFrameTree() {
-        this("Page.getFrameTree")
-    }
+    getFrameTree() => this("Page.getFrameTree")
 
     ;在当前标签打开
     navigate(url, bActive:=true) {
@@ -657,9 +644,7 @@ class CDP_Page extends WebSocket {
         while (this.evaluate('document.readyState',"value") != DesiredState)
             sleep(Interval)
     }
-    onClose() {
-        this.reconnect()
-    }
+    onClose() => this.reconnect()
     onMessage(msg) {
         data := JSON.parse(msg)
         if (data.has('id') && this.responses.has(data['id']))
