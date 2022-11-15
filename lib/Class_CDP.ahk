@@ -94,6 +94,7 @@ class _CDP {
             bActive := false
         ;bActive := (A_Index==arrUrl.length) ? bActive : false ;只激活最后一个标签
         if (this.hwnd := this.detect()) {
+            OutputDebug(format("i#{1} {2}:detect hwnd={3}", A_LineFile,A_LineNumber,this.hwnd))
             if (arrUrl.length) {
                 objPage := this.getPageList(, "host")
                 arrRes := []
@@ -112,6 +113,7 @@ class _CDP {
                         activeTab(objPage[urlOpen][1]["id"])
                         continue
                     }
+                    OutputDebug(format("i#{1} {2}:this.arrEmpty={3}", A_LineFile,A_LineNumber,json.stringify(this.arrEmpty,4)))
                     ;打开标签
                     if (this.arrEmpty.length) ;优先在空白页打开
                         CDP_Page(this, this.arrEmpty.pop()["webSocketDebuggerUrl"]).navigate(urlOpen, bActive)
@@ -175,6 +177,7 @@ class _CDP {
         OutputDebug(format("i#{1} {2}:自动运行浏览器 hwnd={3} sCmd={}", A_LineFile,A_LineNumber,this.hwnd,sCmd))
         WinActivate
         WinMaximize
+        return this.hwnd
     }
 
     ;核实并获取Chrome的 pid 和 hwnd
@@ -187,32 +190,41 @@ class _CDP {
             return this.hwnd
         if (ProcessExist(this.exeName)) { ;可能脚本重启等原因丢失了数据
             this.pid := this.FindInstances().get("pid", 0)
-            OutputDebug(format("i#{1} {2}:this.pid={3}", A_LineFile,A_LineNumber,this.pid))
+            OutputDebug(format("i#{1} {2}:detect获取pid={3}", A_LineFile,A_LineNumber,this.pid))
             if (this.pid) {
+                saveDetect := A_DetectHiddenWindows
+                DetectHiddenWindows(true)
                 for winHwnd in WinGetList("ahk_class Chrome_WidgetWin_1 ahk_pid " . this.pid) {
-                    try
+                    try {
                         titleLoop := WinGetTitle(winHwnd)
-                    catch
+                        OutputDebug(format("i#{1} {2}:detect遍历titleLoop={3}", A_LineFile,A_LineNumber,titleLoop))
+                    } catch {
+                        OutputDebug(format("i#{1} {2}:detect WinGetTitle异常", A_LineFile,A_LineNumber))
                         continue
+                    }
                     if (titleLoop ~= "\S") {
+                        OutputDebug(format("i#{1} {2}:this.hwnd={3},title={4}", A_LineFile,A_LineNumber,this.hwnd,titleLoop))
                         this.hwnd := winHwnd
                         break
                     }
                 }
+                DetectHiddenWindows(saveDetect)
                 if (this.hwnd) {
-                    tooltip(format("detect重新获取chrome.hwnd={1}", this.hwnd))
-                    SetTimer(tooltip, -1000)
+                    OutputDebug(format("i#{1} {2}:detect重新获取chrome.hwnd={3}", A_LineFile,A_LineNumber,this.hwnd))
                     return this.hwnd
                 } else if (tp) {
                     ;NOTE 找不到，是否结束所有进程
+                    OutputDebug(format("i#{1} {2}:关闭所有进程chrome.exe", A_LineFile,A_LineNumber))
                     for item in ComObjGet("winmgmts:").ExecQuery(format("select ProcessId from Win32_Process where name='{1}'", this.exeName))
                         ProcessClose(item.ProcessId)
                     if (tp == 2) {
-                        this.runChrome()
-                        return true
+                        return this.runChrome()
                     }
+                } else {
+                    OutputDebug(format("i#{1} {2}:detect无法获取chrome.hwnd", A_LineFile,A_LineNumber))
                 }
             } else {
+                OutputDebug(format("i#{1} {2}:通用pid检测hwnd失败", A_LineFile,A_LineNumber))
                 tooltip("待完善：通用pid检测hwnd失败")
                 SetTimer(tooltip, -1000)
             }
@@ -448,7 +460,7 @@ class _CDP {
     static FindInstances() {
         for item in ComObjGet('winmgmts:').ExecQuery(format("SELECT CommandLine,ProcessId FROM Win32_Process WHERE Name = '{1}'", this.exeName)) {
             if (RegExMatch(item.CommandLine, '--remote-debugging-port=(\d+)', &m)) {
-                OutputDebug(format("d#{1} {2}:return CommandLine={3}", A_LineFile,A_LineNumber,item.CommandLine))
+                ;OutputDebug(format("d#{1} {2}:return CommandLine={3}", A_LineFile,A_LineNumber,item.CommandLine))
                 return map(
                     "DebugPort", m[1],
                     "CommandLine", item.CommandLine,
@@ -484,7 +496,7 @@ class CDP_Page extends WebSocket {
 
     __new(cls, events:=0) {
         CDP_Page.count++
-        OutputDebug(format("w#{1} {2}:CDP_Page.count={3}", A_LineFile,A_LineNumber,CDP_Page.count))
+        ;OutputDebug(format("w#{1} {2}:CDP_Page.count={3}", A_LineFile,A_LineNumber,CDP_Page.count))
         this.cls := cls
         ;OutputDebug(format("i#{1} {2}:page={3}", A_LineFile,A_LineNumber,this.cls.getCurrentPage()))
         for k, v in this.cls.getCurrentPage()
@@ -504,7 +516,7 @@ class CDP_Page extends WebSocket {
 
     __delete() {
         CDP_Page.count--
-        OutputDebug(format("w#{1} {2}:CDP_Page.count={3}", A_LineFile,A_LineNumber,CDP_Page.count))
+        ;OutputDebug(format("w#{1} {2}:CDP_Page.count={3}", A_LineFile,A_LineNumber,CDP_Page.count))
         ;SetTimer(keepalive, 0)
         super.close()
     }

@@ -34,15 +34,13 @@ class _Array extends Array {
         return res
     }
 
-    index(value) {
+    indexOf(value) {
         for k, v in this {
             if (v = value)
                 return k
         }
         return 0
     }
-
-    hasValue(value) => this.index(value) > 0
 
     extend(arr) {
         arr0 := this

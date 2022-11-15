@@ -414,6 +414,17 @@ class UIA {
         }
     }
 
+    static WaitFocusedElement(ctlName, ms:=1000) {
+        endTime := A_TickCount + ms
+        loop {
+            el := this.GetFocusedElement()
+            if (el.CurrentControlType == UIA.ControlType.%ctlName%)
+                return true
+            else
+                sleep(200)
+        } until (A_TickCount >= endTime)
+    }
+
     ;arrFind 为 FindElement 所有参数
     static FindAndSetChecked(hwnd, arrFind, bChecked, method:="") {
         if (el := this.FindElement(hwnd, arrFind*)) {
@@ -601,6 +612,7 @@ class UIA {
 
     ;ElementFromPoint 有时获取的是很大的父元素，此方法通过遍历来获取精确的子元素
     ;cm 0=window 1=screen
+    ;比如 https://work.weixin.qq.com/wework_admin/frame#/securityManage/account   
     static ElementFromPointEx(xScreen:=unset, yScreen:=unset, cm:=0) {
         if (!isset(xScreen) || !isset(yScreen)) {
             cmMouse := A_CoordModeMouse
@@ -621,7 +633,7 @@ class UIA {
         findInSons(elParent, mk:=0) {
             try {
                 elSon := rvw.GetFirstChildElement(elParent)
-                ;OutputDebug(format("i#{1} {2}:get elSon", A_LineFile,A_LineNumber))
+                ;OutputDebug(format("i#{1} {2}:get elSon={3}", A_LineFile,A_LineNumber,json.stringify(elSon.allProperty(),4)))
             } catch { ;没儿子
                 ;OutputDebug(format("i#{1} {2}:no son, return parent", A_LineFile,A_LineNumber))
                 return elParent ;NOTE 可能是最终结果，由后续的 equals 判断
@@ -632,7 +644,7 @@ class UIA {
                         el := findInSons(elSon, 1) ;NOTE 递归查找最底层的元素
                         if (el) {
                             if (el.equals(elSon)) { ;NOTE 最终结果判断
-                                OutputDebug(format("d#{1} {2}:find this end", A_LineFile,A_LineNumber))
+                                ;OutputDebug(format("d#{1} {2}:find this end", A_LineFile,A_LineNumber))
                                 if (el.GetBoundingRectangle()[4] < 40) ;暂时用高度判断
                                     return el
                             } else {
@@ -658,6 +670,7 @@ class UIA {
     }
 
     ; Retrieves the UI Automation element that has the input focus.
+    ;总能返回一个 element
     ;TODO Tim 里有问题
     static GetFocusedElement() => (comcall(8, this, "ptr*",&element:=0), IUIAutomationElement(element))
 
@@ -1145,7 +1158,7 @@ class IUIAutomationElement extends IUIABase {
                     this.%method%() ;作为补充
         }
     }
-    ;包含坐标
+    ;包含坐标，以下对 CheckBox 作了特殊处理 by 火冷 <2022-11-10 21:28:47>
     ContainXY(xScreen:=unset, yScreen:=unset, cm:=0) { ;cm 0=windows 1=screen
         if (!isset(xScreen)) {
             cmMouse := A_CoordModeMouse
@@ -1158,8 +1171,16 @@ class IUIAutomationElement extends IUIABase {
             yScreen += y
         }
         aRect := this.GetBoundingRectangle()
-        res := xScreen >= aRect[1] && xScreen <= aRect[1]+aRect[3] && yScreen >= aRect[2] && yScreen <= aRect[2]+aRect[4]
-        return res
+        if (yScreen >= aRect[2] && yScreen <= aRect[2]+aRect[4]) { ;y 已经匹配
+            ;NOTE CheckBox 有可能只获取到✅
+            if (this.CurrentControlType == UIA.ControlType.CheckBox && abs(aRect[3]-aRect[4])<=2)
+                res := xScreen >= aRect[1] && xScreen - aRect[1]+aRect[3] <= 100 ;放宽至100的范围
+            else
+                res := xScreen >= aRect[1] && xScreen <= aRect[1]+aRect[3]
+            return res
+        } else {
+            return false
+        }
     }
 
     GetAllCurrentPropertyValue() {

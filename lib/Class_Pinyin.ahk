@@ -9,8 +9,8 @@ class _Pinyin {
 
     ;obj["为"] = ["wei2", wei1]
     ;tpAlpab 以 hān 为列
-    ;   "a0" = hān
-    ;   "A0" = hān
+    ;   a0 = hān
+    ;   A0 = Hān
     ;    a = h
     ;    A = H
     ;   aa = han

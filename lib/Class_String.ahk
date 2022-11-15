@@ -820,7 +820,7 @@ class _String {
             obj := map(
                 "A_Desktop", A_Desktop,
                 "A_MyDocuments", A_MyDocuments,
-                "A_LOCALAPPDATA", "c:\Users\Administrator\AppData\local", ;自定义
+                "A_LocalAppdata", "c:\Users\Administrator\AppData\local", ;自定义
                 "A_Temp", A_Temp,
                 "A_AppData", A_AppData,
                 "A_StartMenu", A_StartMenu,

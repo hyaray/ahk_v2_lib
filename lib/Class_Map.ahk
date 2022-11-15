@@ -12,6 +12,14 @@ class _Map extends map {
     ;CaseSense := 0
     ;Default := ""
 
+    keyLast(iskey:=1) {
+        e := this.__enum()
+        ;msgbox(numget(objptr(e), 6*A_PtrSize+16, "uint"))
+        numput("uint", this.count-2, objptr(e), 6*A_PtrSize+16)
+        e(&k)
+        return iskey ? k : this[k]
+    }
+
     toString() => super.toJson()
 
     ;参考python

@@ -1330,11 +1330,9 @@ hyf_selectByArr(arr2, indexKey:=1, bAddPy:=false, bDistinct:=false) {
     ;添加拼音
     if (bAddPy) {
         arrField.push("拼音")
-        oPinyin := _Pinyin("A")
-        for arr in arrNew {
-            arr.push(oPinyin.main(arr[indexKey]))
-            ;sleep(1)
-        }
+        sFile := fileread("d:\BB\lib\汉字拼音对照表.txt", "utf-8")
+        for arr in arrNew
+            arr.push(pinyin(arr[indexKey]))
     }
     ;OutputDebug(format("i#{1} {2}:arrNew={3}", A_LineFile,A_LineNumber,arrNew.toTable(",")))
     ;添加到 Gui
@@ -1460,6 +1458,18 @@ hyf_selectByArr(arr2, indexKey:=1, bAddPy:=false, bDistinct:=false) {
         ;OutputDebug(format("i#{1} {2}:r={3} indexKey={4} key={5}", A_LineFile,A_LineNumber,r,indexKey,key))
         resGui := objRaw[key] ;TODO 增加了序号
         doEscape(oLv.gui)
+    }
+    pinyin(str){
+        res := ""
+        loop parse, str {
+            if (A_LoopField ~= "[\x{00}-\x{FF}]")
+                res .= A_LoopField
+            else if (RegExMatch(sFile, A_LoopField . ".*\s\K.", &m))
+               res .= m[0]
+            else
+                res .= A_LoopField
+        }
+        return res
     }
 }
 
