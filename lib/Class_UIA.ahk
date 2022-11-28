@@ -414,12 +414,12 @@ class UIA {
         }
     }
 
-    static WaitFocusedElement(ctlName, ms:=1000) {
+    static WaitFocusedElement(ctlName:="Edit", ms:=3000) {
         endTime := A_TickCount + ms
         loop {
             el := this.GetFocusedElement()
             if (el.CurrentControlType == UIA.ControlType.%ctlName%)
-                return true
+                return el
             else
                 sleep(200)
         } until (A_TickCount >= endTime)
@@ -640,12 +640,14 @@ class UIA {
             } else {
                 loop { ;在所有兄弟里找
                     if (elSon.ContainXY(xScreen, yScreen, 1)) { ;包含坐标
+                        ;_GDIP.rectMark([elSon.GetBoundingRectangle()], "LButton")
                         ;OutputDebug(format("d#{1} {2}:containXY=({3},{4}) elSon={5}", A_LineFile,A_LineNumber,xScreen,yScreen,json.stringify(elSon.allProperty(),4)))
                         el := findInSons(elSon, 1) ;NOTE 递归查找最底层的元素
                         if (el) {
-                            if (el.equals(elSon)) { ;NOTE 最终结果判断
-                                ;OutputDebug(format("d#{1} {2}:find this end", A_LineFile,A_LineNumber))
-                                if (el.GetBoundingRectangle()[4] < 40) ;暂时用高度判断
+                            if (el.equals(elSon)) { ;NOTE NOTE NOTE 最终结果判断
+                                h := el.GetBoundingRectangle()[4]
+                                ;OutputDebug(format("w#{1} {2}:find this end height={3}", A_LineFile,A_LineNumber,h))
+                                if (h < 50) ;TODO 暂时用高度判断
                                     return el
                             } else {
                                 return el
@@ -1035,6 +1037,7 @@ class IUIAutomationElement extends IUIABase {
         CoordMode("mouse", "Screen")
         ;记录原位置
         MouseGetPos(&x0, &y0)
+        OutputDebug(format("d#{1} {2}:arrXY={3}", A_LineFile,A_LineNumber,json.stringify(arrXY)))
         MouseMove(arrXY[1], arrXY[2], 0)
         sleep(20)
         click(cnt)
@@ -1867,6 +1870,8 @@ class IUIAutomationElement extends IUIABase {
     CurrentItemStatus => (comcall(42, this, "ptr*",&retVal:=0), BSTR(retVal))
 
     ; Retrieves the coordinates of the rectangle that completely encloses the element, in screen coordinates.
+    ;如果元素在显示器外，可能值全为0
+    ;如果窗口在副显示器，坐标可能不准。比如企业微信后台→通讯录→人名所在位置
     CurrentBoundingRectangle => (comcall(43, this, "ptr",retVal := NativeArray(0, 4, "int")), {left: retVal[0], top: retVal[1], right: retVal[2], bottom: retVal[3]})
 
     ; This property maps to the Accessible Rich Internet Applications (ARIA) property.

@@ -37,11 +37,13 @@ class _Pinyin {
             this.sFile := RegExReplace(this.sFile, "(\s(.))(\s\2)+", "$1") ;NOTE 删除多音字重复的声母
             for sd, a1 in objTmp
                 this.sFile := RegExReplace(this.sFile, sd, substr(a1,1,1))
+            this.char := ""
         } else if (l == 2) {
             if (substr(tpAlpha, 2, 1) != "0") { ;非 ā模式
                 for sd, a1 in objTmp
                     this.sFile := RegExReplace(this.sFile, sd . "(\w*)", format("{1}$1{2}", substr(a1,1,1),substr(a1,2,1)))
             }
+            this.char := " "
         }
         ;转大写
         if (substr(tpAlpha,1,1) ~= "[A-Z]")
@@ -62,13 +64,13 @@ class _Pinyin {
                 res .= A_LoopField
             } else {
                 if (this.obj.has(A_LoopField)) {
-                    res .= this.obj[A_LoopField][1] ;NOTE 只能取第1个
+                    res .= this.obj[A_LoopField][1] . this.char ;NOTE 只能取第1个
                 } else { ;一般不会
-                    res .= A_LoopField
+                    res .= A_LoopField . this.char
                 }
             }
         }
-        return res
+        return rtrim(res, char)
     }
 
     ;判断拼音是否有效

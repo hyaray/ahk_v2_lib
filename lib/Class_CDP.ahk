@@ -212,21 +212,21 @@ class _CDP {
                 if (this.hwnd) {
                     OutputDebug(format("i#{1} {2}:detect重新获取chrome.hwnd={3}", A_LineFile,A_LineNumber,this.hwnd))
                     return this.hwnd
-                } else if (tp) {
-                    ;NOTE 找不到，是否结束所有进程
-                    OutputDebug(format("i#{1} {2}:关闭所有进程chrome.exe", A_LineFile,A_LineNumber))
-                    for item in ComObjGet("winmgmts:").ExecQuery(format("select ProcessId from Win32_Process where name='{1}'", this.exeName))
-                        ProcessClose(item.ProcessId)
-                    if (tp == 2) {
-                        return this.runChrome()
-                    }
                 } else {
                     OutputDebug(format("i#{1} {2}:detect无法获取chrome.hwnd", A_LineFile,A_LineNumber))
                 }
-            } else {
-                OutputDebug(format("i#{1} {2}:通用pid检测hwnd失败", A_LineFile,A_LineNumber))
-                tooltip("待完善：通用pid检测hwnd失败")
-                SetTimer(tooltip, -1000)
+            } else if (tp) {
+                ;NOTE 找不到，是否结束所有进程
+                OutputDebug(format("i#{1} {2}:关闭所有进程chrome.exe", A_LineFile,A_LineNumber))
+                for item in ComObjGet("winmgmts:").ExecQuery(format("select ProcessId from Win32_Process where name='{1}'", this.exeName))
+                    ProcessClose(item.ProcessId)
+                if (tp == 2) {
+                    return this.runChrome()
+                } else {
+                    OutputDebug(format("i#{1} {2}:通用pid检测hwnd失败", A_LineFile,A_LineNumber))
+                    tooltip("待完善：通用pid检测hwnd失败")
+                    SetTimer(tooltip, -1000)
+                }
             }
         }
         return false

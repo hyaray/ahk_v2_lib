@@ -498,7 +498,7 @@ class _Mouse {
     ;m.add("(&B)每2个到指定",ObjBindMethod(_Mouse,"clickThrough",0,h,2))
     ;m.show()
     ;从当前位置点击到目标位置
-    static clickThrough(yMax:=0, part:=0, nFenge:=1) {
+    static clickThrough(yMax:=0, part:=0, nFenge:=1, ms:=20) {
         cmMouse := A_CoordModeMouse
         CoordMode("mouse", "screen") ;用全屏模式不需要后面的 sleep
         ;sleep(100) ;等待窗口激活
@@ -530,7 +530,7 @@ class _Mouse {
         yLoop := y0
         while(yLoop <= round(part/2+yMax)) {
             _Mouse.clickStayByScreen(x, yLoop)
-            sleep(20)
+            sleep(ms)
             yLoop += part*nFenge
         }
         CoordMode("mouse", cmMouse)

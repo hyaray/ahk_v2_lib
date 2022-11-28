@@ -22,6 +22,27 @@ class _Number {
             return item.CommandLine
     }
 
+    ;一般用来计算整体的百分比坐标，或右侧-n的坐标
+    ;v<0	w - abs(v)
+    ;v<1	w * v
+    ;v<w	v
+    ;v>=w	other
+    forCrop(v, other:=0) {
+        if (v == 0)
+            return v
+        w := this ;一般是总宽
+        if (v < 0) {
+            v := w - abs(v)
+            if (v < 0)
+                v := other
+        } else if (v < 1) {
+            v := round(w * v)
+        } else if (v > w) {
+            v := other
+        }
+        return v
+    }
+
     ;分区整数
     diskInt() {
         mb := this*1024

@@ -1,4 +1,5 @@
-﻿;GDI+系列教程 https://www.autoahk.com/archives/34920
+﻿;rect 相关方法也在这里，如 CreateRect
+;GDI+系列教程 https://www.autoahk.com/archives/34920
 ;主要 class 及其表示方法：(用在 ultisnips)
 ;   GDIP_PBitmap = m(NOTE)
 ;   GDIP_FontFamily = v(NOTE)
@@ -15,28 +16,26 @@
 ;   简化了释放，函数内部会自动释放变量，释放变量会自动调用 __delete 释放资源
 ;   把 DC 封装到 GDIP_Graphics，不用考虑生成和释放顺序，使用更简单
 ;       两个方法 SelectObject 和 UpdateLayeredWindow 转成 GDIP_Graphics 的方法
-;       简化了 SelectObject
-;           用 GDIP_HBitmap 生成 oGraphics 时会自动 SelectObject
-;           不需要记录旧对象，释放时，不要传入参数即可
-;   简化了方法调用的参数，无需传入对象本身的属性，比如 oPen的方法不需要传入 pPen 参数
-;   x,y,w,h 的参数统一用 aRect 数组方式打包传入，而不是传入4个参数
+;       简化了 SelectObject :
+;           1. 用 GDIP_HBitmap 生成 oGraphics 时会自动 SelectObject
+;           2. 不需要记录旧对象，释放时，不要传入参数即可
+;   简化了方法调用的参数，无需传入对象本身的属性，比如 oPen 的方法不需要传入 pPen 参数
+;   x,y,w,h 的参数统一用 aRect 数组方式打包传入，而不是传入4个参数，用语法的复杂让结构简单些
 
 ; NOTE 重要说明：
 ;一般都需要实例化，比如 oPen 为实例，oPen.ptr 为 gdip 原生的 pPen。暂时每个实例只支持一个 ptr 属性。
 ;【方法】
 ;   名称，一般都是和 dllcall 函数同名，没涉及 dllcall 的则不是以 Gdip 开头，drawImage 是个例外(支持 oPBitmap)
-;   PS：如果参数填oPen，v2-beta会自动读取其 ptr 属性，比如以下两句等效
+;   PS：v2-beta会自动读取其 ptr 属性，比如以下两句等效
 ;   oGraphics.GdipDrawEllipse(oPen,     [0,0,w,h])
 ;   oGraphics.GdipDrawEllipse(oPen.ptr, [0,0,w,h])
 ;
 ;补充：
-;   NOTE 边框如果很粗，则会溢出一半的粗细到 aRect外
+;   NOTE 边框如果很粗，则会溢出一半的粗细到 aRect 外
 
 ;NOTE "空"对 gdip 的教程 https://www.autoahk.com/archives/34920
 ;gdip v1 最新版在 https://github.com/marius-sucan/Quick-Picto-Viewer
-
-;其他处理图片的库
-; ImagePut https://github.com/iseahound/ImagePut
+;非常强大的应用 ImagePut https://github.com/iseahound/ImagePut
 ;图片信息
 ;   二进制
 ;   base64
@@ -69,7 +68,7 @@ class _GDIP {
     static __new() {
         if (this != _GDIP)
             return
-        _GDIP.startup()
+        _GDIP.startup() ;TODO 不应长时间开着
     }
 
 	static startup() {
@@ -137,11 +136,14 @@ class _GDIP {
         return bufBI
     }
 
-    ;确认鼠标选择区域
+    ;用鼠标选择区域
     ;aRect := _GDIP.getRect((p*)=>GetKeyState(RegExReplace(A_ThisLabel, ".*\s"), "P"))
-    static getRect(funDo:="") {
+    static getRect(funDo:="", bHBitmap:=false) {
         if (!isobject(funDo))
             funDo := (p*)=>GetKeyState("LButton", "P")
+        aRectBase := [0,0,sysget(0),sysget(1)]
+        oPBitmapBase := GDIP_PBitmap(aRectBase)
+        oGuiBase := oPBitmapBase.showByGui(aRectBase)
         ;截图时显示的Gui
         oGui := gui("-caption +AlwaysOnTop +Border +E0x80000 +LastFound +OwnDialogs +ToolWindow")
         oGui.BackColor := "FFFFFF"
@@ -159,6 +161,10 @@ class _GDIP {
             oGui.show(format("x{1} y{2} w{3} h{4} NA", x,y,w,h))
             tooltip(format("{1},{2},{3},{4}",x,y,w,h))
         }
+        if bHBitmap {
+            return 1
+        }
+        oGuiBase.destroy()
         oGui.destroy()
         SetTimer(tooltip, -100)
         if (w<=3 || h<=3)
@@ -194,7 +200,7 @@ class _GDIP {
     ;屏幕区域保存为文件
     static rect2fp(aRect, fp:="") {
         if (aRect is integer) { ;hwnd
-            WinGetPos(&x, &y, &w, &h, "ahk_id " . aRect)
+            WinGetPos(&x, &y, &w, &h, aRect)
             aRect := [x,y,w,h]
         }
         if (fp == "")
@@ -209,9 +215,9 @@ class _GDIP {
     ;NOTE 进一步抽象见 _UIADo.rectControls
     ;aRect 画框
     ;oGui := _GDIP.rectMark(el.GetBoundingRectangle())
-    ;oGui := _GDIP.rectMark(_Win.toRect("ahk_id " . this.winInfo["winID"]))
+    ;oGui := _GDIP.rectMark(_Win.toRect(this.winInfo["winID"]))
     ;标窗口
-    ;WinGetPos(&x, &y, &w, &h, "ahk_id " . hwnd)
+    ;WinGetPos(&x, &y, &w, &h, hwnd)
     ;_GDIP.rectMark([x,y,w,h])
     static rectMark(aRects, keyWaitClose:="", arrStyle:=unset) {
         _GDIP.startup()
@@ -248,7 +254,7 @@ class _GDIP {
             oGui.destroy()
         } else if (isobject(keyWaitClose)) {
             if (keyWaitClose is gui) { ;等待 gui 关闭则结束
-                WinWaitClose("ahk_id " . keyWaitClose.hwnd)
+                WinWaitClose(keyWaitClose)
                 oGui.destroy()
             }
         }
@@ -287,15 +293,15 @@ class _GDIP {
         cmMouse := A_CoordModeMouse
         CoordMode("Mouse", "screen")
         MouseGetPos(&x0, &y0, &hwnd, &ctl)
-        if !WinActive("ahk_id " . hwnd) ;TODO 激活窗口
-            WinActivate("ahk_id " . hwnd)
+        if !WinActive(hwnd) ;TODO 激活窗口
+            WinActivate(hwnd)
         ;确保鼠标移动了才开始画图
         if !waitMove()
             return
         objDo := funAction()
         if (!objDo.count)
             return
-        exeName := WinGetProcessName("ahk_id " . hwnd)
+        exeName := WinGetProcessName(hwnd)
         ;分别定义【路径】和【提示】的x,y,w,h
         wPath := hPath := 500
         xPath := x0-wPath//2
@@ -517,7 +523,15 @@ class _GDIP {
     }
 
     ;数组 aRect 转成 struct
-    static CreateRect(&bufRect, aRect) => numput("uint",aRect[1],"uint",aRect[2],"uint",aRect[3],"uint",aRect[4], bufRect:=buffer(16))
+    static CreateRect(aRect) {
+        numput("uint",aRect[1],"uint",aRect[2],"uint",aRect[3],"uint",aRect[4], bufRect:=buffer(16))
+        return bufRect
+    }
+
+    static CreateRectFloat(aRect) {
+        numput("float",aRect[1],"float",aRect[2],"float",aRect[3],"float",aRect[4], bufRect:=buffer(16))
+        return bufRect
+    }
 
     ; ======================================================================================================================
     ; Multiple Display Monitors Functions -> msdn.microsoft.com/en-us/library/dd145072(v=vs.85).aspx
@@ -618,6 +632,7 @@ class _GDIP {
 }
 
 ;mm
+;windows不允许直接操作 pBitmap，要通过 hBitmap
 ;根据 ImagePut
 ;输入的主要步骤
 ;   1. 获取 ImageType
@@ -637,34 +652,38 @@ class GDIP_PBitmap extends _GDIP {
     ;w,h w是数字
     ;oHBitmap
     ;[x,y,w,h] aRect
-    __new(w:="", h:=0) {
+    __new(w:="", h:=unset) {
         if (isobject(w)) {
             if (w is GDIP_HBitmap)
                 this.GdipCreateBitmapFromHBITMAP(w, Palette:=0)
-            else if (w.length == 2)
-                this.GdipCreateBitmapFromScan0(w[1], w[2])
-            else if (w.length == 4)
-                this.getFromRect(w)
+            else if (w is array) {
+                switch w.length {
+                    case 2: this.GdipCreateBitmapFromScan0(w*)
+                    case 4: this.getFromRect(w)
+                }
+            }
         } else {
-            if (w == "")
-                this.getFromClipboard()
-            else if (w ~= "^\d+$")
-                this.GdipCreateBitmapFromScan0(w, h)
-            else if (FileExist(w))
-                this.GdipCreateBitmapFromFile(w)
-            ; else if (w == "") ;否则就创建个空白的对象(后面再添加图片)
-            ;     msgbox(A_ThisFunc . "`n" . w . "`n" . h)
+            if (w is string) {
+                if (w == "") {
+                    this.getFromClipboard()
+                } else if (FileExist(w)) {
+                    this.GdipCreateBitmapFromFile(w)
+                }
+            } else if (w is integer) {
+                if (isset(h))
+                    this.GdipCreateBitmapFromScan0(w, h)
+                else ;pBitmap
+                    this.ptr := w
+            }
         }
     }
 
     ;出错，可排查释放顺序
     __delete() => dllcall("gdiplus\GdipDisposeImage", "ptr",this)
 
+    ;PixelFormat 见 getPixelFormat
     GdipCreateBitmapFromScan0(w, h, PixelFormat:=0x26200A) {
         dllcall("gdiplus\GdipCreateBitmapFromScan0", "int",w, "int",h, "int",0, "int",PixelFormat, "ptr",0, "ptr*",&pBitmap:=0)
-        if (!pBitmap) {
-            msgbox(A_ThisFunc . "`n" . w . "`n" . h)
-        }
         this.w := w
         this.h := h
         this.ptr := pBitmap
@@ -745,18 +764,32 @@ class GDIP_PBitmap extends _GDIP {
         return this.ptr := pBitmap
     }
 
+    ;Thanks tic - https://www.autohotkey.com/boards/viewtopic.php?t=6517
+    ;这个不返回 pStream
+    getFromRect(aRect) {
+        hdc := dllcall("CreateCompatibleDC", "ptr",0, "ptr")
+        bi := _GDIP._bufBitmapInfoHeader(aRect[3], -aRect[4])
+        hbm := dllcall("CreateDIBSection", "ptr",hdc, "ptr",bi, "uint",0, "ptr*",&pBits:=0, "ptr",0, "uint",0, "ptr")
+        oBM := dllcall("SelectObject", "ptr",hdc, "ptr",hbm, "ptr")
+        hDC := dllcall("GetDC", "ptr",0, "ptr")
+        dllcall("gdi32\BitBlt", "ptr",hdc, "int",0,"int",0,"int",aRect[3],"int",aRect[4], "ptr",hDC, "int",aRect[1],"int",aRect[2], "uint",0x00CC0020 | 0x40000000) ; SRCCOPY | CAPTUREBLT
+        dllcall("ReleaseDC", "ptr",0, "ptr",hDC)
+        dllcall("gdiplus\GdipCreateBitmapFromHBITMAP", "ptr",hbm, "ptr",0, "ptr*",&pBitmap:=0)
+        dllcall("SelectObject", "ptr",hdc, "ptr",oBM)
+        dllcall("DeleteObject", "ptr",hbm)
+        dllcall("DeleteDC",     "ptr",hdc)
+        return this.ptr := pBitmap
+    }
+
     ; Thanks tic - https://www.autohotkey.com/boards/viewtopic.php?t=6517
-    getFromWindow(winTitle) {
-        hwnd := WinExist(winTitle)
+    getFromWindow(hwnd) {
         ; Restore the window if minimized! Must be visible for capture.
         if (dllcall("IsIconic", "ptr",hwnd))
             dllcall("ShowWindow", "ptr",hwnd, "int",4)
         ; Get the width and height of the client window.
-        dllcall("GetClientRect", "ptr",hwnd, "ptr",Rect:=buffer(16)) ; sizeof(RECT) = 16
-        width  := NumGet(Rect, 8, "int")
-        height := NumGet(Rect, 12, "int")
+        WinGetClientPos(,, &w, &h, hwnd)
         hdc := dllcall("CreateCompatibleDC", "ptr",0, "ptr")
-        bi := _GDIP._bufBitmapInfoHeader(width, -height)
+        bi := _GDIP._bufBitmapInfoHeader(w, -h)
         hbm := dllcall("CreateDIBSection", "ptr",hdc,"ptr",bi, "uint",0, "ptr*",&pBits:=0, "ptr",0, "uint",0, "ptr")
         obm := dllcall("SelectObject", "ptr", hdc, "ptr", hbm, "ptr")
         ; Print the window onto the hBitmap using an undocumented flag. https://stackoverflow.com/a/40042587
@@ -771,29 +804,8 @@ class GDIP_PBitmap extends _GDIP {
         return pBitmap
     }
 
-    ;Thanks tic - https://www.autohotkey.com/boards/viewtopic.php?t=6517
-    ;这个不返回 pStream
-    getFromRect(aRect) {
-        if (0)
-            this.GdipCreateBitmapFromHBITMAP(GDIP_HBitmap(aRect))
-        else {
-            hdc := dllcall("CreateCompatibleDC", "ptr",0, "ptr")
-            bi := _GDIP._bufBitmapInfoHeader(aRect[3], -aRect[4])
-            hbm := dllcall("CreateDIBSection", "ptr", hdc, "ptr", bi, "uint", 0, "ptr*", &pBits:=0, "ptr", 0, "uint", 0, "ptr")
-            obm := dllcall("SelectObject", "ptr", hdc, "ptr", hbm, "ptr")
-            sdc := dllcall("GetDC", "ptr",0, "ptr")
-            dllcall("gdi32\BitBlt", "ptr",hdc, "int",0, "int",0, "int",aRect[3], "int",aRect[4], "ptr",sdc, "int",aRect[1], "int",aRect[2], "uint",0x00CC0020 | 0x40000000) ; SRCCOPY | CAPTUREBLT
-            dllcall("ReleaseDC", "ptr",0, "ptr",sdc)
-            dllcall("gdiplus\GdipCreateBitmapFromHBITMAP", "ptr",hbm, "ptr",0, "ptr*",&pBitmap:=0)
-            dllcall("SelectObject", "ptr",hdc, "ptr",obm)
-            dllcall("DeleteObject", "ptr",hbm)
-            dllcall("DeleteDC",     "ptr",hdc)
-            return this.ptr := pBitmap
-        }
-    }
-
     GdipCreateBitmapFromHBITMAP(oHBitmap, Palette:=0) {
-        dllcall("gdiplus\GdipCreateBitmapFromHBITMAP", "ptr",oHBitmap.ptr, "ptr",Palette, "ptr*",&pBitmap:=0)
+        dllcall("gdiplus\GdipCreateBitmapFromHBITMAP", "ptr",oHBitmap, "ptr",Palette, "ptr*",&pBitmap:=0)
         return this.ptr := pBitmap
     }
 
@@ -806,13 +818,15 @@ class GDIP_PBitmap extends _GDIP {
         if (!this.w) {
             dllcall("gdiplus\GdipGetImageWidth", "ptr",this, "uint*",&w:=0)
             this.w := w
-        } else
+        } else {
             w := this.w
+        }
         if (!this.h) {
             dllcall("gdiplus\GdipGetImageHeight", "ptr",this, "uint*",&h:=0)
             this.h := h
-        } else
+        } else {
             h := this.h
+        }
         return [this.w, this.h]
     }
     getWidth() {
@@ -829,7 +843,10 @@ class GDIP_PBitmap extends _GDIP {
         }
         return this.h
     }
-
+    getPixelFormat() {
+        dllcall("gdiplus\GdipGetImagePixelFormat", "ptr",this, "int*",&pf:=0)
+        return pf
+    }
     getPixel(x, y) {
         dllcall("gdiplus\GdipBitmapGetPixel", "Ptr",this, "int",x, "int",y, "Uint*",&ARGB:=0)
         return ARGB
@@ -918,19 +935,67 @@ class GDIP_PBitmap extends _GDIP {
     }
 
     ;剪切(名字同 python PIL)
-    crop(left:=0, right:=0, up:=0, down:=0, Dispose:=1) {
+    ;crop(left:=0, right:=0, up:=0, down:=0, Dispose:=1) {
+    ;    this.ptr1 := this.ptr
+    ;    this.getSize(&w, &h)
+    ;    wNew := w-left-right
+    ;    hNew := h-up-down
+    ;    this.GdipCreateBitmapFromScan0(wNew, hNew)
+    ;    oGraphics := GDIP_Graphics(this.ptr)
+    ;    oGraphics.GdipSetInterpolationMode(7)
+    ;    oGraphics.GdipSetSmoothingMode(4)
+    ;    oGraphics.GdipDrawImageRectRect(this.ptr1, [0,0,wNew,hNew], [left,up,wNew,hNew])
+    ;    oGraphics := ""
+    ;    if (Dispose)
+    ;        dllcall("gdiplus\GdipDisposeImage", "ptr",this)
+    ;}
+
+    ;裁剪
+    crop(aRect, Dispose:=1) {
         this.ptr1 := this.ptr
         this.getSize(&w, &h)
-        wNew := w-left-right
-        hNew := h-up-down
-        this.GdipCreateBitmapFromScan0(wNew, hNew)
-        oGraphics := GDIP_Graphics(this.ptr)
-        oGraphics.GdipSetInterpolationMode(7)
-        oGraphics.GdipSetSmoothingMode(4)
-        oGraphics.GdipDrawImageRectRect(this.ptr1, [0,0,wNew,hNew], [left,up,wNew,hNew])
-        oGraphics := ""
-        if (Dispose)
+        aRect[1] := forCrop(w, aRect[1])
+        aRect[2] := forCrop(h, aRect[2])
+        aRect[3] := forCrop(w, aRect[3])
+        aRect[4] := forCrop(h, aRect[4])
+        ;再次核实
+        (aRect[3] > w - aRect[1]) && aRect[3] := w - aRect[1]
+        (aRect[4] > h - aRect[2]) && aRect[4] := h - aRect[2]
+        ;是否无需处理
+        if (aRect[1]==0 && aRect[2]==0 && aRect[3]==w && aRect[4]==h)
+            return
+        dllcall("gdiplus\GdipCloneBitmapAreaI", "int",aRect[1],"int",aRect[2],"int",aRect[3],"int",aRect[4], "int",this.getPixelFormat(), "ptr",this "ptr*",&pBitmapCrop:=0)
+        if (Dispose) {
+            this.w := aRect[3]
+            this.h := aRect[4]
+            this.ptr := pBitmapCrop
             dllcall("gdiplus\GdipDisposeImage", "ptr",this)
+            return this
+        } else {
+            oPBitmap := GDIP_PBitmap(pBitmapCrop)
+            oPBitmap.w := aRect[3]
+            oPBitmap.h := aRect[4]
+            return oPBitmap
+        }
+        ;一般用来计算整体的百分比坐标，或右侧-n的坐标
+        ;v<0	width - abs(v)
+        ;v<1	width * v
+        ;v<width	v
+        ;v>=width	other
+        forCrop(width, v, other:=0) {
+            if (v == 0)
+                return v
+            if (v < 0) {
+                v := width - abs(v)
+                if (v < 0)
+                    v := other
+            } else if (v < 1) {
+                v := round(width * v)
+            } else if (v > width) {
+                v := other
+            }
+            return v
+        }
     }
 
     ;FIXME 马赛克
@@ -1414,7 +1479,7 @@ class GDIP_HBitmap extends _GDIP {
                 this.w := arr[1]
                 this.h := arr[2]
                 this.ptr := hBitmap
-            } else if (widthOrPBitmap is Array) { ;aRect
+            } else if (widthOrPBitmap is array) { ;aRect
                 this.getFromRect(widthOrPBitmap)
             }
         } else {
@@ -1472,22 +1537,22 @@ class GDIP_HBitmap extends _GDIP {
     ; }
 
     ; SetImage(ctlID) {
-    ;     res := SendMessage(0x172,, this.ptr,, "ahk_id " . ctlID)
-    ;     dllcall("DeleteObject", "Uint",res)
+    ;     res := SendMessage(0x172,, this.ptr,, ctlID)
+    ;     dllcall("DeleteObject", "ptr",res)
     ;     return res
     ; }
 
     ;复制 hBitmap 图像到剪切板
     SetClipboardData(bDelete:=false) {
         bufOI := buffer(84,0)
-        dllcall("GetObject", "Uint",this.ptr, "int",bufOI.size, "Uint",&bufOI)
+        dllcall("GetObject", "ptr",this, "int",bufOI.size, "Uint",&bufOI)
         hDIB := dllcall("GlobalAlloc", "Uint",2, "Uint",40+numget(bufOI,44))
         pDIB := dllcall("GlobalLock", "Uint",hDIB)
         dllcall("RtlMoveMemory", "Uint",pDIB, "Uint",&bufOI+24, "Uint",40)
         dllcall("RtlMoveMemory", "Uint",pDIB+40, "Uint",numget(bufOI,20), "Uint",numget(bufOI,44))
         dllcall("GlobalUnlock", "Uint",hDIB)
         if (bDelete)
-            dllcall("DeleteObject", "Uint",this.ptr)
+            dllcall("DeleteObject", "ptr",this)
         dllcall("OpenClipboard", "Uint",0)
         dllcall("EmptyClipboard")
         dllcall("SetClipboardData", "Uint",8, "Uint",hDIB)
@@ -1497,7 +1562,6 @@ class GDIP_HBitmap extends _GDIP {
     ;贴图
     showByGui(aRect:=unset) {
         ;放入gui
-        ; oGui := gui("-Caption +ToolWindow +AlwaysOnTop +LastFound +Border -DPIScale")
         oGui := gui("-Caption +ToolWindow +AlwaysOnTop +LastFound -DPIScale") ;no border
         ;oGui.title := "hyd-" . A_Now
         oGui.OnEvent("ContextMenu", (p*)=>oGui.destroy())
@@ -1510,8 +1574,9 @@ class GDIP_HBitmap extends _GDIP {
         oPic := oGui.AddPicture(format("w{1} h{2} +0xE", aRect[3],aRect[4]))
         oPic.OnEvent("click", (p*)=>PostMessage(WM_NCLBUTTONDOWN:=0xA1, 2)) ; 随着鼠标移动
         ;oPic.OnEvent("DoubleClick", ObjBindMethod(this,"zoom"))
-        SendMessage(STM_SETIMAGE:=0x172,, this.ptr,, "ahk_id " . oPic.hwnd)
-        oGui.show(format("x{1} y{2}", aRect[1]-1,aRect[2]-1))
+        SendMessage(STM_SETIMAGE:=0x172,, this.ptr,, oPic)
+        oGui.show(format("x{1} y{2}", aRect[1],aRect[2]))
+        return oGui
     }
     zoom(oCtl) {
         n := 2
@@ -1523,13 +1588,13 @@ class GDIP_HBitmap extends _GDIP {
         this.resize(n*100)
         oHBitmap := GDIP_HBitmap(oPBitmap)
         oPBitmap := ""
-        SendMessage(STM_SETIMAGE:=0x172,, this.ptr,, "ahk_id " . oCtl.hwnd)
+        SendMessage(STM_SETIMAGE:=0x172,, this.ptr,, oCtl)
         ControlMove(,, w*n, h*n, oCtl)
-        WinMove(,, w*n, h*n, "ahk_id " . oCtl.Gui.hwnd)
+        WinMove(,, w*n, h*n, oCtl.Gui)
         ;if (!isobject(oCtl))
         ;{
         ;MouseGetPos(,, idWin, oCtl)
-        ;ControlGetPos(x,y,w,h, oCtl, "ahk_id " . idWin)
+        ;ControlGetPos(x,y,w,h, oCtl, idWin)
         ;}
         ;else
         ;{
@@ -1546,11 +1611,11 @@ class GDIP_HBitmap extends _GDIP {
         ;hBitmap := Gdip_CreateHBITMAPFromBitmap(pBitmap)
         ;Gdip_DisposeImage(pBitmap)
         ;Gdip_Shutdown(pToken)
-        ;E := SendMessage(0x172, 0, hBitmap,, "ahk_id " . oCtl)
-        ;;E := SendMessage(0x172, 0, hBitmap,, "ahk_id " . oCtl.hwnd)
+        ;E := SendMessage(0x172, 0, hBitmap,, oCtl)
+        ;;E := SendMessage(0x172, 0, hBitmap,, oCtl)
         ;dllcall("DeleteObject", "ptr",E)
         ;ControlMove(,,w*2,h*2, oCtl)
-        ;WinMove(,,w*2, h*2,"ahk_id " . oCtl.Gui.hwnd)
+        ;WinMove(,,w*2, h*2, oCtl.Gui)
     }
 }
 

@@ -11,8 +11,7 @@ for k in proto.OwnProps() {
 
 class _String {
     static fileSZM := "d:\TC\hy\Rime\opencc\jiayin.txt"
-    ;static fileQP := A_LineFile . "\..\汉字拼音对照表.txt"
-    static fileTS := "d:\BB\lib\繁体简体.txt"
+    static fileTS := "d:\TC\hy\Rime\opencc\backup\TSCharacters.txt" ;来源于 opencc，稍微调整
     static regNum := "^-?\d+(\.\d+)?$"
     static regIP := "^(25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d?)(\.(25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d?)){3}$"
     static regSfz := "^\d{17}[\dXx]$" ;身份证
@@ -23,7 +22,7 @@ class _String {
     static regImage := "i)^(bmp|jpe|jpeg|jpg|png|gif|ico|psd|tif|tiff)$"
     ;   编程源代码
     static regCode := "i)^(ah[k2]|js|vim|html?|wxml|css|wxss|lua|hh[cpk])$"
-    static regText := "i)^(ah[k2]|js|sh|log|vim|md|html?|wxml|css|wxss|lua|hh[cpk]|csv|json|txt|ini)$"
+    static regText := "i)^(ah[k2]|js|sh|log|vim|md|yaml|html?|wxml|css|wxss|lua|hh[cpk]|csv|json|txt|ini)$"
     static regAudeo := "i)^(wav|mp3|m4a|wma)$"
     static regVideo := "i)^(mp4|wmv|mkv|m4a|rm(vb)?|flv|mpeg|avi)$"
     static regZip := "i)^(7z|zip|rar|iso|img|gz|cab|jar|arj|lzh|ace|tar|GZip|uue|bz2)$"
@@ -263,9 +262,8 @@ class _String {
 
     toIframe() => format('<iframe src="{1}"></iframe>', this)
 
-    ;charLine为不空，则行
-    toArr(charLine:="", arrIdx:="", funLineFilter:="") {
-        if (!isobject(funLineFilter))
+    toArr(charLine:="", arrIdx:="", funLineFilter:=unset) {
+        if (!isset(funLineFilter))
             funLineFilter := (p*)=>1
         arr := []
         loop parse, rtrim(this,"`r`n"), "`n", "`r" {
@@ -277,11 +275,13 @@ class _String {
                         for i in arrIdx
                             arrTmp.push(arrLine[i])
                         arr.push(arrTmp)
-                    } else
+                    } else {
                         arr.push(arrLine)
+                    }
                 }
-            } else
+            } else {
                 arr.push(A_LoopField)
+            }
         }
         return arr
     }
@@ -322,7 +322,7 @@ class _String {
         nums := str.grem("\d+(\.\d+)?")
         arr := []
         for v in nums {
-            if instr(v, ".")
+            if instr(v[0], ".")
                 arr.push(float(v[0]))
             else
                 arr.push(integer(v[0]))
@@ -640,7 +640,7 @@ class _String {
         str := fileread(_String.fileTS, "utf-8")
         res := ""
         loop parse, this {
-            if (ord(A_LoopField) > 127) && RegExMatch(str, "(.)" . A_LoopField, &m)
+            if (ord(A_LoopField) > 0xFF) && RegExMatch(str, format("{1}\s(.)", A_LoopField), &m)
                 res .= m[1]
             else
                 res .= A_LoopField
