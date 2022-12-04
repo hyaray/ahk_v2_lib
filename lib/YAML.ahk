@@ -2,10 +2,9 @@
  * @description: YAML/JSON格式字符串序列化和反序列化, 修改自[HotKeyIt/Yaml](https://github.com/HotKeyIt/Yaml)
  * 修复了一些YAML解析的bug, 增加了对true/false/null类型的支持, 保留了数值的类型
  * @author thqby, HotKeyIt
- * @date 2021/10/04
- * @version 1.0.1
+ * @date 2022/09/21
+ * @version 1.0.4
  ***********************************************************************/
-
 class YAML {
 	static null := ComValue(1, 0), true := ComValue(0xB, 1), false := ComValue(0xB, 0)
 
@@ -33,7 +32,7 @@ class YAML {
 			while P && (LP := P, P := DllCall(NXTLN, "PTR", P, "Int", true, "cdecl PTR"), LF := StrGet(LP), P) {	;P:=(LP:=P,!p||!NumGet(p,"UShort")?0:(str:=StrSplit(StrGet(P),"`n","`r",2)).Length?(p+=StrLen(LF:=str[1])*2,p+=!NumGet(p,"UShort") ? 0 : NumGet(p,"USHORT")=13?4:2):0){
 				if (!Y && InStr(LF, "---") = 1) || (InStr(LF, "---") = 1 && (Y.Push(""), NEWDOC := 0, D[1] := 0, _L := _LL := O := _Q := _K := _S := _T := _V := "", 1)) || (InStr(LF, "...") = 1 && NEWDOC := 1) || (LF = "") || RegExMatch(LF, "^\s+$")
 					continue
-				else if (NEWDOC)
+				else if NEWDOC
 					throw Error("Document ended but new document not specified.", 0, LF)
 				if RegExMatch(LF, "^\s*#") || InStr(LF, "``%") = 1	; Comments, tag, document start/end or empty line, ignore
 					continue
@@ -84,9 +83,9 @@ class YAML {
 					_C := ""
 				if _L != L && !D[L]	; object in this level not created yet
 					if L = 1 {	; first level, use or create main object
-						if Y && Type(Y[-1]) != "String" && ((Q && Type(Y[-1]) != "Array") || (!Q && Type(Y[-1]) = "Array"))
+						if Y && Type(Y[Y.Length]) != "String" && ((Q && Type(Y[Y.Length]) != "Array") || (!Q && Type(Y[Y.Length]) = "Array"))
 							throw Error("Mapping Item and Sequence cannot be defined on the same level.", 0, LF)	; trying to create sequence on the same level as key or vice versa
-						else D[L] := Y ? (Type(Y[-1]) = "String" ? (Y[-1] := Q ? [] : Map()) : Y[-1]) : (Y := Q ? [[]] : [Map()])[1]
+						else D[L] := Y ? (Type(Y[Y.Length]) = "String" ? (Y[Y.Length] := Q ? [] : Map()) : Y[Y.Length]) : (Y := Q ? [[]] : [Map()])[1]
 					} else if !_Q && Type(D[L - 1][_K]) = (Q ? "Array" : "Map")	; use previous object
 						D[L] := D[L - 1][_K]
 					else D[L] := O := Q ? [] : Map(), _A ? A[_A] := O : "", _Q ? (N && D[L - 1].Pop(), D[L - 1].Push(O)) : D[L - 1][_K] := O, O := ""	; create new object
@@ -111,12 +110,14 @@ class YAML {
 				else V := T = "int" || T = "float" ? V + 0 : T = "str" ? V "" : T = "null" ? _null : T = "bool" ? (V = "true" ? _true : V = "false" ? _false : V) : V	; tags !!int !!float !!str !!null !!bool - else seq map omap ignored
 				if _.ASET
 					A[_A := SubStr(_.ASET, 2)] := V
-				if _.AGET
-					V := A[SubStr(_.AGET, 2)]
-				else if !VQ && SubStr(LTrim(V, " `t"), 1, 1) = "{"	; create json map object
-					O := Map(), _A ? A[_A] := O : "", P := (YO(O, LP + InStr(LF, V) * 2, L))
-				else if !VQ && SubStr(LTrim(V, " `t"), 1, 1) = "["	; create json sequence object
-					O := [], _A ? A[_A] := O : "", P := (YA(O, LP + InStr(LF, V) * 2, L))
+                if _.AGET {
+                    V := A[SubStr(_.AGET, 2)]
+                } else if (V == undefined) {
+                } else if !VQ && SubStr(LTrim(V, " `t"), 1, 1) = "{" { ; create json map object
+                    O := Map(), _A ? A[_A] := O : "", P := (YO(O, LP + InStr(LF, V) * 2, L))
+                } else if !VQ && SubStr(LTrim(V, " `t"), 1, 1) = "[" { ; create json sequence object
+                    O := [], _A ? A[_A] := O : "", P := (YA(O, LP + InStr(LF, V) * 2, L))
+                }
 				N := false
 				if Q	; push sequence value into an object
 					; (V !== undefined ? D[L].Push(O ? O : S ? "" : V) : 0)
@@ -126,7 +127,7 @@ class YAML {
 					_L := L, _LL := LL, O := _Q := _K := _S := _T := _V := ""	;_L:=
 				else _L := L, _LL := LL, _Q := Q, _K := K, _S := S, _T := T, _V := V, O := ""
 			}
-			if Y && Type(Y[-1]) = "String"
+			if Y && Type(Y[Y.Length]) = "String"
 				Y.Pop()
 			return SubStr(txt, 1, 3) != "---" && Y.Length = 1 ? Y[1] : Y
 		}
@@ -151,7 +152,7 @@ class YAML {
 					;~ if ((tp:=G(P+2,lf))&&(NumGet(P+2,"UShort")=10||NumGet(P+4,"UShort")=10||(nl:=RegExMatch(lf,"^\s+?$"))||RegExMatch(lf,"^\s*[,\}\]]")))
 					if ((tp := DllCall(NXTLN, "PTR", P + 2, "Int", false, "cdecl PTR"), lf := StrGet(P + 2), tp) && (NumGet(P + 2, "UShort") = 0 || (nl := RegExMatch(lf, "^\s+?$")) || RegExMatch(lf, "^\s*[,\}\]]")))
 						return nl ? DllCall(NXTLN, "PTR", P + 2, "Int", true, "cdecl PTR") : lf ? P + 2 : NumGet(P + 4, "UShort") = 0 ? P + 6 : P + 4	; in case `r`n we have 2 times NULL chr
-					else if (!tp)
+					else if !tp
 						return NumGet(P + 4, "UShort") = 0 ? P + 6 : P + 4	; in case `r`n we have 2 times NULL chr
 					else throw Error("Malformed inline YAML string.", 0, StrGet(p))
 				} else if !v && (c = "," || c = ":" || c = " " || c = "`t") && P += 2
@@ -183,7 +184,7 @@ class YAML {
 					;~ if ((tp:=G(P+2,lf))&&(NumGet(P+2,"UShort")=10||NumGet(P+4,"UShort")=10||(nl:=RegExMatch(lf,"^\s+?$"))||RegExMatch(lf,"^\s*[,\}\]]")))
 					if ((tp := DllCall(NXTLN, "PTR", P + 2, "Int", false, "cdecl PTR"), lf := StrGet(P + 2), tp) && (NumGet(P + 2, "UShort") = 0 || (nl := RegExMatch(lf, "^\s+?$")) || RegExMatch(lf, "^\s*[,\}\]]")))
 						return nl ? DllCall(NXTLN, "PTR", P + 2, "Int", true, "cdecl PTR") : lf ? P + 2 : NumGet(P + 4, "UShort") = 0 ? P + 6 : P + 4	; in case `r`n we have 2 times NULL chr
-					else if (!tp)
+					else if !tp
 						return NumGet(P + 4, "UShort") = 0 ? P + 6 : P + 4	; in case `r`n we have 2 times NULL chr
 					else throw Error("Malformed inline YAML string.", 0, StrGet(p))
 				} else if !v && (c = "," || c = " " || c = "`t") && P += 2	;InStr(", `t",c)
@@ -226,7 +227,7 @@ class YAML {
 								if RegExMatch(SubStr(t, A_Index), "m)^(null|false|true|-?\d+\.?\d*)\s*[,}\]\r\n]", &R) && (N := R.Len(0) - 2, R := R.1, 1) {
 									if A
 										C.Push(R = "null" ? _null : R = "true" ? _true : R = "false" ? _false : IsNumber(R) ? R + 0 : R)
-									else if (V)
+									else if V
 										C[K] := R = "null" ? _null : R = "true" ? _true : R = "false" ? _false : IsNumber(R) ? R + 0 : R, K := V := ""
 									else throw Error("Malformed JSON - missing key.", 0, t)
 								} else
@@ -237,9 +238,9 @@ class YAML {
 						throw Error("Malformed JSON - unrecognized character-", 0, SubStr(t, 1, 1) " in " t)
 				} else if NQ && (P .= A_LoopField '"', 1)
 					continue
-				else if (A)
+				else if A
 					LF := P A_LoopField, C.Push(InStr(LF, "\") ? UC(LF) : LF), P := ""
-				else if (V)
+				else if V
 					LF := P A_LoopField, C[K] := InStr(LF, "\") ? UC(LF) : LF, K := V := P := ""
 				else
 					LF := P A_LoopField, K := InStr(LF, "\") ? UC(LF) : LF, P := ""
@@ -257,7 +258,7 @@ class YAML {
 			v := ""
 			Loop Parse S, "\"
 				if !((e := !e) && A_LoopField = "" ? v .= "\" : !e ? (v .= A_LoopField, 1) : 0)
-					v .= (t := InStr("ux", SubStr(A_LoopField, 1, 1)) ? SubStr(A_LoopField, 1, RegExMatch(A_LoopField, "^[ux]?([\dA-F]{4})?([\dA-F]{2})?\K") - 1) : "") && RegexMatch(t, "i)^[ux][\da-f]+$") ? Chr(Abs("0x" SubStr(t, 2))) SubStr(A_LoopField, RegExMatch(A_LoopField, "^[ux]?([\dA-F]{4})?([\dA-F]{2})?\K")) : m.has(Ord(A_LoopField)) ? m[Ord(A_LoopField)] SubStr(A_LoopField, 2) : "\" A_LoopField, e := A_LoopField = "" ? e : !e
+					v .= (t := InStr("ux", SubStr(A_LoopField, 1, 1)) ? SubStr(A_LoopField, 1, RegExMatch(A_LoopField, "i)^[ux]?([\dA-F]{4})?([\dA-F]{2})?\K") - 1) : "") && RegexMatch(t, "i)^[ux][\da-f]+$") ? Chr(Abs("0x" SubStr(t, 2))) SubStr(A_LoopField, RegExMatch(A_LoopField, "i)^[ux]?([\dA-F]{4})?([\dA-F]{2})?\K")) : m.Has(Ord(A_LoopField)) ? m[Ord(A_LoopField)] SubStr(A_LoopField, 2) : "\" A_LoopField, e := A_LoopField = "" ? e : !e
 			return v
 		}
 		CL(i) {	; Convert level to spaces

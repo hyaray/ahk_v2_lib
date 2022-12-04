@@ -12,25 +12,45 @@ class _Map extends map {
     ;CaseSense := 0
     ;Default := ""
 
-    keyLast(iskey:=1) {
+    index(isValue:=0, i:=1) {
         e := this.__enum()
-        ;msgbox(numget(objptr(e), 6*A_PtrSize+16, "uint"))
-        numput("uint", this.count-2, objptr(e), 6*A_PtrSize+16)
+        numput("uint", this.count-1-i, objptr(e), 6*A_PtrSize+16)
         e(&k)
-        return iskey ? k : this[k]
+        return isValue ? this[k] : k
     }
 
     toString() => super.toJson()
 
     ;参考python
-    keys() {
+    ;如果指定了i，则返回对应序号的k
+    keys(i:=0) {
+        if (i) {
+            if (i > 0) ;1=-1 2=0
+                idx := i-2
+            else ;-1=count-2 -2=count-3
+                idx := this.count - (abs(i) + 1)
+            e := this.__enum()
+            numput("uint", idx, objptr(e), 6*A_PtrSize+16)
+            e(&k)
+            return k
+        }
         arr := []
         for k, v in this
             arr.push(k)
         return arr
     }
 
-    values() {
+    values(i:=0) {
+        if (i) {
+            if (i > 0)
+                idx := i-2
+            else
+                idx := this.count - (abs(i) + 1)
+            e := this.__enum()
+            numput("uint", idx, objptr(e), 6*A_PtrSize+16)
+            e(&k)
+            return this[k]
+        }
         arr := []
         for k, v in this
             arr.push(v)

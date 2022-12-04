@@ -20,9 +20,6 @@ class _Pinyin {
     __new(tpAlpha:="Aa", toObj:=true) {
         SplitPath(A_LineFile,, &dir)
         this.sFile := rtrim(fileread("d:\TC\soft\AutoHotkey\lib\pinyin.txt","utf-8"),"`r`n")
-        if (!toObj)
-            return
-        this.obj := map() ;汉字和拼音对照表
         l := strlen(tpAlpha)
         objTmp := map(
             "ā","a1", "á","a2", "ǎ","a3", "à","a4",
@@ -46,12 +43,17 @@ class _Pinyin {
             this.char := " "
         }
         ;转大写
+        timeSave := A_TickCount
         if (substr(tpAlpha,1,1) ~= "[A-Z]")
             this.sFile := RegExReplace(this.sFile, "\s\K([a-z])", "$U1")
-        loop parse, this.sFile, "`n", "`r" {
-            arr := StrSplit(A_LoopField, "`t")
-            this.obj[arr[1]] := StrSplit(arr[2]," ")
+        if (toObj) {
+            this.obj := map() ;汉字和拼音对照表
+            loop parse, this.sFile, "`n", "`r" {
+                arr := StrSplit(A_LoopField, "`t")
+                this.obj[arr[1]] := StrSplit(arr[2]," ")
+            }
         }
+        OutputDebug(format("i#{1} {2}:oPinyin time={3}", A_LineFile,A_LineNumber,A_TickCount - timeSave))
         ;msgbox(json.stringify(this.obj, 4))
     }
 
@@ -63,14 +65,22 @@ class _Pinyin {
             if (A_LoopField ~= "[[:ascii:]]") {
                 res .= A_LoopField
             } else {
-                if (this.obj.has(A_LoopField)) {
-                    res .= this.obj[A_LoopField][1] . this.char ;NOTE 只能取第1个
-                } else { ;一般不会
-                    res .= A_LoopField . this.char
+                if this.HasOwnProp("obj") {
+                    if (this.obj.has(A_LoopField)) {
+                        res .= this.obj[A_LoopField][1] . this.char ;NOTE 只能取第1个
+                    } else { ;一般不会
+                        res .= A_LoopField . this.char
+                    }
+                } else {
+                    if (RegExMatch(this.sFile, A_LoopField . "\s(\S+)", &m)) { ;只提取第1个
+                        res .= m[1] . this.char
+                    } else { ;一般不会
+                        res .= A_LoopField . this.char
+                    }
                 }
             }
         }
-        return rtrim(res, char)
+        return rtrim(res, this.char)
     }
 
     ;判断拼音是否有效

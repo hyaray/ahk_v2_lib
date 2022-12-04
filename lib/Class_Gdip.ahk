@@ -130,9 +130,9 @@ class _GDIP {
     }
 
     ; struct BITMAPINFOHEADER - https://docs.microsoft.com/en-us/windows/win32/api/wingdi/ns-wingdi-bitmapinfoheader
+    ; bpp = BitCount / BitsPerPixel
     static _bufBitmapInfoHeader(w, h, bpp:=32) {
-        bufBI := buffer(40, 0)
-        numput("uint",40, "uint",w, "uint",h, "ushort",1, "ushort",bpp, bufBI)
+        numput("uint",40, "uint",w, "uint",h, "ushort",1, "ushort",bpp, bufBI:=buffer(40, 0))
         return bufBI
     }
 
@@ -141,13 +141,14 @@ class _GDIP {
     static getRect(funDo:="", bHBitmap:=false) {
         if (!isobject(funDo))
             funDo := (p*)=>GetKeyState("LButton", "P")
-        aRectBase := [0,0,sysget(0),sysget(1)]
-        oPBitmapBase := GDIP_PBitmap(aRectBase)
-        oGuiBase := oPBitmapBase.showByGui(aRectBase)
+        ;aRectBase := [0,0,sysget(0),sysget(1)]
+        ;oPBitmapBase := GDIP_PBitmap(aRectBase)
+        ;oPBitmapBase.GdipSaveImageToFile("c:\1.jpg")
+        ;oGuiBase := GDIP_HBitmap(oPBitmapBase).showByGui(aRectBase)
         ;截图时显示的Gui
         oGui := gui("-caption +AlwaysOnTop +Border +E0x80000 +LastFound +OwnDialogs +ToolWindow")
         oGui.BackColor := "FFFFFF"
-        WinSetTransparent(110)
+        WinSetTransparent(110, oGui)
         ;记录初始位置
         CoordMode("Mouse", "screen")
         MouseGetPos(&x0, &y0)
@@ -161,10 +162,10 @@ class _GDIP {
             oGui.show(format("x{1} y{2} w{3} h{4} NA", x,y,w,h))
             tooltip(format("{1},{2},{3},{4}",x,y,w,h))
         }
-        if bHBitmap {
+        if (bHBitmap) {
             return 1
         }
-        oGuiBase.destroy()
+        ;oGuiBase.destroy()
         oGui.destroy()
         SetTimer(tooltip, -100)
         if (w<=3 || h<=3)
@@ -189,13 +190,7 @@ class _GDIP {
     }
 
     ;屏幕区域转成 base64
-    static rect2base64(aRect) {
-        _GDIP.startup()
-        oPBitmap := GDIP_PBitmap(aRect)
-        res := oPBitmap.toBase64()
-        _GDIP.shutdown()
-        return res
-    }
+    static rect2base64(aRect) => GDIP_PBitmap(aRect).toBase64()
 
     ;屏幕区域保存为文件
     static rect2fp(aRect, fp:="") {
@@ -654,9 +649,9 @@ class GDIP_PBitmap extends _GDIP {
     ;[x,y,w,h] aRect
     __new(w:="", h:=unset) {
         if (isobject(w)) {
-            if (w is GDIP_HBitmap)
+            if (w is GDIP_HBitmap) {
                 this.GdipCreateBitmapFromHBITMAP(w, Palette:=0)
-            else if (w is array) {
+            } else if (w is array) {
                 switch w.length {
                     case 2: this.GdipCreateBitmapFromScan0(w*)
                     case 4: this.getFromRect(w)

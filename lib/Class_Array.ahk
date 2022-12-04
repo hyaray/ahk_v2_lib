@@ -228,19 +228,77 @@ class _Array extends Array {
         return arrRes
     }
 
+    ;递归平铺所有内容(删除文件夹)
+    ;每项是 map，如果含 keySub 则递归读取其下的内容(比如hyobj)
+    ;每项是 array，如果为 map 则递归读取其下的内容(比如yaml)
+    static noBranch(arr, keySub:="") {
+        if (!arr.length)
+            return []
+        arrRes := []
+        if (arr[1] is map) {
+            if (keySub == "")
+                throw ValueError("keySub 未定义")
+            for obj in arr {
+                if (obj.has(keySub)) ;为目录
+                    arrRes.extend(this.noBranch(obj[keySub],keySub)) ;NOTE 递归
+                else {
+                    arrRes.push(obj)
+                }
+            }
+        } else if (arr[1] is array) {
+            for arr1 in arr {
+                if (arr1 is map) { ;为目录
+                    for k1, v1 in arr1 {
+                        if (v1 is array) {
+                            arrRes.extend(this.noBranch(v1))
+                        } else if (v1 is string) {
+                            msgbox(v1)
+                        } else {
+                            msgbox(type(v1))
+                        }
+                    }
+                } else {
+                    arrRes.push(arr1)
+                }
+            }
+        }
+        return arrRes
+    }
+
+    ;参考 noBranch 的场景
+    ;对每个 item 进行处理
+    ;map 只是无脑对 item 进行处理，这个增加了对子目录 item 的处理
+    mapEx(funDeal) {
+        return f(this)
+        f(arr) {
+            arrRes := []
+            for item in arr {
+                if (item is map) { ;NOTE 判断为目录
+                    for k1, v1 in item
+                        arrRes.push(this.mapEx(v1, funDeal)) ;NOTE 递归
+                } else if (item is array) {
+                    arrRes.push(funDeal(item)) ;NOTE 是函数返回值，而不是修改后的 item
+                } else if (item is string) {
+                    msgbox(item)
+                }
+            }
+            return arrRes
+        }
+    }
+
     ;提取对象的所有key对应的值到数组
     ;比如多个map("key","aaa","hotkey","B")组成数据
     ;提取所有key的值aaa到数组
     static oValueOfKey2Arr(arr, subKey, key) {
-        this.arrRes := []
+        arrRes := []
         tmp(arr, subKey, key)
-        return this.arrRes
+        return arrRes
         tmp(arr, subKey, key) {
-            for k, v in arr {
+            for v in arr {
                 if (v.has(subKey))
                     tmp(v[subKey], subKey, key)
                 else if (v.has(key))
-                    this.arrRes.push(v[key])
+                    arrRes.push(v[key])
             }
         }
     }

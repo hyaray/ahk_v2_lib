@@ -1998,10 +1998,7 @@ class _String {
     }
 
     ;n1 := 3.06
-    ;n2 := 2.14
-    ;msgbox((n1+n2) . "`n" . (n1+n2).floatErr())
-    ;msgbox((n1-n2) . "`n" . (n1-n2).floatErr())
-    floatErr() => number(this).floatErr() ;+号为了解决全是9的问题
+    floatErr() => number(this).floatErr()
 
     ; arr := [
     ;     0.01,
