@@ -104,6 +104,10 @@ class _String {
         return dirName
     }
     extRep(extNew) => RegExReplace(this, "\.\K\w+$", extNew)
+    noextRep(noExtNew) {
+        SplitPath(this,, &dir, &ext)
+        return format("{1}\{2}.{3}", dir,noExtNew,ext)
+    }
 
     ;在arr里的第1个序号
     index(arr) {

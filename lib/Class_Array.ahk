@@ -2,6 +2,7 @@
 ;默认都是不修改原arr，方法内都会clone()并操作
 ;除了方法名以r开头的会修改原arr，且无返回值(rMoveDown)
 ;ip 1.2 转成 192.168.1.2
+;map 方法已自带，NOTE 注意区分 map 的返回值和被 map 修改之后的 arr
 
 ; https://autohotkey.com/board/topic/83081-ahk-l-customizing-object-and-array
 defprop := object.DefineProp.bind(array.prototype)

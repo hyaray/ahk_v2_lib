@@ -1,5 +1,7 @@
 ﻿;不修改原obj
 ;优先使用Arrays
+;连续的 key 保存在 arr里，如何用arr:=["a","b"]一次性引用=obj["a"]["b"]
+
 ;v1 https://www.autohotkey.com/board/topic/83081-ahk-l-customizing-object-and-array
 defprop := object.DefineProp.bind(map.prototype)
 proto := _Map.prototype

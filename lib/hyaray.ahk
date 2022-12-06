@@ -1229,22 +1229,22 @@ hyf_pipeRun(code, fn:="", callback:=0) {
 
 ;去重或生成拼音都是根据 subArr[indexKey]
 ;indexKey 主值在 subArr 的序号(不能重复，否则返回结果有问题)
-;bAddPy 是否添加拼音
+;sPyAndIndex
+;   第1位：0=不添加拼音 1=已有拼音(无需添加，但要匹配搜索) 2=添加拼音
+;   第2位：0=不push序号 1=要
 ;bDistinct 是否去重
 ;返回 subArr
-hyf_selectByArr(arr2, indexKey:=1, bAddPy:=false, bDistinct:=false) {
+hyf_selectByArr(arr2, indexKey:=1, sPyAndIndex:="01", bDistinct:=false) {
     if (!arr2.length)
         return []
-    arrNew := [] ;防止修改原数组
-    ;1. arrNew 转成二维，NOTE 并在每项末尾添加 A_Index
+    bAddIndex := (substr(sPyAndIndex, 1, 2) == "1")
+    ;1. arrNew 转成二维，NOTE 并可能在每项末尾添加 A_Index
     if (!isobject(arr2[1])) {
-        for v in arr2
-            arrNew.push([v, A_Index])
+        arrNew := bAddIndex ? arr2.map((v)=>[v, A_Index]) : arr2.map((v)=>[v])
     } else {
-        for subArr in arr2 {
-            subArr.push(A_Index)
-            arrNew.push(subArr)
-        }
+        if (bAddIndex)
+            arr2.map((v)=>v.push(A_Index))
+        arrNew := arr2
     }
     ;   去重(根据 subArr[1])
     if (bDistinct)
@@ -1258,7 +1258,7 @@ hyf_selectByArr(arr2, indexKey:=1, bAddPy:=false, bDistinct:=false) {
     loop(arrNew[1].length)
         arrField.push("v" . string(A_Index))
     ;添加拼音
-    if (bAddPy) {
+    if (substr(sPyAndIndex,1,1) == "2") {
         arrField.push("拼音")
         sFile := fileread("d:\BB\lib\汉字拼音对照表.txt", "utf-8")
         for arr in arrNew
@@ -1315,12 +1315,11 @@ hyf_selectByArr(arr2, indexKey:=1, bAddPy:=false, bDistinct:=false) {
         ;    return
         sInput := ctl.text
         ;NOTE 获取匹配的 idxMatch
-        idxMatch := (bAddPy && sInput ~= "[[:ascii:]]") ? -1 : 1
+        idxMatch := (substr(sPyAndIndex,1,1)!="0" && sInput ~= "^[[:ascii:]]+$") ? -1 : 1 ;-1是末位字段
         i := 1
-        ;OutputDebug(format("i#{1} {2}:sInput={3} idxMatch={4}", A_LineFile,A_LineNumber,sInput,idxMatch))
+        OutputDebug(format("i#{1} {2}:sInput={3} idxMatch={4}", A_LineFile,A_LineNumber,sInput,idxMatch))
         for subArr in arrNew {
             if (sInput=="" || instr(subArr[idxMatch], sInput)) {
-                ;OutputDebug(format("i#{1} {2}:subArr={3}", A_LineFile,A_LineNumber,json.stringify(subArr)))
                 oLv.add(, i++, subArr*)
             }
         }
@@ -1385,7 +1384,7 @@ hyf_selectByArr(arr2, indexKey:=1, bAddPy:=false, bDistinct:=false) {
         ;做任何事
         ;设置返回值
         key := oLv.GetText(r, indexKey+1)
-        ;OutputDebug(format("i#{1} {2}:r={3} indexKey={4} key={5}", A_LineFile,A_LineNumber,r,indexKey,key))
+        OutputDebug(format("w#{1} {2}:r={3} indexKey={4} key={5}", A_LineFile,A_LineNumber,r,indexKey,key))
         resGui := objRaw[key] ;TODO 增加了序号
         doEscape(oLv.gui)
     }
