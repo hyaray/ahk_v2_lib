@@ -316,7 +316,7 @@ class _ListView extends _Ctrl {
         loop parse, ListViewGetContent(, this.hCtl), "`n", "`r"
             arr.push(RegExReplace(A_LoopField, "`t.*"))
         ;OutputDebug(format("i#{1} {2}:arr={3}", A_LineFile,A_LineNumber,json.stringify(arr,4)))
-        arrRes := hyf_selectByArr(arr,, 1)
+        arrRes := hyf_selectByArr(arr,, "21")
         if (arrRes.length)
             this.selectByText(arrRes[i], i)
     }

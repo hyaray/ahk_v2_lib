@@ -10,15 +10,18 @@ class _Mouse {
         cmMouse := A_CoordModeMouse
         CoordMode("mouse", "screen")
         MouseGetPos(&xSave, &ySave)
-        _Mouse.xSave := xSave
-        _Mouse.ySave := ySave
+        this.arrSave := [xSave, ySave]
         CoordMode("mouse", cmMouse)
     }
 
-    static back() {
+    static back(cnt:=0) {
         cmMouse := A_CoordModeMouse
         CoordMode("mouse", "screen")
-        MouseMove(_Mouse.xSave, _Mouse.ySave, 0)
+        MouseMove(this.arrSave[1], this.arrSave[2], 0)
+        if (cnt) {
+            sleep(10)
+            click(cnt)
+        }
         CoordMode("mouse", cmMouse)
     }
 
@@ -26,18 +29,47 @@ class _Mouse {
     static saveSpeed() {
         dllcall("SystemParametersInfo", "UInt",SPI_GETMOUSESPEED:=0x70, "UInt",0, "Ptr*",&OrigMouseSpeed:=0, "UInt",0)
         return OrigMouseSpeed
+        ; 现在在倒数第二个参数中设置较低的速度 (范围为 1-20, 10 是默认值):
+        ;dllcall("SystemParametersInfo", "UInt",SPI_SETMOUSESPEED, "UInt",0, "Ptr",3, "UInt",0)
+        ;dllcall("SystemParametersInfo", "UInt",SPI_SETMOUSESPEED:=0x71, "UInt",0, "Ptr",OrigMouseSpeed, "UInt",0)  ; 恢复原始速度
     }
 
-    ; static saveSpeed() {
-    ;     ; 获取鼠标当前的速度以便稍后恢复:
-    ;     dllcall("SystemParametersInfo", "UInt",SPI_GETMOUSESPEED:=0x70, "UInt",0, "Ptr*",&OrigMouseSpeed:=0, "UInt",0)
-    ;     msgbox(OrigMouseSpeed)
-    ;     return OrigMouseSpeed
-    ;     ; 现在在倒数第二个参数中设置较低的速度 (范围为 1-20, 10 是默认值):
-    ;     dllcall("SystemParametersInfo", "UInt",SPI_SETMOUSESPEED, "UInt",0, "Ptr",3, "UInt",0)
+    ;主要用来生成代码
+    ;如果偏右/下，则返回负数
+    ;xPercent=100则不会获取相对坐标
+    static getXYByWindowR(arrXY:="", xPercent:=80, yPercent:=80, winTitle:="") {
+        cmMouse := A_CoordModeMouse
+        CoordMode("mouse", "window")
+        WinGetPos(&x, &y, &w, &h, winTitle)
+        if (isobject(arrXY)) {
+            x := arrXY[1]
+            y := arrXY[2]
+        }
+        if (x > w * xPercent/100)
+            x := x - w
+        if (y > h * yPercent/100)
+            y := y - h
+        CoordMode("mouse", cmMouse)
+        return [x, y]
+    }
 
-    ;     dllcall("SystemParametersInfo", "UInt",SPI_SETMOUSESPEED:=0x71, "UInt",0, "Ptr",OrigMouseSpeed, "UInt",0)  ; 恢复原始速度
-    ; }
+    ;获取当前鼠标的Window坐标
+    static getXYByWindow(&x, &y) {
+        cmMouse := A_CoordModeMouse
+        CoordMode("mouse", "window")
+        MouseGetPos(&x, &y)
+        CoordMode("mouse", cmMouse)
+        return [x, y]
+    }
+
+    ;获取当前鼠标的screen坐标
+    static getXYByScreen(&x:=0, &y:=0) {
+        cmMouse := A_CoordModeMouse
+        CoordMode("mouse", "screen")
+        MouseGetPos(&x, &y)
+        CoordMode("mouse", cmMouse)
+        return [x, y]
+    }
 
     ;target 0=鼠标所在屏幕 1=另一屏幕
     ;获取w,h形状居中显示的起始x,y坐标
@@ -66,57 +98,53 @@ class _Mouse {
     }
 
     ;笔直移动 to 为4个方向 up/down/left/right
-    ;_Mouse.shiftMove("right", (p*)=>GetKeyState("CapsLock", "P"), (p*)=>send("{LButton down}"), (p*)=>send("{LButton up}"))
+    ;this.shiftMove("right", (p*)=>GetKeyState("CapsLock", "P"), (p*)=>send("{LButton down}"), (p*)=>send("{LButton up}"))
     static shiftMove(to:="right", funState:="", funBefore:="", funAfter:="") {
-        if (_Mouse.bMoving) {
-            _Mouse.speed++
-            tooltip(_Mouse.speed)
+        if (this.bMoving) {
+            this.speed++
+            tooltip(this.speed)
             SetTimer(tooltip, -1000)
             return
         } else
-            _Mouse.speed := 1
-        if (!_Mouse.bMoving && isobject(funBefore))
+            this.speed := 1
+        if (!this.bMoving && isobject(funBefore))
             funBefore.call()
-        _Mouse.bMoving := true
+        this.bMoving := true
         SetTimer(%to . "Move"%, -1) ;用 SetTimer 解放当前线程，再次运行可增加速度
         rightMove() {
             while (funState.call()) {
-                MouseMove(_Mouse.speed, 0, 0, "R")
+                MouseMove(this.speed, 0, 0, "R")
                 sleep(1)
             }
             after()
         }
         leftMove() {
             while (funState.call()) {
-                MouseMove(-_Mouse.speed, 0, 0, "R")
+                MouseMove(-this.speed, 0, 0, "R")
                 sleep(1)
             }
             after()
         }
         upMove() {
             while (funState.call()) {
-                MouseMove(0, -_Mouse.speed, 0, "R")
+                MouseMove(0, -this.speed, 0, "R")
                 sleep(1)
             }
             after()
         }
         downMove() {
             while (funState.call()) {
-                MouseMove(0, _Mouse.speed, 0, "R")
+                MouseMove(0, this.speed, 0, "R")
                 sleep(1)
             }
             after()
         }
         after() { ;放函数里，延迟调用
-            _Mouse.bMoving := false
-            _Mouse.speed := 1
+            this.bMoving := false
+            this.speed := 1
             if (isobject(funAfter))
                 funAfter.call()
         }
-    }
-
-    static clickSave(n:=1) {
-        _Mouse._click("screen", _Mouse.xSave, _Mouse.ySave, n)
     }
 
     ;控件中心位置 window 坐标
@@ -129,8 +157,8 @@ class _Mouse {
     }
 
     static clickCtrl(ctl, winTitle:="") {
-        arrXY := _Mouse.getCtrlXY(ctl, winTitle)
-        _Mouse.clickByClient()
+        arrXY := this.getCtrlXY(ctl, winTitle)
+        this.clickByClient()
     }
 
     static getColorByWindow(x, y) { ;获取鼠标位置的颜色(6位16进制)
@@ -179,12 +207,12 @@ class _Mouse {
         res := map()
         for k, v in obj {
             if (isobject(v))
-                res[k] := _Mouse.fblBase(v, arr1, arr2)
+                res[k] := this.fblBase(v, arr1, arr2)
             else if (k = 1 || instr(k, "w")) { ;按A_ScreenWidth转换
                 ;msgbox(k . "`n" . v . "`n" . arr1[1] . "`n" . arr2[1] . "`n" . hyf_fblNumSwitch(v, arr1[1], arr2[1]))
-                res[k] := _Mouse.fblBase(v, arr1[1], arr2[1])
+                res[k] := this.fblBase(v, arr1[1], arr2[1])
             } else
-                res[k] := _Mouse.fblBase(v, arr1[2], arr2[2])
+                res[k] := this.fblBase(v, arr1[2], arr2[2])
         }
         return res
         fblBase(n, w1, w2) { ;w1分辨率下的n坐标转成w2分辨率下的坐标
@@ -216,42 +244,42 @@ class _Mouse {
     }
 
     ;window坐标转screen坐标
-    static toScreen(x, y:="") {
-        if (isobject(x)) {
-            y := x[2] ;这句必须放前面
-            x := x[1]
+    static toScreen(xWindow, yWindow:="") {
+        if (isobject(xWindow)) {
+            yWindow := xWindow[2] ;这句必须放前面
+            xWindow := xWindow[1]
         }
         WinGetPos(&xWin, &yWin,,, "A")
-        return [x+xWin, y+yWin]
+        return [xWindow+xWin, yWindow+yWin]
     }
-    static toWindow(x, y:="") {
-        if (isobject(x)) {
-            y := x[2] ;这句必须放前面
-            x := x[1]
+    static toWindow(xScreen, yScreen:="") {
+        if (isobject(xScreen)) {
+            yScreen := xScreen[2] ;这句必须放前面
+            xScreen := xScreen[1]
         }
         WinGetPos(&xWin, &yWin,,, "A")
-        return [x-xWin, y-yWin]
+        return [xScreen-xWin, yScreen-yWin]
     }
-    static toClient(x, y:="") {
-        if (isobject(x)) {
-            y := x[2] ;这句必须放前面
-            x := x[1]
+    static toClient(xScreen, yScreen:="") {
+        if (isobject(xScreen)) {
+            yScreen := xScreen[2] ;这句必须放前面
+            xScreen := xScreen[1]
         }
         WinGetClientPos(&xWin, &yWin,,, "A")
-        return [x-xWin, y-yWin]
+        return [xScreen-xWin, yScreen-yWin]
     }
 
     ;获取指定坐标点的鼠标光标特征码
     static shapeByWindow(x, y, toStr:=0) {
-        _Mouse.moveByWindow(x, y)
+        this.moveByWindow(x, y)
         MouseMove(X, Y, 0, "R")
-        return _Mouse.shapeResult(_Mouse.shapeBase(), toStr:=0)
+        return this.shapeResult(this.shapeBase(), toStr:=0)
     }
 
     ;获取指定坐标点的鼠标光标特征码
     static shapeR(x, y, toStr:=0) {
         MouseMove(X, Y, 0, "R")
-        return _Mouse.shapeResult(_Mouse.shapeBase(), toStr)
+        return this.shapeResult(this.shapeBase(), toStr)
     }
 
     ;shapeBase结果简化
@@ -321,81 +349,44 @@ class _Mouse {
         ;return MaskCode//2 . ColorCode  ;输出特征码
     }
 
-    ;获取当前鼠标的Window坐标
-    static getXYByWindow(&x, &y) {
-        cmMouse := A_CoordModeMouse
-        CoordMode("mouse", "window")
-        MouseGetPos(&x, &y)
-        CoordMode("mouse", cmMouse)
-        return [x, y]
-    }
-
-    ;NOTE 推荐
-    ;如果偏右或下，则获取相对窗口右/下边缘的坐标(负数)
-    ;xPercent=100则不会获取相对坐标
-    static getXYByWindowR(arrXY:="", xPercent:=80, yPercent:=80, winTitle:="") {
-        cmMouse := A_CoordModeMouse
-        CoordMode("mouse", "window")
-        WinGetPos(&x, &y, &w, &h, winTitle)
-        if (isobject(arrXY)) {
-            x := arrXY[1]
-            y := arrXY[2]
-        }
-        if (x > w * xPercent/100)
-            x := x - w 
-        if (y > h * yPercent/100)
-            y := y - h 
-        CoordMode("mouse", cmMouse)
-        return [x, y]
-    }
-
-    ;获取当前鼠标的screen坐标
-    static getXYByScreen(&x:=0, &y:=0) {
-        cmMouse := A_CoordModeMouse
-        CoordMode("mouse", "screen")
-        MouseGetPos(&x, &y)
-        CoordMode("mouse", cmMouse)
-        return [x, y]
-    }
-
     static moveByWindow(x, y:=1) {
-        _Mouse._move("window", x, y)
+        this._move("window", x, y)
     }
     static moveByScreen(x, y:=1) {
-        _Mouse._move("screen", x, y)
+        this._move("screen", x, y)
     }
 
     ;如果x是数组，则y直接当n用(调用时不需要中间空一个参数) NOTE
     ;如果是负数，则点击高/宽相减的坐标
     static clickByWindow(x, y:=1, n:=1) {
-        _Mouse._click("window", x, y, n)
+        this._click("window", x, y, n)
     }
     static clickByScreen(x, y:=1, n:=1) {
-        _Mouse._click("screen", x, y, n)
+        this._click("screen", x, y, n)
     }
     static clickByClient(x, y:=1, n:=1) { ;获取控件的坐标是client
-        _Mouse._click("client", x, y, n)
+        this._click("client", x, y, n)
     }
 
     static clickStayByWindow(x, y:=1, n:=1) { ;点击后鼠标不回到原位置
-        _Mouse._clickStay("window", n, x, y)
+        this._clickStay("window", n, x, y)
     }
     static clickStayByScreen(x, y:=1, n:=1) {
-        _Mouse._clickStay("screen", n, x, y)
+        this._clickStay("screen", n, x, y)
     }
     static clickStayByClient(x, y:=1, n:=1) { ;获取控件的坐标是client
-        _Mouse._clickStay("client", n, x, y)
+        this._clickStay("client", n, x, y)
     }
 
     ;如果x是数组，则y直接当n用(调用时不需要中间空一个参数) NOTE
     static downByWindow(x, y:=1) {
-        _Mouse.downBase("window", x, y)
+        this.downBase("window", x, y)
     }
     static downByScreen(x, y:=1, n:=1) {
-        _Mouse.downBase("screen", x, y)
+        this.downBase("screen", x, y)
     }
     static downByClient(x, y:=1, n:=1) { ;获取控件的坐标是client
-        _Mouse.downBase("client", x, y)
+        this.downBase("client", x, y)
     }
 
     ;如果x是数组，则y直接当n用(调用时不需要中间空一个参数) NOTE
@@ -460,7 +451,7 @@ class _Mouse {
         ;保存坐标
         CoordMode("mouse", "Screen")
         MouseGetPos(&x0, &y0)
-        _Mouse._move(mode, x, y)
+        this._move(mode, x, y)
         sleep(20)
         if (isobject(x))
             click(y)
@@ -472,7 +463,7 @@ class _Mouse {
     }
 
     static _clickStay(mode, n:=1, arr*) {
-        _Mouse._move(mode, arr[1], arr[2])
+        this._move(mode, arr[1], arr[2])
         sleep(20)
         click(n)
         ; isobject(x) ? click(y) : click(n)
@@ -529,11 +520,76 @@ class _Mouse {
         }
         yLoop := y0
         while(yLoop <= round(part/2+yMax)) {
-            _Mouse.clickStayByScreen(x, yLoop)
+            this.clickStayByScreen(x, yLoop)
             sleep(ms)
             yLoop += part*nFenge
         }
         CoordMode("mouse", cmMouse)
+    }
+
+}
+
+;和当前鼠标有关的坐标在 _Mouse
+;无关的才放这里
+;比如要点击窗口的 x,y,可以自动根据窗口或 aRect 转化为
+class xy {
+
+    ;从左/上，向外部偏移
+    ;返回 [xScreen, yScreen]
+    static offsetOut(xOffset, yOffset, aRect) {
+        if (aRect is integer || aRect is string) {
+            WinGetPos(&x, &y, &w, &h, aRect)
+            aRect := [x,y,w,h]
+        }
+        return [deal(xOffset,aRect[1],aRect[3]), deal(yOffset,aRect[2],aRect[4])]
+        ;v
+        ;   0 = 中点
+        ;   负数 = 左边界再往左偏移(支持小数点按百分比计算)
+        ;   正数 = 右边界再往右偏移(支持小数点按百分比计算)
+        deal(v, x, w) {
+            if (v == 0) {
+                v := x + w // 2
+            } else if (v < 0) {
+                if (v > -1)
+                    v := x - round(w*abs(v))
+                else
+                    v := x - abs(v)
+            } else {
+                if (v < 1)
+                    v := x + w + round(w * v)
+                else if (v >= 1)
+                    v := x + w + v
+            }
+            return v
+        }
+    }
+
+    ;从右/下，向内部偏移
+    static offsetIn(xOffset, yOffset, aRect, fun:="WinGetClientPos") {
+        if (aRect is integer || aRect is string) {
+            %fun%(&x, &y, &w, &h, aRect)
+            aRect := [x,y,w,h]
+        }
+        return [xy.part(aRect[3],xOffset), xy.part(aRect[4],yOffset)]
+    }
+    ;_Number.part
+    static part(w, x, vOutRange:=0) {
+        if (x == 0)
+            return x
+        if (x < 0) {
+            if (x > -1) {
+                x := w - round(w*abs(x))
+            } else {
+                x := w - abs(x)
+                if (x < 0)
+                    x := vOutRange
+            }
+        } else if (x < 1) {
+            x := round(w * x)
+        } else if (x > w) {
+            x := vOutRange
+        }
+        return x
     }
 
 }

@@ -1021,7 +1021,7 @@ class IUIAutomationElement extends IUIABase {
     ;NOTE 如果有 xOffset，则是相对于左/或右边缘，yOffset 同理
     ;TODO 如果 ElementFromHandle 传入控件id会出错
     ClickByControl(xOffset:=0, yOffset:=0) {
-        arrXY := this.getScreenXY(xOffset, yOffset)
+        arrXY := this.offsetOut(xOffset, yOffset)
         ;转成 client
         WinActive("ahk_id " . UIA.hwnd)
         WinGetClientPos(&xClient, &yClient) ;见 UIA.FindElement()
@@ -1032,7 +1032,7 @@ class IUIAutomationElement extends IUIABase {
         return arrXY
     }
     ClickByMouse(bStay:=false, xOffset:=0, yOffset:=0, cnt:=1) { ;优先用 ClickByControl 备用 TODO Button IsInvokePatternAvailable=false
-        arrXY := this.getScreenXY(xOffset, yOffset)
+        arrXY := this.offsetOut(xOffset, yOffset)
         cmMouse := A_CoordModeMouse
         CoordMode("mouse", "Screen")
         ;记录原位置
@@ -1047,20 +1047,12 @@ class IUIAutomationElement extends IUIABase {
         CoordMode("mouse", cmMouse)
         return arrXY
     }
-    ;tp=1 则返回中心点坐标[x,y](screen)
-    GetBoundingRectangle(tp:=0) {
-        obj := this.CurrentBoundingRectangle
-        if (tp)
-            return [(obj.left+obj.right)//2, (obj.top+obj.bottom)//2]
-        else ;[x,y,w,h]
-            return [obj.left,obj.top,obj.right-obj.left,obj.bottom-obj.top]
-    }
     ;以 xOffset为例, yOffset 同理
     ;   0 = 中点
-    ;   负数 = 左边界再往左偏移
-    ;   0-1 = 百分比(从左开始)
-    ;   >1 = 右边界再往右偏移
-    getScreenXY(xOffset, yOffset) {
+    ;   负数 = 左边界再往左偏移(支持小数点按百分比计算)
+    ;   正数 = 右边界再往右偏移(支持小数点按百分比计算)
+    ;见 xy.offsetOut
+    offsetOut(xOffset, yOffset) {
         obj := this.CurrentBoundingRectangle
         if (xOffset == 0)
             x := (obj.left + obj.right) // 2
@@ -1079,6 +1071,14 @@ class IUIAutomationElement extends IUIABase {
         else
             y := obj.bottom + yOffset
         return [x, y]
+    }
+    ;tp=1 则返回中心点坐标[x,y](screen)
+    GetBoundingRectangle(tp:=0) {
+        obj := this.CurrentBoundingRectangle
+        if (tp)
+            return [(obj.left+obj.right)//2, (obj.top+obj.bottom)//2]
+        else ;[x,y,w,h]
+            return [obj.left,obj.top,obj.right-obj.left,obj.bottom-obj.top]
     }
     GetControlType() { ;字符串的控件类型 CurrentControlType 转成字符串
         return UIA.ControlType.%this.CurrentControlType%

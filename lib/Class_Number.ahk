@@ -22,23 +22,22 @@ class _Number {
             return item.CommandLine
     }
 
-    ;一般用来计算整体的百分比坐标，或右侧-n的坐标
-    ;v<0	w - abs(v)
-    ;v<1	w * v
-    ;v<w	v
-    ;v>=w	other
-    forCrop(v, other:=0) {
-        if (v == 0)
-            return v
+    part(v, vOutRange:=0) {
         w := this ;一般是总宽
+        if (v == 0)
+            return 0
         if (v < 0) {
-            v := w - abs(v)
-            if (v < 0)
-                v := other
-        } else if (v < 1) {
+            if (v > -1) { ;小数点
+                v := w - round(w*abs(v))
+            } else {
+                v := w - abs(v)
+                if (v < 0)
+                    v := vOutRange
+            }
+        } else if (v < 1) { ;小数点
             v := round(w * v)
         } else if (v > w) {
-            v := other
+            v := vOutRange
         }
         return v
     }

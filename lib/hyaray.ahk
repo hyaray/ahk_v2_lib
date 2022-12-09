@@ -31,12 +31,37 @@ sendEx(arr*) {
         if (v is integer) {
             sleep(v)
         } else {
-            if (v ~= "i)^\{\w+(?: (?:down|up|\d+))?\}") ;NOTE 如果要发送 {\w+} 格式字符串，则不要用此函数
+            if (v ~= "i)^\{\w+(?: (?:down|up|\d+))?\}") ;{ctrl down}|{a 2}|{ctrl up} NOTE 如果要发送 {\w+} 格式字符串，则不要用此函数
                 send(v)
             else
                 SendText(v)
         }
     }
+}
+
+deepclone(obj) {
+	objs := map()
+	objs.default := ''
+	return clone(obj)
+
+	clone(obj) {
+		switch Type(obj) {
+			case 'Array', 'Map':
+				o := obj.Clone()
+				for k, v in o
+					if IsObject(v)
+						o[k] := objs[p := ObjPtr(v)] || (objs[p] := clone(v))
+				return o
+			case 'Object':
+				o := obj.Clone()
+				for k, v in o.OwnProps()
+					if IsObject(v)
+						o.%k% := objs[p := ObjPtr(v)] || (objs[p] := clone(v))
+				return o
+			default:
+				return obj
+		}
+	}
 }
 
 ;NOTE 可直接获取的不依赖复制
@@ -1234,7 +1259,7 @@ hyf_pipeRun(code, fn:="", callback:=0) {
 ;   第2位：0=不push序号 1=要
 ;bDistinct 是否去重
 ;返回 subArr
-hyf_selectByArr(arr2, indexKey:=1, sPyAndIndex:="01", bDistinct:=false) {
+hyf_selectByArr(arr2, indexKey:=1, sPyAndIndex:="21", bDistinct:=false) {
     if (!arr2.length)
         return []
     bAddIndex := (substr(sPyAndIndex, 1, 2) == "1")
