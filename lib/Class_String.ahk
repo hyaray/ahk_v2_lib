@@ -103,6 +103,7 @@ class _String {
         SplitPath(dir, &dirName)
         return dirName
     }
+    dirRep(dirOld, dirNew) => dirNew . substr(this, strlen(dirOld)+1)
     extRep(extNew) => RegExReplace(this, "\.\K\w+$", extNew)
     noextRep(noExtNew) {
         SplitPath(this,, &dir, &ext)
@@ -1049,25 +1050,15 @@ class _String {
     }
 
     ; /k在执行完命令后保留命令提示窗口，而/c则在执行完命令之后关闭提示窗口
-    runCmd(op:="/c") {
-        run(this.toCmd(op))
-    }
-    runCmdHide(op:="/c") {
-        run(this.toCmd(op),, "hide")
-    }
-    runWaitCmd(op:="/c") {
-        RunWait(this.toCmd(op))
-    }
-    runWaitCmdHide(op:="/c") {
-        RunWait(this.toCmd(op),, "hide")
-    }
+    runCmd(op:="/c") => run(this.toCmd(op))
+    runCmdHide(op:="/c") => run(this.toCmd(op),, "hide")
+    runWaitCmd(op:="/c") => RunWait(this.toCmd(op))
+    runWaitCmdHide(op:="/c") => RunWait(this.toCmd(op),, "hide")
     toCmd(opt:="/c") {
         ;cmd.exe /k %windir%\system32\ipconfig.exe
         return format("{1} {2} {3}", A_ComSpec,opt,this)
     }
-    toCmdStr() { ;命令行很多符号需要转义 https://blog.csdn.net/kucece/article/details/46716069
-        return StrReplace(this, "&", "^&")
-    }
+    toCmdStr() => StrReplace(this, "&", "^&") ;命令行很多符号需要转义 https://blog.csdn.net/kucece/article/details/46716069
 
     ;https://www.autohotkey.com/boards/viewtopic.php?t=97921
     ;另见 Class_NTLCalc.ahk
@@ -1139,10 +1130,10 @@ class _String {
             if(instr(NewExpr .= TmpExpr, "`n`n"))
                 throw( ValueError("Double operand in expression",, -6) ) ;for eg '2*2' is invalid.
             loop Parse, NewExpr, "`n" {
-                if(A_Index & 1 = 0 && IsNumber(A_LoopField) || A_Index & 1 == 1 && !IsNumber(A_LoopField)) {
+                if (A_Index & 1 = 0 && IsNumber(A_LoopField) || A_Index & 1 == 1 && !IsNumber(A_LoopField)) {
                     throw(ValueError("Incomplete expression",, -7))         ;  for eg '2/2+' is incomplete.
                 } else {
-                    if(A_Index & 1 = 0) {
+                    if (A_Index & 1 = 0) {
                         Sym := A_LoopField
                     } else {
                         switch Sym {
@@ -1177,12 +1168,8 @@ class _String {
             return(Val)
         }
         ;      Unary support Functions
-        BitwiseNot(n:=0) {
-            return( ~(n) )
-        }
-        LogicalNot(n:=0) {
-            return( !(n) )
-        }
+        BitwiseNot(n:=0) => ~(n)
+        LogicalNot(n:=0) => !(n)
         ; UDF (User Defined Functions)
         UnBin(B) { ; v0.12 on D516
             loop Parse, B,, "01"
@@ -1295,9 +1282,7 @@ class _String {
         return 0
     }
 
-    wordAddQuote() { ;单词增加双引号(af:day转成"af":"day")
-        return RegExReplace(this, "([a-zA-Z_]\w+)", "$1".addQuote())
-    }
+    wordAddQuote() => RegExReplace(this, "([a-zA-Z_]\w+)", "$1".addQuote()) ;单词增加双引号(af:day转成"af":"day")
 
     forJson() { ;字符串转对象(a:aa换行b:bb)转成{"a":"aa","b":"bb"}供json使用
         str1 := ""
@@ -1316,9 +1301,7 @@ class _String {
         return RegExReplace(this, "i)\.exe\K .*")
     }
 
-    noHotkey(reg:="\(&.\)") { ;删除菜单的(&A)字符串
-        return trim(RegExReplace(this, reg))
-    }
+    noHotkey(reg:="\(&.\)") => trim(RegExReplace(this, reg)) ;删除菜单的(&A)字符串
 
     ;noExt64名称再替换空格为_
     noExt64(dealSpace:=false) { ;去除_x64.exe内容的名称(比如abc_x64.exe转成abc)
@@ -1351,13 +1334,9 @@ class _String {
         return char0.join(arrMain)
     }
 
-    isZh() { ;是否中文
-        return (this ~= "^[\x{4E00}-\x{9FA5}]")
-    }
+    isZh() => (this ~= "^[\x{4E00}-\x{9FA5}]") ;是否中文
 
-    isabs() { ;判断字符串是否为路径格式
-        return (this ~= "i)^[a-z]:[\\/]")
-    }
+    isabs() => (this ~= "i)^[a-z]:[\\/]") ;判断字符串是否为路径格式
 
     ;fp是否64位程序
     is64() {
@@ -1403,9 +1382,7 @@ class _String {
         return ext.isText() || ext.isPdf() || ext.isExcel() || ext.isWord() || ext.isPPT() || ext.isAudio() || ext.isVideo()
     }
 
-    isZip() { ;是否压缩包
-        return instr(this, ".") ? (this.ext() ~= _String.regZip) : (this ~= _String.regZip)
-    }
+    isZip() => instr(this, ".") ? (this.ext() ~= _String.regZip) : (this ~= _String.regZip) ;是否压缩包
 
     isExcel() {
         if (1) {
