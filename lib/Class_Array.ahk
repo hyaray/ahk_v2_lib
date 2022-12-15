@@ -85,12 +85,23 @@ class _Array extends Array {
         return arrRes
     }
 
-    toMap(arrKey:=unset) {
+    ;目前是
+    ;[ [A1,B1], [A2,B2] ] [title1, title2]
+    ;{
+    ;    title1 : [A1,B1],
+    ;    title2 : [A2,B2],
+    ;}
+    ;TODO 是否应该是下面这种
+    ;{
+    ;    title1 : [A1,A2],
+    ;    title2 : [B1,B2],
+    ;}
+    toMap(arrTitle:=unset) {
         arr := this
         obj := map()
-        if (isset(arrKey)) {
+        if (isset(arrTitle)) {
             for v in arr ;TODO 是否判断长度
-                obj[arrKey[A_Index]] := v
+                obj[arrTitle[A_Index]] := v
         } else {
             for v in this
                 obj[A_Index] := v

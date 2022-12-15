@@ -200,10 +200,8 @@ class _GDIP {
         }
         if (fp == "")
             fp := format("{1}\{2}.png", A_Desktop,A_Now)
-        _GDIP.startup()
         oPBitmap := GDIP_PBitmap(aRect)
         oPBitmap.GdipSaveImageToFile(fp)
-        _GDIP.shutdown()
         return fp
     }
 
@@ -215,7 +213,6 @@ class _GDIP {
     ;WinGetPos(&x, &y, &w, &h, hwnd)
     ;_GDIP.rectMark([x,y,w,h])
     static rectMark(aRects, keyWaitClose:="", arrStyle:=unset) {
-        _GDIP.startup()
         if (!isobject(aRects[1]))
             aRects := [aRects]
         if (!isset(arrStyle))
@@ -241,7 +238,6 @@ class _GDIP {
         }
         oGraphics.UpdateLayeredWindow(oGui.hwnd, [0,0,w,h])
         oGraphics.SelectObject()
-        _GDIP.shutdown()
         if (keyWaitClose is string) {
             if (keyWaitClose == "")
                 return oGui
@@ -764,13 +760,13 @@ class GDIP_PBitmap extends _GDIP {
     getFromRect(aRect) {
         hdc := dllcall("CreateCompatibleDC", "ptr",0, "ptr")
         bi := _GDIP._bufBitmapInfoHeader(aRect[3], -aRect[4])
-        hbm := dllcall("CreateDIBSection", "ptr",hdc, "ptr",bi, "uint",0, "ptr*",&pBits:=0, "ptr",0, "uint",0, "ptr")
-        oBM := dllcall("SelectObject", "ptr",hdc, "ptr",hbm, "ptr")
-        hDC := dllcall("GetDC", "ptr",0, "ptr")
-        dllcall("gdi32\BitBlt", "ptr",hdc, "int",0,"int",0,"int",aRect[3],"int",aRect[4], "ptr",hDC, "int",aRect[1],"int",aRect[2], "uint",0x00CC0020 | 0x40000000) ; SRCCOPY | CAPTUREBLT
-        dllcall("ReleaseDC", "ptr",0, "ptr",hDC)
+        hbm := dllcall("CreateDIBSection", "ptr", hdc, "ptr", bi, "uint", 0, "ptr*", &pBits:=0, "ptr", 0, "uint", 0, "ptr")
+        obm := dllcall("SelectObject", "ptr", hdc, "ptr", hbm, "ptr")
+        sdc := dllcall("GetDC", "ptr",0, "ptr")
+        dllcall("gdi32\BitBlt", "ptr",hdc, "int",0, "int",0, "int",aRect[3], "int",aRect[4], "ptr",sdc, "int",aRect[1], "int",aRect[2], "uint",0x00CC0020 | 0x40000000) ; SRCCOPY | CAPTUREBLT
+        dllcall("ReleaseDC", "ptr",0, "ptr",sdc)
         dllcall("gdiplus\GdipCreateBitmapFromHBITMAP", "ptr",hbm, "ptr",0, "ptr*",&pBitmap:=0)
-        dllcall("SelectObject", "ptr",hdc, "ptr",oBM)
+        dllcall("SelectObject", "ptr",hdc, "ptr",obm)
         dllcall("DeleteObject", "ptr",hbm)
         dllcall("DeleteDC",     "ptr",hdc)
         return this.ptr := pBitmap
@@ -848,26 +844,90 @@ class GDIP_PBitmap extends _GDIP {
     }
     setPixel(x, y, ARGB) => dllcall("gdiplus\GdipBitmapSetPixel", "Ptr",this, "int",x, "int",y, "int",&ARGB)
 
+    toClipboard(paste:=false) {
+      ; Standard Clipboard Formats - https://www.codeproject.com/Reference/1091137/Windows-Clipboard-Formats
+      ; Synthesized Clipboard Formats - https://docs.microsoft.com/en-us/windows/win32/dataxchg/clipboard-formats
+
+      ; Open the clipboard with exponential backoff.
+      loop
+         if DllCall("OpenClipboard", "ptr", A_ScriptHwnd)
+            break
+         else
+            if A_Index < 6
+               Sleep (2**(A_Index-1) * 30)
+            else throw Error("Clipboard could not be opened.")
+
+      ; Requires a valid window handle via OpenClipboard or the next call to OpenClipboard will crash.
+      DllCall("EmptyClipboard")
+
+      ; #1 - Place the image onto the clipboard as a PNG stream.
+      ; Thanks Jochen Arndt - https://www.codeproject.com/Answers/1207927/Saving-an-image-to-the-clipboard#answer3
+
+      ; Create a Stream whose underlying HGlobal must be referenced or lost forever.
+      ; Rescue the HGlobal after GDI+ has written the PNG to stream and release the stream.
+      ; Please read: https://devblogs.microsoft.com/oldnewthing/20210929-00/?p=105742
+      DllCall("ole32\CreateStreamOnHGlobal", "ptr", 0, "int", False, "ptr*", &pStream:=0, "HRESULT")
+      this.select_codec("png", "")
+      DllCall("gdiplus\GdipSaveImageToStream", "ptr",this, "ptr",pStream, "ptr",this.pCodec, "ptr",this.HasOwnProp("EncoderParameter") ? this.EncoderParameter : 0)
+      DllCall("ole32\GetHGlobalFromStream", "ptr",pStream, "uint*",&hData:=0, "HRESULT")
+      ObjRelease(pStream)
+
+      ; Set the rescued HGlobal to the clipboard as a shared object.
+      png := DllCall("RegisterClipboardFormat", "str","png", "uint") ; case insensitive
+      DllCall("SetClipboardData", "uint",png, "ptr",hData)
+
+
+      ; #2 - Place the image onto the clipboard in the CF_DIB format using a bottom-up bitmap.
+      ; Thanks tic - https://www.autohotkey.com/boards/viewtopic.php?t=6517
+      DllCall("gdiplus\GdipCreateHBITMAPFromBitmap", "ptr",this, "ptr*", &hbm:=0, "uint", 0)
+
+      ; struct DIBSECTION - https://docs.microsoft.com/en-us/windows/win32/api/wingdi/ns-wingdi-dibsection
+      ; struct BITMAP - https://docs.microsoft.com/en-us/windows/win32/api/wingdi/ns-wingdi-bitmap
+      dib := Buffer(64+5*A_PtrSize) ; sizeof(DIBSECTION) = 84, 104
+      DllCall("GetObject", "ptr", hbm, "int", dib.size, "ptr", dib)
+         , pBits := NumGet(dib, A_PtrSize = 4 ? 20:24, "ptr")  ; bmBits
+         , size  := NumGet(dib, A_PtrSize = 4 ? 44:52, "uint") ; biSizeImage
+
+      ; Allocate space for a new device independent bitmap on movable memory.
+      hdib := DllCall("GlobalAlloc", "uint", 0x2, "uptr", 40 + size, "ptr") ; sizeof(BITMAPINFOHEADER) = 40
+      pdib := DllCall("GlobalLock", "ptr", hdib, "ptr")
+
+      ; Copy the BITMAPINFOHEADER.
+      DllCall("RtlMoveMemory", "ptr", pdib, "ptr", dib.ptr + (A_PtrSize = 4 ? 24:32), "uptr", 40)
+
+      ; Copy the pixel data.
+      DllCall("RtlMoveMemory", "ptr", pdib+40, "ptr", pBits, "uptr", size)
+
+      ; Unlock to moveable memory because the clipboard requires it.
+      DllCall("GlobalUnlock", "ptr", hdib)
+
+      ; CF_DIB (8) can be synthesized into CF_BITMAP (2), CF_PALETTE (9), and CF_DIBV5 (17).
+      DllCall("SetClipboardData", "uint", 8, "ptr", hdib)
+
+      ; Cleanup
+      DllCall("DeleteObject", "ptr", hbm)
+      DllCall("CloseClipboard")
+      if (paste)
+          send("{ctrl down}v{ctrl up}")
+      else
+          return ClipboardAll()
+    }
+
     ; http://www.autohotkey.com/community/viewtopic.php?p=477333
     ; returns resized bitmap. By Learning one.
-    resize(PercentOrWH, Dispose:=1) {
+    resize(arrWH, Dispose:=1) {
         ;NOTE 保存原图
         this.ptr1 := this.ptr
-        this.getSize(&w, &h)
+        this.getSize()
         ;新图宽高
-        if (isobject(PercentOrWH)) {
-            wNew := integer(PercentOrWH[1])
-            hNew := integer(PercentOrWH[2])
-        } else {
-            wNew := integer(w*PercentOrWH)
-            hNew := integer(h*PercentOrWH)
-        }
+        if !(arrWH is array)
+            arrWH := [integer(this.w * arrWH), integer(this.h * arrWH)]
         ;创建新 pBitmap
-        this.GdipCreateBitmapFromScan0(wNew, hNew)
-        oGraphics := GDIP_Graphics(this.ptr)
+        this.GdipCreateBitmapFromScan0(arrWH*)
+        oGraphics := GDIP_Graphics(this)
         oGraphics.GdipSetInterpolationMode(7)
         oGraphics.GdipSetSmoothingMode(4)
-        oGraphics.GdipDrawImageRectRect(this.ptr1, [0,0,wNew,hNew], [0,0,w,h])
+        oGraphics.GdipDrawImageRectRect(this.ptr1, [0,0,arrWH[1],arrWH[2]], [0,0,this.w,this.h])
         oGraphics := ""
         if (Dispose)
             dllcall("gdiplus\GdipDisposeImage", "ptr",this)
@@ -945,51 +1005,29 @@ class GDIP_PBitmap extends _GDIP {
     ;        dllcall("gdiplus\GdipDisposeImage", "ptr",this)
     ;}
 
-    ;裁剪
+    ;裁剪当前图片，批量裁剪见 crops
+    ;aRect 不再进行验证
     crop(aRect, Dispose:=1) {
         this.ptr1 := this.ptr
         this.getSize(&w, &h)
-        aRect[1] := forCrop(w, aRect[1])
-        aRect[2] := forCrop(h, aRect[2])
-        aRect[3] := forCrop(w, aRect[3])
-        aRect[4] := forCrop(h, aRect[4])
-        ;再次核实
-        (aRect[3] > w - aRect[1]) && aRect[3] := w - aRect[1]
-        (aRect[4] > h - aRect[2]) && aRect[4] := h - aRect[2]
         ;是否无需处理
         if (aRect[1]==0 && aRect[2]==0 && aRect[3]==w && aRect[4]==h)
             return
-        dllcall("gdiplus\GdipCloneBitmapAreaI", "int",aRect[1],"int",aRect[2],"int",aRect[3],"int",aRect[4], "int",this.getPixelFormat(), "ptr",this "ptr*",&pBitmapCrop:=0)
-        if (Dispose) {
+        OutputDebug(format("i#{1} {2}:aRect={3}", A_LineFile,A_LineNumber,json.stringify(aRect)))
+        dllcall("gdiplus\GdipCloneBitmapAreaI", "int",aRect[1],"int",aRect[2],"int",aRect[3],"int",aRect[4], "int",this.getPixelFormat(), "ptr",this, "ptr*",&pBitmapCrop:=0)
+        if (Dispose == 1) {
             this.w := aRect[3]
             this.h := aRect[4]
             this.ptr := pBitmapCrop
             dllcall("gdiplus\GdipDisposeImage", "ptr",this)
             return this
-        } else {
+        } else if (Dispose is string) {
             oPBitmap := GDIP_PBitmap(pBitmapCrop)
             oPBitmap.w := aRect[3]
             oPBitmap.h := aRect[4]
+            OutputDebug(format("i#{1} {2}:Dispose={3}", A_LineFile,A_LineNumber,Dispose))
+            oPBitmap.GdipSaveImageToFile(Dispose)
             return oPBitmap
-        }
-        ;一般用来计算整体的百分比坐标，或右侧-n的坐标
-        ;v<0	width - abs(v)
-        ;v<1	width * v
-        ;v<width	v
-        ;v>=width	other
-        forCrop(width, v, other:=0) {
-            if (v == 0)
-                return v
-            if (v < 0) {
-                v := width - abs(v)
-                if (v < 0)
-                    v := other
-            } else if (v < 1) {
-                v := round(width * v)
-            } else if (v > width) {
-                v := other
-            }
-            return v
         }
     }
 
@@ -1069,10 +1107,12 @@ class GDIP_PBitmap extends _GDIP {
 
     ;Quality 0-100
     GdipSaveImageToFile(fp, quality:=100) {
-        SplitPath(fp,,, &ext)
+        SplitPath(fp,, &dir, &ext)
         if !(ext ~= "^(?i:bmp|dib|rle|jpg|jpeg|jpe|jfif|gif|tif|tiff|png)$")
             return -1
         this.select_codec(ext, quality)
+        if (!DirExist(dir))
+            DirCreate(dir)
         return dllcall("gdiplus\GdipSaveImageToFile","ptr",this, "ptr",strptr(fp), "ptr",this.pCodec, "ptr",this.EncoderParameter) ? -5 : 0
     }
 
@@ -1198,7 +1238,7 @@ class GDIP_PBitmap extends _GDIP {
 
     toStream(ext:="tif", quality:="") {
         this.select_codec(ext, quality)
-        dllcall("ole32\CreateStreamOnHGlobal", "ptr",0, "int",true, "ptr*",&pStream:=0, "HRESULT")
+        pStream := this.CreateStreamOnHGlobal(0, true)
         dllcall("gdiplus\GdipSaveImageToStream", "ptr",this, "ptr",pStream, "ptr",this.pCodec, "ptr",this.HasOwnProp("EncoderParameter") ? this.EncoderParameter : 0)
         return pStream
     }
@@ -1276,7 +1316,7 @@ class GDIP_PBitmap extends _GDIP {
         }
         ComCall(IPdfDocument_GetPage:=6, PdfDocument, "uint",index, "ptr*",&PdfPage:=0)
         ; Render the page to an output stream.
-        dllcall("ole32\CreateStreamOnHGlobal", "ptr",0, "uint",true, "ptr*",&pStreamOut:=0)
+        pStreamOut := this.CreateStreamOnHGlobal(0, true)
         dllcall("ole32\CLSIDFromString", "wstr","{905A0FE1-BC53-11DF-8C49-001E4FC686DA}", "ptr",CLSID:=buffer(16), "HRESULT")
         dllcall("ShCore\CreateRandomAccessStreamOverStream", "ptr",pStreamOut, "uint",BSOS_DEFAULT:=0, "ptr",CLSID, "ptr*", &pRandomAccessStreamOut:=0)
         ComCall(IPdfPage_RenderToStreamAsync:=6, PdfPage, "ptr",pRandomAccessStreamOut, "ptr*",&AsyncInfo:=0)
@@ -1467,6 +1507,8 @@ class GDIP_HBitmap extends _GDIP {
     ptr := 0
 
     __new(widthOrPBitmap, heightOrColor:=0xffFFFFFF, hDC:=0) {
+        if (widthOrPBitmap is string) ;文件路径
+            widthOrPBitmap := GDIP_PBitmap(widthOrPBitmap)
         if (isobject(widthOrPBitmap)) {
             if (widthOrPBitmap is GDIP_PBitmap) {
                 dllcall("gdiplus\GdipCreateHBITMAPFromBitmap", "ptr",widthOrPBitmap, "ptr*",&hBitmap:=0, "int",heightOrColor)
@@ -1767,6 +1809,7 @@ class GDIP_Graphics extends _GDIP {
     }
 
     GdipSetImageAttributesColorMatrix(Matrix) {
+        OutputDebug(format("i#{1} {2}:type(Matrix)={3} Matrix={4}", A_LineFile,A_LineNumber,type(Matrix),Matrix))
         bufColourMatrix := buffer(100, 0)
         Matrix := RegExReplace(RegExReplace(Matrix, "^[^\d-\.]+([\d\.])", "$1",, 1), "[^\d-\.]+", "|")
         Matrix := StrSplit(Matrix, "|")

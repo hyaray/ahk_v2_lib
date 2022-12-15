@@ -43,7 +43,6 @@ deepclone(obj) {
 	objs := map()
 	objs.default := ''
 	return clone(obj)
-
 	clone(obj) {
 		switch Type(obj) {
 			case 'Array', 'Map':
@@ -884,6 +883,20 @@ hyf_removeUSB(bUPan:=true) { ;移除U盘
     }
 }
 
+;run帮助增加了数组的支持(TODO 哪里不完善？)
+;批量执行cmd并一次性返回结果
+hyf_run(sCmd) {
+    if (sCmd is array)
+        sCmd := "`n".join(sCmd)
+    shell := ComObject("WScript.Shell")
+    ; 打开 cmd.exe 禁用命令回显
+    exec := shell.Exec(A_ComSpec " /Q /K echo off")
+    ; 发送并执行命令, 使用新行分隔
+    exec.StdIn.WriteLine(sCmd "`nexit")  ; 总是在最后退出!
+    ; 读取并返回所有命令的输出
+    return exec.StdOut.ReadAll()
+}
+
 ;NOTE 实现从其他脚本比如 python 获取结果
 ;执行cmd命令并获取返回结果 TODO 少部分内容会编码错误
 ;原函数名 StdOutStream https://autohotkey.com/board/topic/96903-simplified-versions-of-seans-stdouttovar/
@@ -892,7 +905,7 @@ hyf_removeUSB(bUPan:=true) { ;移除U盘
 ; https://autohotkey.com/board/topic/7874-cmdret-ahk-functions/
 ; https://autohotkey.com/board/topic/15455-stdouttovar/
 ; https://autohotkey.com/board/topic/3489-cmdret-return-output-from-console-progs-dll-version/
-;run帮助也有此类方法(不完善)
+;run帮助也有此类方法(TODO 哪里不完善？)
 ;示例
 ;msgbox(hyf_cmd("ping www.taobao.com", StdOutStream_Callback))
 ;StdOutStream_Callback(idx, data) {

@@ -564,32 +564,4 @@ class xy {
         }
     }
 
-    ;从右/下，向内部偏移
-    static offsetIn(xOffset, yOffset, aRect, fun:="WinGetClientPos") {
-        if (aRect is integer || aRect is string) {
-            %fun%(&x, &y, &w, &h, aRect)
-            aRect := [x,y,w,h]
-        }
-        return [xy.part(aRect[3],xOffset), xy.part(aRect[4],yOffset)]
-    }
-    ;_Number.part
-    static part(w, x, vOutRange:=0) {
-        if (x == 0)
-            return x
-        if (x < 0) {
-            if (x > -1) {
-                x := w - round(w*abs(x))
-            } else {
-                x := w - abs(x)
-                if (x < 0)
-                    x := vOutRange
-            }
-        } else if (x < 1) {
-            x := round(w * x)
-        } else if (x > w) {
-            x := vOutRange
-        }
-        return x
-    }
-
 }

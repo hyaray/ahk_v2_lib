@@ -28,13 +28,13 @@ class _Number {
             return 0
         if (v < 0) {
             if (v > -1) { ;小数点
-                v := w - round(w*abs(v))
+                v := round(w * (1-abs(v)))
             } else {
                 v := w - abs(v)
                 if (v < 0)
                     v := vOutRange
             }
-        } else if (v < 1) { ;小数点
+        } else if (v <= 1) { ;小数点 TODO 是否按小数点计算
             v := round(w * v)
         } else if (v > w) {
             v := vOutRange
