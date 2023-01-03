@@ -919,7 +919,7 @@ hyf_run(sCmd) {
 ;   }
 ;}
 ; https://www.autohotkey.com/boards/viewtopic.php?t=93944
-hyf_cmd(strCode, callback:="", encode:="CP936") { ;  GAHK32 ; Modified version : SKAN 05-Jul-2013  http://goo.gl/j8XJXY
+hyf_cmd(strCode, encode:="utf-8", callback:="") { ;  GAHK32 ; Modified version : SKAN 05-Jul-2013  http://goo.gl/j8XJXY
     ; https://docs.microsoft.com/en-us/windows/win32/api/namedpipeapi/nf-namedpipeapi-createpipe
     dllcall("CreatePipe", "ptr*",&hStdInRd:=0, "ptr*",&hStdInWr:=0, "UInt",0, "UInt",0)
     ; https://docs.microsoft.com/en-us/windows/win32/api/handleapi/nf-handleapi-sethandleinformation

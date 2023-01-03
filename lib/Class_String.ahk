@@ -1547,10 +1547,18 @@ class _String {
     urlClean() {
         objUrl := this.jsonUrl()
         if (objUrl["hostname"] == "www.bilibili.com") {
-            if (instr(objUrl["pathname"], "/video/"))
-                return objUrl["origin"] . RegExReplace(objUrl["pathname"], "^\/video\/\w+\K.*") ;. objUrl["search"]
-            else
+            if (instr(objUrl["pathname"], "/video/")) {
+                ;OutputDebug(format("i#{1} {2}:bilibili-video pathname={3}", A_LineFile,A_LineNumber,objUrl["pathname"]))
+                newPathname := RegExReplace(objUrl["pathname"],"^\/video\/\w+\K.*")
+                newSearch := RegExReplace(objUrl["search"],"^(\?p\=\d+)?\K.*")
+                ;OutputDebug(format("i#{1} {2}:new pathname={3}", A_LineFile,A_LineNumber,newPathname))
+                ;OutputDebug(format("i#{1} {2}:new search={3}", A_LineFile,A_LineNumber,newSearch))
+                url := format("{1}{2}{3}", objUrl["origin"], newPathname, newSearch)
+                OutputDebug(format("i#{1} {2}:urlClean={3}", A_LineFile,A_LineNumber,url))
+                return url
+            } else {
                 return objUrl["href"]
+            }
         } else if (objUrl["hostname"] == "item.jd.com") {
             return objUrl["origin"] . objUrl["pathname"]
         } else

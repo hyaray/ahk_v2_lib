@@ -234,11 +234,12 @@ class _ListBox extends _Ctrl {
         throw ValueError("value not matched")
     }
 
+    ;TODO 有问题
     ;第 idx 行所有文本(一般需要 StrSplit)
     getTextByIndex(idx) {
         len := SendMessage(LB_GETTEXTLEN:=0x18A, idx-1,,, this.hCtl)+1
         var := buffer(len<<1, 0)
-        SendMessage(LB_GETTEXT:=0x189, idx-1,&var,, this.hCtl)+1
+        SendMessage(LB_GETTEXT:=0x189, idx-1, &var,, this.hCtl)+1
         return strget(&var)
     }
 

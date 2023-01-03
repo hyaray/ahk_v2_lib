@@ -100,8 +100,16 @@ class _Array extends Array {
         arr := this
         obj := map()
         if (isset(arrTitle)) {
-            for v in arr ;TODO 是否判断长度
-                obj[arrTitle[A_Index]] := v
+            if (arrTitle is array) {
+                for v in arr ;TODO 是否判断长度
+                    obj[arrTitle[A_Index]] := v
+            } else if (arrTitle == 0) { ;当 key
+                for v in this
+                    obj[v] := A_Index
+            } else if (arrTitle == 1) { ;当 value
+                for v in this
+                    obj[A_Index] := v
+            }
         } else {
             for v in this
                 obj[A_Index] := v
