@@ -53,7 +53,9 @@ NOTE NOTE NOTE 思路：
                      两个条件可用 And 组合
                          cond := UIA.CreateAndCondition(UIA.CreatePropertyCondition("ControlType", "Button"), UIA.CreatePropertyCondition("Name", "确定"))
                          cond := UIA.CreateOrCondition(UIA.CreatePropertyConditionEx("Name", "树"), UIA.CreatePropertyCondition("ValueValue", "树"))
-                     更多条件用 array/obj，见 UIA.PropertyCondition([{ControlType: 50000, Name: "edit"}, {ControlType: 50004, Name: "edit", flags: 3}])
+                     更多条件
+                         CreateAndConditionFromArray
+                         见 UIA.PropertyCondition([{ControlType: 50000, Name: "edit"}, {ControlType: 50004, Name: "edit", flags: 3}])
                 3.指定搜索范围 scope 见 TreeScope(默认所有子孙节点:4)
                 4.开始搜索
                 查找单个
@@ -729,8 +731,9 @@ class UIA {
         if (A_PtrSize == 4) {
             v := ComVar(value,, true)
             comcall(23, this, "int",propertyId, "int64",numget(v,0,"int64"), "int64",numget(v,8,"int64"), "ptr*",&newCondition:=0)
-        } else
+        } else {
             comcall(23, this, "int",propertyId, "ptr",ComVar(value,, true), "ptr*",&newCondition:=0)
+        }
         return IUIAutomationPropertyCondition(newCondition)
     }
 
@@ -743,8 +746,9 @@ class UIA {
         if (A_PtrSize == 4) {
             v := ComVar(value)
             comcall(24, this, "int",propertyId, "int64",numget(v,0,"int64"), "int64",numget(v,8,"int64"), "int",flags, "ptr*",&newCondition:=0)
-        } else
+        } else {
             comcall(24, this, "int",propertyId, "ptr",ComVar(value,,true), "int",flags, "ptr*",&newCondition:=0)
+        }
         return IUIAutomationPropertyCondition(newCondition)
     }
 
@@ -754,6 +758,10 @@ class UIA {
     static CreateAndCondition(condition1, condition2) => (comcall(25, this, "ptr",condition1, "ptr",condition2, "ptr*",&newCondition:=0), IUIAutomationAndCondition(newCondition))
 
     ; Creates a condition that selects elements based on multiple conditions, all of which must be true.
+    ;arrA := ComObjArray(0xd, 2)
+    ;arrA[0] := UIA.CreatePropertyCondition("ControlType", "Edit")[]
+    ;arrA[1] := UIA.CreatePropertyCondition("name", "abc")[]
+    ;cond := UIA.CreateAndConditionFromArray(arrA)
     static CreateAndConditionFromArray(conditions) => (comcall(26, this, "ptr",conditions, "ptr*",&newCondition:=0), IUIAutomationAndCondition(newCondition))
 
     ; Creates a condition that selects elements based on multiple conditions, all of which must be true.
@@ -1040,7 +1048,7 @@ class IUIAutomationElement extends IUIABase {
         OutputDebug(format("d#{1} {2}:arrXY={3}", A_LineFile,A_LineNumber,json.stringify(arrXY)))
         MouseMove(arrXY[1], arrXY[2], 0)
         sleep(20)
-        click(cnt)
+        (cnt) && click(cnt)
         ;回到原位置
         if (!bStay)
             MouseMove(x0, y0, 0)

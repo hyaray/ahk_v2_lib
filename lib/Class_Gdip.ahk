@@ -77,7 +77,7 @@ class _GDIP {
                 _GDIP.hModule := dllcall("LoadLibrary", "Str","gdiplus")
             bufSi := buffer(8+A_PtrSize*2, 0)
             numput("UInt", 1, bufSi)
-            dllcall("gdiplus\GdiplusStartup","ptr*",&pToken:=0, "Ptr",bufSi, "Ptr",0)
+            dllcall("gdiplus\GdiplusStartup","ptr*",&pToken:=0, "Ptr",bufSi.ptr, "Ptr",0)
             _GDIP.pToken := pToken
         }
 		_GDIP.RefCount += 1

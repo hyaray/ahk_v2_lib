@@ -105,10 +105,23 @@ class _String {
     }
     dirRep(dirOld, dirNew) => dirNew . substr(this, strlen(dirOld)+1)
     extRep(extNew) => RegExReplace(this, "\.\K\w+$", extNew)
-    noextRep(noExtNew) {
+    noExtRep(noExtNew) {
         SplitPath(this,, &dir, &ext)
         return format("{1}\{2}.{3}", dir,noExtNew,ext)
     }
+
+    ;noExt64名称再替换空格为_
+    noExt64(dealSpace:=false) { ;去除_x64.exe内容的名称(比如abc_x64.exe转成abc)
+        res := RegExReplace(this, "i)_?(x?(64))?(\.\w+)?$")
+        if (dealSpace)
+            res := StrReplace(res, A_Space, "_")
+        return res
+    }
+
+    ;删除文件名前面的序号
+    noIndex() => RegExReplace(this, "^\d{1,2}([.、]\s*)?")
+
+    noHotkey(reg:="\(&.\)") => trim(RegExReplace(this, reg)) ;删除菜单的(&A)字符串
 
     ;在arr里的第1个序号
     index(arr) {
@@ -1300,19 +1313,6 @@ class _String {
             return StrSplit(this,'"')[2]
         return RegExReplace(this, "i)\.exe\K .*")
     }
-
-    noHotkey(reg:="\(&.\)") => trim(RegExReplace(this, reg)) ;删除菜单的(&A)字符串
-
-    ;noExt64名称再替换空格为_
-    noExt64(dealSpace:=false) { ;去除_x64.exe内容的名称(比如abc_x64.exe转成abc)
-        res := RegExReplace(this, "i)_?(x?(64))?(\.\w+)?$")
-        if (dealSpace)
-            res := StrReplace(res, A_Space, "_")
-        return res
-    }
-
-    ;删除文件名前面的序号
-    noIndex() => RegExReplace(this, "^\d{1,2}([.、]\s*)?")
 
     ;250/年*116=29000/年*3=83520元
     ;TODO 待完善

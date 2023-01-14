@@ -1,95 +1,90 @@
-﻿/*
-类似实现 https://github.com/Xeo786/Rufaydium-Webdriver
-CDP https://chromedevtools.github.io/devtools-protocol/1-3/Page
-原理：
-1.this.detect(true)
-2.httpOpen
-3.getPageList|getCurrentPage
-当前页面的处理，推荐用
-oPage := CDP_Page(_CB)
-
-https://github.com/G33kDude/Chrome.ahk
-https://github.com/mark-wiemer/Chrome.ahk/tree/v2
-ImagePut原理 https://github.com/iseahound/ImagePut/wiki/Internal-Documentation
-https://www.autohotkey.com/boards/viewtopic.php?f=6&t=42890
-快捷键 https://support.google.com/chrome/answer/157179?hl=zh-Hans
-驱动	https://sites.google.com/a/chromium.org/chromedriver/downloads
-	https://chromedriver.storage.googleapis.com/index.html
-
-chrome://flags/#enable-tab-audio-muting
-chrome://flags/#enable-quic
-chrome://flags/#smooth-scrolling
-chrome://flags/#overlay-scrollbars
-
-清除全部缓存
-    send("{ctrl down}{shift down}{delete}{shift up}{ctrl up}")
-清除当前页缓存
-    右键刷新按钮→清空缓存并硬性重新加载
-
-打开网址变成【本地文件】：设置其他浏览器为默认，再设置回默认浏览器。
-扩展被隐藏：往左拖动地址栏右侧把他们都显示出来就行了
-弹框询问是否转中文：
-翻墙科普 https://www.youtube.com/playlist?list=PLqybz7NWybwUgR-S6m78tfd-lV4sBvGFG
-ctrl-f查找内容时崩溃：
-
-允许编辑网页
-    开发者工具→console→最下方输入 document.body.contentEditable='true';
-
-命令行
-    --user-data-dir=d:\hy\User Data ;如果用命令行指定，普通的邮箱弹框则会加载默认文件夹影响使用
-
-NOTE 问题：
-打不开，热点没问题：判断dns，ping ip测试
-页面变成英文，删除 User Data\Default\Local Storage\ 文件夹
-;您的连接不是私密连接
-    添加命令行参数 --ignore-certificate-errors
-    chrome://flags ??
-    send("thisisunsafe")
-
-路径：
-HKEY_CURRENT_USER\SOFTWARE\Classes\http\DefaultIcon
-*/
-
-;NOTE url 支持多个，用空格分开即可
-;StrSplit(RegRead("HKEY_CLASSES_ROOT\http\shell\open\command"), '"')[1]
-
+﻿#include WebSocket.ahk
 class _CDP {
-    static oHttp := ComObject('WinHttp.WinHttpRequest.5.1')
-    ;static funLogin := {}
-    static objSingleHost := map( ;指定单页面的host
-        "oa.hf-zj.com:9898", 1,
-        "192.168.16.6", 1,
-        "192.168.16.217", 1,
-        "192.168.16.228", 1,
-    )
 
-    ;NOTE 必须要运行
-    static init(fp, port) {
+    static objInstance := map()
+
+    static getInfo(name) {
+        return map(
+            "chrome", ["s:\CentBrowser\chrome.exe", 9222],
+            "msedge", ["c:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe", 9223],
+            "obsidian", [A_LocalAppdata . "\Obsidian\Obsidian.exe", 9221],
+        )[name]
+    }
+
+    ;统一管理各 Chrome 系浏览器的实例
+    static getInstance(name, key:="") {
+        if (!_CDP.objInstance.has(name)) {
+            OutputDebug(format("w#{1} {2}:A_ThisFunc={3} create instanceCDP of {4} key={5}", A_LineFile,A_LineNumber,A_ThisFunc,name,key))
+            _CDP.objInstance[name] := _CDP(_CDP.getInfo(name)*)
+        } else {
+            OutputDebug(format("w#{1} {2}:A_ThisFunc={3} exist {4} instanceCDP, key={5}", A_LineFile,A_LineNumber,A_ThisFunc,name,key))
+        }
+        oCDP := _CDP.objInstance[name]
+        switch key {
+            case "": return oCDP
+            case "page": return oCDP.getPage()
+            default: return oCDP.getCurrentPage(key)
+        }
+    }
+
+    __new(fp, DebugPort) {
         this.ChromePath := fp
         SplitPath(this.ChromePath, &fn)
         this.exeName := fn
-        this.DebugPort := port
+        this.DebugPort := DebugPort
         this.hwnd := 0
         this.pid := 0
-        ;msgbox(type(this) . "`n" . this.hwnd . "`n" . this.pid)
-        this.userdata := ""
-        if (this.userdata != "") {
-            if (!FileExist(this.userdata))
-                DirCreate(this.userdata)
-            this.sParam .= ' --user-data-dir=' . this.CliEscape(this.userdata)
-        }
         ;获取 sParam
         this.sParam := format("--remote-debugging-port={1}", this.DebugPort)
+        this.userdata := ""
+        ;if (this.userdata != "") {
+        ;    if (!FileExist(this.userdata))
+        ;        DirCreate(this.userdata)
+        ;    this.sParam .= ' --user-data-dir=' . this.CliEscape(this.userdata)
+        ;}
+        this.http := ComObject('WinHttp.WinHttpRequest.5.1')
+        this.objSingleHost := map( ;指定单页面的host
+            "oa.hf-zj.com:9898", 1,
+            "192.168.16.6", 1,
+            "192.168.16.217", 1,
+            "192.168.16.228", 1,
+        )
         ;this.sParam .= ' ' . flags
     }
 
+    ;Escape a string in a manner suitable for command line parameters
+    CliEscape(Param) => format('"{1}"', RegExReplace(Param, '(\\*)"', '$1$1\"'))
+
+    ;通用命令行参数获取 pid
+    FindInstances() {
+        for item in ComObjGet('winmgmts:').ExecQuery(format("SELECT CommandLine,ProcessId FROM Win32_Process WHERE Name = '{1}'", this.exeName)) {
+            if (RegExMatch(item.CommandLine, '--remote-debugging-port=(\d+)', &m)) {
+                ;OutputDebug(format("d#{1} {2}:return CommandLine={3}", A_LineFile,A_LineNumber,item.CommandLine))
+                return map(
+                    "DebugPort", m[1],
+                    "CommandLine", item.CommandLine,
+                    "pid", item.ProcessId,
+                )
+            } else {
+                OutputDebug(format("d#{1} {2}:not matched CommandLine={3}", A_LineFile,A_LineNumber,item.CommandLine))
+            }
+        }
+        return map()
+    }
+
+    ;pathname前面要带 /
+    httpOpen(pathname, bResponse:=false) {
+        this.http.open('GET', format("http://127.0.0.1:{1}/json{2}", this.DebugPort,pathname))
+        resSend := this.http.send()
+        return bResponse ? JSON.parse(this.http.responseText) : resSend
+    }
+
     ;NOTE 有些页面只限制打开1个，规则在哪里指定
-    ;往往在 __new 里被调用 或见 Chrome_Do.openUrl()
-    static tabOpenLink(arrUrl:='', funAfterDo:="", bActive:=true) { ;about:blank chrome://newtab
+    ;往往在 __new 里被调用 或见 CDPdo.openUrl()
+    tabOpenLink(arrUrl:="", funAfterDo:="", bActive:=true) { ;about:blank chrome://newtab
         OutputDebug(format("i#{1} {2}:A_ThisFunc={3}", A_LineFile,A_LineNumber,A_ThisFunc))
-        if (!isobject(arrUrl))
+        if (arrUrl is string)
             arrUrl := (arrUrl == "") ? [] : [arrUrl]
-        ;msgbox(json.stringify(arrUrl, 4))
         if (arrUrl.length > 1)
             bActive := false
         ;bActive := (A_Index==arrUrl.length) ? bActive : false ;只激活最后一个标签
@@ -97,10 +92,11 @@ class _CDP {
             OutputDebug(format("i#{1} {2}:detect hwnd={3}", A_LineFile,A_LineNumber,this.hwnd))
             if (arrUrl.length) {
                 objPage := this.getPageList(, "host")
+                ;OutputDebug(format("i#{1} {2}:{3} objPage={4}", A_LineFile,A_LineNumber,A_ThisFunc,json.stringify(objPage,4)))
                 arrRes := []
                 for urlOpen in arrUrl { ;NOTE 判断页面是否已打开
                     urlOpen := rtrim(urlOpen, "/")
-                    if (!instr(urlOpen, "://"))
+                    if (!instr(urlOpen, "://") && !(urlOpen ~= "^\w:\\"))
                         urlOpen := "http://" . urlOpen
                     arrRes.push(A_Index . urlOpen)
                     objOpen := urlOpen.jsonUrl()
@@ -116,7 +112,7 @@ class _CDP {
                     OutputDebug(format("i#{1} {2}:this.arrEmpty={3}", A_LineFile,A_LineNumber,json.stringify(this.arrEmpty,4)))
                     ;打开标签
                     if (this.arrEmpty.length) ;优先在空白页打开
-                        CDP_Page(this, this.arrEmpty.pop()["webSocketDebuggerUrl"]).navigate(urlOpen, bActive)
+                        this.getPage().navigate(urlOpen, bActive) ;CDPP(this, this.arrEmpty.pop()["webSocketDebuggerUrl"])
                     else ;新标签打开
                         this.httpOpen("/new?" . urlOpen) ;TODO 哪里有问题
                 }
@@ -136,7 +132,7 @@ class _CDP {
             this.runChrome(urls)
         }
         if (arrUrl.length == 1 && bActive) {
-            oPage := CDP_Page(this)
+            oPage := this.getPage()
             this.thisisunsafe(oPage)
             ;自动登录接口，为了解耦，不直接放实现函数
             if (funAfterDo) { ;TODO 判断条件不好获取
@@ -153,39 +149,12 @@ class _CDP {
         }
     }
 
-    static getTipsText() {
-        cmMouse := A_CoordModeMouse
-        CoordMode("Mouse", "screen")
-        MouseGetPos(&xMouse, &yMouse)
-        CoordMode("Mouse", cmMouse)
-        cond := UIA.CreatePropertyCondition("ControlType", "Tooltip")
-        for hwnd in WinGetList("ahk_class Chrome_WidgetWin_1") {
-            WinGetPos(&x, &y,,, hwnd)
-            if ((x-xMouse)**2 + (y-yMouse)**2 <= 100**2) { ;离鼠标近
-                el := UIA.ElementFromHandle(hwnd).GetFirst()
-                if (el.CurrentControlType == UIA.ControlType.Tooltip)
-                    return el.CurrentName
-            }
-        }
-    }
-
-    static runChrome(urls:="") {
-        sCmd := format("{1} {2} {3}", _CDP.CliEscape(this.ChromePath),this.sParam,urls)
-        run(sCmd,,, &pid) ;--ignore-certificate-errors
-        this.pid := pid
-        this.hwnd := WinWait("ahk_class Chrome_WidgetWin_1 ahk_pid " . this.pid)
-        OutputDebug(format("i#{1} {2}:自动运行浏览器 hwnd={3} sCmd={}", A_LineFile,A_LineNumber,this.hwnd,sCmd))
-        WinActivate
-        WinMaximize
-        return this.hwnd
-    }
-
     ;核实并获取Chrome的 pid 和 hwnd
     ;0 不检测
     ;1 检测不到则关闭当前浏览器
     ;2 检测不到则关闭并正确打开浏览器
     ;返回 hwnd
-    static detect(tp:=0) {
+    detect(tp:=0) {
         if (this.hwnd && ProcessExist(this.pid))
             return this.hwnd
         if (ProcessExist(this.exeName)) { ;可能脚本重启等原因丢失了数据
@@ -232,14 +201,20 @@ class _CDP {
         return false
     }
 
-    ;pathname前面要带 /
-    static httpOpen(pathname, bResponse:=false) {
-        _CDP.oHttp.open('GET', format("http://127.0.0.1:{1}/json{2}", this.DebugPort,pathname))
-        resSend := _CDP.oHttp.send()
-        return bResponse ? JSON.parse(_CDP.oHttp.responseText) : resSend
+    runChrome(urls:="") {
+        sCmd := format("{1} {2} {3}", this.CliEscape(this.ChromePath),this.sParam,urls)
+        run(sCmd,,, &pid) ;--ignore-certificate-errors
+        this.pid := pid
+        this.hwnd := WinWait("ahk_class Chrome_WidgetWin_1 ahk_pid " . this.pid)
+        OutputDebug(format("i#{1} {2}:自动运行浏览器 hwnd={3} sCmd={}", A_LineFile,A_LineNumber,this.hwnd,sCmd))
+        WinActivate
+        WinMaximize
+        return this.hwnd
     }
 
     /*
+    NOTE 仅当非常明确只是获取网址和标题，用 getCurrentPage("json")
+    其他考虑功能性，都用 getPage
     {
         "description": "",
         "devtoolsFrontendUrl": "/devtools/inspector.html?ws=127.0.0.1:9222/devtools/page/8A5B6CDB1ABE9E40BAD3C9902841BBE2",
@@ -251,21 +226,36 @@ class _CDP {
         "webSocketDebuggerUrl": "ws://127.0.0.1:9222/devtools/page/8A5B6CDB1ABE9E40BAD3C9902841BBE2"
     }
     */
-    static getCurrentPage(key:="") {
+    getCurrentPage(key:="") {
         this.detect(true)
         ;debug 模式获取
         try {
             ;OutputDebug(format("i#{1} {2}:httpAll={3}", A_LineFile,A_LineNumber,json.stringify(this.httpOpen("",true),4)))
-            for obj in this.httpOpen("", true) {
-                if (obj["type"] == "page" && obj["title"] != "DevTools") { ;NOTE by 火冷 <2022-10-01 17:42:12>
-                    obj["url"] := rtrim(obj["url"], "/")
-                    return key=="" ? obj : obj[key]
+            for objHttp in this.httpOpen("", true) {
+                if (objHttp["type"] == "page" && objHttp["title"] != "DevTools") { ;NOTE by 火冷 <2022-10-01 17:42:12>
+                    objHttp["url"] := rtrim(objHttp["url"], "/")
+                    ;OutputDebug(format("i#{1} {2}:key={3} currentObj={4}", A_LineFile,A_LineNumber,key,json.stringify(objHttp,4)))
+                    OutputDebug(format("i#{1} {2}:{3} getCurrentPage key={4}", A_LineFile,A_LineNumber,A_ThisFunc,key))
+                    switch key {
+                        case "json": ;增加个 title
+                            jsonPage := objHttp["url"].jsonUrl()
+                            jsonPage["title"] := objHttp["title"]
+                            return jsonPage
+                        case "arr": ;标题+url
+                        case "": return objHttp
+                        default: return objHttp[key]
+                    }
                 }
             }
         } catch {
             return map()
         }
     }
+
+    ;Firefox UIA.ElementFromHandle(WinActive("A")).FindFirst(UIA.CreatePropertyCondition("AutomationId", "urlbar-input")).GetCurrentPropertyValue("ValueValue")
+    getUrl() => this.getCurrentPage("url")
+    ;删除末尾的 - Cent Browser
+    getTitle() => this.getCurrentPage("title")
 
     /*
     Queries Chrome for a list of pages that expose a debug interface.
@@ -274,12 +264,13 @@ class _CDP {
     所有标签+插件的信息
     keyJson
         ="" 则返回数组
-        否则应设置为 jsonUrl 包含的 key，返回以 keyJson | "href" 为索引的 map
+        否则应设置为 jsonUrl 包含的 key，返回以 keyJson | "href" 为索引的 map(用来判断xx页面是否存在)
     */
-    static getPageList(funTrue:="", keyJson:="") {
+    getPageList(funTrue:="", keyJson:="") {
         if (funTrue == "")
             funTrue := (obj)=>obj["type"] == "page"
         arr := this.httpOpen("", true)
+        OutputDebug(format("i#{1} {2}:arr={3}", A_LineFile,A_LineNumber,json.stringify(arr,4)))
         if (keyJson == "")
             arrRes := []
         else
@@ -305,27 +296,23 @@ class _CDP {
                 }
             }
         }
-        return keyJson == "" ? arrRes : objRes
-    }
-
-    static closeNewtab(id:="") {
-        if (id == "") {
-            arr := this.getPageList((obj)=>obj["url"]=="chrome://newtab")
-            if (arr.length)
-                id := arr[1]['id']
+        if (keyJson == "") {
+            OutputDebug(format("i#{1} {2}:arrRes={3}", A_LineFile,A_LineNumber,json.stringify(arrRes,4)))
+            return arrRes
+        } else {
+            OutputDebug(format("i#{1} {2}:objRes={3}", A_LineFile,A_LineNumber,json.stringify(objRes,4)))
+            return objRes
         }
-        if (id != "")
-            return this.httpOpen("/close/" . id)
     }
 
-    ;static ClosePage(opts, MatchMode:='exact') {
-    ;    for page in this.FindPages(opts, MatchMode)
-    ;        return this.httpOpen("/close/" . page["id"])
-    ;}
-
-    ;static ActivatePage(opts, MatchMode:='exact') {
-    ;    for page in this.FindPages(opts, MatchMode)
-    ;        return this.httpOpen("/activate/" . page["id"])
+    ;closeNewtab(id:="") {
+    ;    if (id == "") {
+    ;        arr := this.getPageList((obj)=>obj["url"]=="chrome://newtab")
+    ;        if (arr.length)
+    ;            id := arr[1]['id']
+    ;    }
+    ;    if (id != "")
+    ;        return this.httpOpen("/close/" . id)
     ;}
 
     ;static FindPages(opts, MatchMode := 'exact') {
@@ -344,17 +331,24 @@ class _CDP {
     ;    return Pages
     ;}
 
-    ;Firefox UIA.ElementFromHandle(WinActive("A")).FindFirst(UIA.CreatePropertyCondition("AutomationId", "urlbar-input")).GetCurrentPropertyValue("ValueValue")
-    static getUrl() => this.getCurrentPage()["url"]
+    ;static ClosePage(opts, MatchMode:='exact') {
+    ;    for page in this.FindPages(opts, MatchMode)
+    ;        return this.httpOpen("/close/" . page["id"])
+    ;}
+
+    ;static ActivatePage(opts, MatchMode:='exact') {
+    ;    for page in this.FindPages(opts, MatchMode)
+    ;        return this.httpOpen("/activate/" . page["id"])
+    ;}
 
     ;https://player.bilibili.com/player.html?aid=976962208&bvid=BV1244y1Y7VR&cid=457445567&page=1
     ;<iframe src="//player.bilibili.com/player.html?aid=720241593&bvid=BV1KQ4y1a7pd&cid=401115360&page=1" scrolling="no" border="0" frameborder="no" framespacing="0" allowfullscreen="true"> </iframe>
-    static iframeCode() {
-        obj := this.getCurrentPage()
-        return format('<iframe src="{1}" scrolling="no" border="0" frameborder="no" framespacing="0" allowfullscreen="true" width="100%" height="450px"> </iframe>', obj["href"])
-    }
+    ;iframeCode() {
+    ;    obj := this.getCurrentPage()
+    ;    return format('<iframe src="{1}" scrolling="no" border="0" frameborder="no" framespacing="0" allowfullscreen="true" width="100%" height="450px"> </iframe>', obj["href"])
+    ;}
 
-    static thisisunsafe(oPage) {
+    thisisunsafe(oPage) {
         objHost := map(
             "192.168.16.218:4430", 1,
             "192.168.16.217", 1,
@@ -369,12 +363,6 @@ class _CDP {
         } else {
             return false
         }
-    }
-
-    static isF12() {
-        WinGetPos(&x0, &y0, &w0, &h0, "A")
-        ControlGetPos(&x, &y, &w, &h, "Chrome_RenderWidgetHostHWND1", "A")
-        return (x+w < w0 - 100) || (y+h < h0 - 100)
     }
 
     ;翻译切换
@@ -394,273 +382,195 @@ class _CDP {
     ;    ; send("{escape}") ;退出窗口
     ;}
 
-    ;删除末尾的 - Cent Browser
-    static title(bClean:=true) => this.getCurrentPage()["title"]
+    ;deleteCache() => send("{ctrl down}{shift down}{delete}{shift up}{ctrl up}")
 
-    ;移到次显示器并全屏播放
-    static moveToSubScreen(winTitle:="", full:=true) {
-        WinMove(A_ScreenWidth-8, -8,,, winTitle)
-        if (full && WinGetExStyle(winTitle)) ;非全屏则返回 256，否则为 0
-            send("{F11}")
-    }
-
-    static deleteCache() => send("{ctrl down}{shift down}{delete}{shift up}{ctrl up}")
-
-    static errScroll() { ;无法滚动的问题
-        WinWaitActive("ahk_exe Chrome.exe")
-        A_Clipboard := "chrome://flags/#enable-gpu-rasterization"
-        doSend()
-        msgbox("设置【GPU rasterization】成disabled，完成后请关闭本窗口并按pause键继续")
-        KeyWait("pause", "D")
-        sleep(200)
-        WinWaitActive("ahk_exe Chrome.exe")
-        A_Clipboard := "chrome://settings/"
-        doSend()
-        msgbox("点击最下方的【高级】，拉到最后，关闭【使用硬件加速模式（如果可用）】，完成后请关闭本窗口并按pause键结束")
-        KeyWait("pause", "D")
-        tooltip()
-        doSend() {
-            sleep(20)
-            send("o")
-            sleep(100)
-            send("c")
-            sleep(1000)
-        }
-    }
-
-    static errOpenUrl() { ;打开网址变成c:\*
-        run("s:\CentBrowser\chrome.exe --make-default-browser")
-        msgbox("完成")
-    }
-
-    static SoundClose() { ;设置静音
-        ;hyf_winActiveOrOpen("ahk_class Chrome_WidgetWin_1 ahk_exe Chrome.exe", gBrowser, 1, "Max")
-        WinWaitActive("ahk_exe Chrome.exe")
-        this.tabOpenLink("chrome://flags/#enable-tab-audio-muting")
-        if !WinWaitActive("chrome://flags/#enable-tab-audio-muting",, 1) {
-            A_Clipboard := "chrome://flags/#enable-tab-audio-muting"
-            msgbox("网址已复制，请手动粘贴并打开")
-        }
-        msgbox("【启用】tab audio muting UI control`n重启浏览器后，对标签右键就可以设置【将此标签页静音】")
-    }
-
-    static mhtml() { ;保存为mhtml
-        this.tabOpenLink("chrome://flags/#save-page-as-mhtml")
-    }
-
-    static downloadSave() { ;下载内容要点击【保留】才行
-        this.tabOpenLink("chrome://settings/privacyV")
-        msgbox("【保护您和您的设备不受危险网站的侵害】选项取消打勾")
-    }
-
-    ;Escape a string in a manner suitable for command line parameters
-    static CliEscape(Param) => format('"{1}"', RegExReplace(Param, '(\\*)"', '$1$1\"'))
-
-    ;通用命令行参数获取 pid
-    static FindInstances() {
-        for item in ComObjGet('winmgmts:').ExecQuery(format("SELECT CommandLine,ProcessId FROM Win32_Process WHERE Name = '{1}'", this.exeName)) {
-            if (RegExMatch(item.CommandLine, '--remote-debugging-port=(\d+)', &m)) {
-                ;OutputDebug(format("d#{1} {2}:return CommandLine={3}", A_LineFile,A_LineNumber,item.CommandLine))
-                return map(
-                    "DebugPort", m[1],
-                    "CommandLine", item.CommandLine,
-                    "pid", item.ProcessId,
-                )
-            } else {
-                OutputDebug(format("d#{1} {2}:not matched CommandLine={3}", A_LineFile,A_LineNumber,item.CommandLine))
-            }
-        }
-        return map()
-    }
-
-}
-
-/*
-CDP https://chromedevtools.github.io/devtools-protocol/1-3/Page
-Connects to the debug interface of a page given its WebSocket URL.
-{
-    "description": "",
-    "devtoolsFrontendUrl": "/devtools/inspector.html?ws=127.0.0.1:9222/devtools/page/8A5B6CDB1ABE9E40BAD3C9902841BBE2",
-    "faviconUrl": "https://mat1.gtimg.com/www/icon/favicon2.ico",
-    "id": "8A5B6CDB1ABE9E40BAD3C9902841BBE2",
-    "title": "腾讯首页",
-    "type": "page",
-    "url": "https://www.qq.com",
-    "webSocketDebuggerUrl": "ws://127.0.0.1:9222/devtools/page/8A5B6CDB1ABE9E40BAD3C9902841BBE2"
-}
-*/
-class CDP_Page extends WebSocket {
-    static count := 0
-    idx := 0
-    responses := map()
-
-    __new(cls, events:=0) {
-        CDP_Page.count++
-        ;OutputDebug(format("w#{1} {2}:CDP_Page.count={3}", A_LineFile,A_LineNumber,CDP_Page.count))
-        this.cls := cls
-        ;OutputDebug(format("i#{1} {2}:page={3}", A_LineFile,A_LineNumber,this.cls.getCurrentPage()))
-        for k, v in this.cls.getCurrentPage()
-            this.%k% := v
-        ;OutputDebug(format("i#{1} {2}:this.url={3}", A_LineFile,A_LineNumber,this.url))
-        this.setUrlJson(this.url)
-        super.__new(StrReplace(this.webSocketDebuggerUrl, "localhost", "127.0.0.1")) ;NOTE 会修改url属性值为 webSocketDebuggerUrl 值
-        ;pthis := ObjPtr(this)
-        ;this.KeepAlive := keepalive
-        this.callback := events
-        ;SetTimer(keepalive, -1000)
-        ;keepalive() {
-        ;    self := ObjFromPtrAddRef(pthis)
-        ;    self('Browser.getVersion',, false)
-        ;}
-    }
-
-    __delete() {
-        CDP_Page.count--
-        ;OutputDebug(format("w#{1} {2}:CDP_Page.count={3}", A_LineFile,A_LineNumber,CDP_Page.count))
-        ;SetTimer(keepalive, 0)
-        super.close()
-    }
-
-    ; https://chromedevtools.github.io/devtools-protocol/1-3/Runtime/#method-evaluate
-    ;判断null用 evaluate(js)["value"] is ComValue
-    ;ahk传入变量：直接修改 jsCode
-    ;TODO 生产订单列表，返回null，console测试正常 evaluate('console.log(document.querySelector(".main_Table"));')
-    evaluate(jsCode, key:="") {
-        response := this.call('Runtime.evaluate', {
-            expression: jsCode,
-            objectGroup: "console",
-            includeCommandLineAPI: JSON.true,
-            silent: JSON.false,
-            returnByValue: JSON.true, ;支持返回数组等格式
-            userGesture: JSON.true,
-            awaitPromise: JSON.false
-        })
-        if (response is map) {
-            if (response.has("ErrorDetails"))
-                throw error(response["result"]["description"],, JSON.stringify(response["ErrorDetails"]))
-            return (key != "") ? response["result"].get(key, "") : response["result"]
-        } else {
-            throw error(A_ThisFunc)
-        }
-    }
-
-    setUrlJson(url) {
-        this.objUrl := url.jsonUrl() ;url 会在后面被修改
-        for k, v in this.objUrl
-            this.%k% := v
-    }
-
-    ;删除网址多余部分
-    urlClean() {
-        if (this.hostname == "www.bilibili.com") {
-            if (instr(this.pathname, "/video/"))
-                return this.origin . RegExReplace(this.pathname, "^\/video\/\w+\K.*") ;. this["search"]
-            else
-                return this.href
-        } else if (this.hostname == "item.jd.com") {
-            return this.origin . this.pathname
-        } else
-            return this.href
-    }
-
-    saveIco() {
-        if !this.HasProp("faviconUrl")
-            return
-        fp := format("{1}\{2}.{3}",A_Desktop,this.title,RegExReplace(this.faviconUrl,".*\."))
-        download(this.faviconUrl, fp)
-        ;_TC.runc(fp, 0, false)
-    }
-
-    arrTitleUrl(bClean:=true, param:="") {
-        fun := bClean ? titleClean : (x)=>x
-        return [titleClean(this.title),this.href.urlClean()]
-        titleClean(tt) {
-            tt := StrReplace(tt, "_哔哩哔哩_bilibili", "_哔哩哔哩") ;TODO 待完善
-            return tt
-        }
-    }
-
-    markdownUrl(bClean:=true) {
-        arr := this.arrTitleUrl(bClean)
-        return format("[{1}]({2})", arr*)
-    }
-
-    ;call("browser.close")
-    call(DomainAndMethod, Params:='', WaitForResponse:=true) {
-        if (this.readyState != 1)
-            throw error("Not connected to tab")
-        ; Use a temporary variable for ID in case more calls are made
-        ; before we receive a response.
-        this.sendText(JSON.stringify(map('id',idx:=this.idx+=1, 'params',Params?Params:{}, 'method',DomainAndMethod), 0))
-        if (!WaitForResponse)
-            return
-        ; Wait for the response
-        this.responses[idx] := false
-        while (this.readyState == 1 && !this.responses[idx]) {
-            sleep(20)
-        }
-        ; Get the response, check if it's an error
-        response := this.responses.delete(idx)
-        if !(response is map)
-            return
-        if (response.has("error"))
-            throw error("Chrome indicated error in response",, JSON.stringify(response['error']))
-        if (response.has("result"))
-            return response["result"]
-    }
-
-    ;event(EventName, Event) {
-    ;    ; If it was called from the WebSocket adjust the class context
-    ;    if (this.Parent)
-    ;        this := this.Parent
-    ;    ; TODO: Handle error events
-    ;    if (EventName == "Open") {
-    ;        ;this.connected := True
-    ;        ;BoundKeepAlive := this.BoundKeepAlive
-    ;        ;SetTimer(BoundKeepAlive, 15000)
-    ;    } else if (EventName == "Message") {
-    ;        data := Chrome.Jxon_Load(Event.data)
-    ;        ;Run the callback routine
-    ;        fnCallback := this.fnCallback
-    ;        if (newData := %fnCallback%(data))
-    ;            data := newData
-    ;        if (this.responses.HasKey(data.ID))
-    ;            this.responses[data.ID] := data
-    ;    } else if (EventName == "Close") {
-    ;        this.Disconnect()
-    ;        fnClose := this.fnClose
-    ;        %fnClose%(this)
+    ;errScroll() { ;无法滚动的问题
+    ;    WinWaitActive("ahk_exe Chrome.exe")
+    ;    A_Clipboard := "chrome://flags/#enable-gpu-rasterization"
+    ;    doSend()
+    ;    msgbox("设置【GPU rasterization】成disabled，完成后请关闭本窗口并按pause键继续")
+    ;    KeyWait("pause", "D")
+    ;    sleep(200)
+    ;    WinWaitActive("ahk_exe Chrome.exe")
+    ;    A_Clipboard := "chrome://settings/"
+    ;    doSend()
+    ;    msgbox("点击最下方的【高级】，拉到最后，关闭【使用硬件加速模式（如果可用）】，完成后请关闭本窗口并按pause键结束")
+    ;    KeyWait("pause", "D")
+    ;    tooltip()
+    ;    doSend() {
+    ;        sleep(20)
+    ;        send("o")
+    ;        sleep(100)
+    ;        send("c")
+    ;        sleep(1000)
     ;    }
     ;}
 
-    ;TODO
-    translateType() => msgbox(this("Page.TransitionType"))
-    activate() => this.cls.httpOpen(format("/activate/{1}",this.id))
-    close() {
-        super.close()
-        this.cls.httpOpen(format("/close/{1}",this.id))
-    }
+    ;errOpenUrl() { ;打开网址变成c:\*
+    ;    run("s:\CentBrowser\chrome.exe --make-default-browser")
+    ;    msgbox("完成")
+    ;}
 
-    ;TODO
-    getFrameTree() => this("Page.getFrameTree")
+    ;SoundClose() { ;设置静音
+    ;    ;hyf_winActiveOrOpen("ahk_class Chrome_WidgetWin_1 ahk_exe Chrome.exe", gBrowser, 1, "Max")
+    ;    WinWaitActive("ahk_exe Chrome.exe")
+    ;    this.tabOpenLink("chrome://flags/#enable-tab-audio-muting")
+    ;    if !WinWaitActive("chrome://flags/#enable-tab-audio-muting",, 1) {
+    ;        A_Clipboard := "chrome://flags/#enable-tab-audio-muting"
+    ;        msgbox("网址已复制，请手动粘贴并打开")
+    ;    }
+    ;    msgbox("【启用】tab audio muting UI control`n重启浏览器后，对标签右键就可以设置【将此标签页静音】")
+    ;}
 
-    ;在当前标签打开
-    navigate(url, bActive:=true) {
-        this("Page.navigate", map("url",url))
-        this.setUrlJson(url)
-        if (bActive)
-            this.activate()
-    }
+    ;mhtml() { ;保存为mhtml
+    ;    this.tabOpenLink("chrome://flags/#save-page-as-mhtml")
+    ;}
 
-    WaitForLoad(DesiredState:="complete", Interval:=100) {
-        while (this.evaluate('document.readyState',"value") != DesiredState)
-            sleep(Interval)
+    ;downloadSave() { ;下载内容要点击【保留】才行
+    ;    this.tabOpenLink("chrome://settings/privacyV")
+    ;    msgbox("【保护您和您的设备不受危险网站的侵害】选项取消打勾")
+    ;}
+
+    getPage() => _CDP.CDPP(this.getCurrentPage(), this.http)
+
+    /*
+    CDP https://chromedevtools.github.io/devtools-protocol/1-3/Page
+    Connects to the debug interface of a page given its WebSocket URL.
+    {
+        "description": "",
+        "devtoolsFrontendUrl": "/devtools/inspector.html?ws=127.0.0.1:9222/devtools/page/8A5B6CDB1ABE9E40BAD3C9902841BBE2",
+        "faviconUrl": "https://mat1.gtimg.com/www/icon/favicon2.ico",
+        "id": "8A5B6CDB1ABE9E40BAD3C9902841BBE2",
+        "title": "腾讯首页",
+        "type": "page",
+        "url": "https://www.qq.com",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9222/devtools/page/8A5B6CDB1ABE9E40BAD3C9902841BBE2"
     }
-    onClose() => this.reconnect()
-    onMessage(msg) {
-        data := JSON.parse(msg)
-        if (data.has('id') && this.responses.has(data['id']))
-            this.responses[data['id']] := data
-        try (this.callback)(msg)
+    */
+    class CDPP extends WebSocket {
+        idx := 0
+        responses := map()
+
+        __new(objHttp, http) {
+            RegExMatch(objHttp["webSocketDebuggerUrl"], 'ws://[\d\.]+:(\d+)', &m)
+            this.DebugPort := m[1]
+            this.setProp(objHttp)
+            this.http := http
+            super.__new(objHttp["webSocketDebuggerUrl"]) ;NOTE 会修改url属性值为 webSocketDebuggerUrl 值
+            ;this.callback := events
+            ;this.KeepAlive := keepalive.bind(ObjPtr(this))
+            ;SetTimer(this.KeepAlive, 25000)
+            ;keepalive() {
+            ;    self := ObjFromPtrAddRef(pthis)
+            ;    self('Browser.getVersion',, false)
+            ;}
+        }
+
+        __delete() {
+            ;SetTimer(keepalive, 0)
+            super.close()
+        }
+
+        setProp(objHttp) {
+            if (isobject(objHttp)) {
+                for k, v in objHttp
+                    this.%k% := v
+                this.objUrl := objHttp["url"].jsonUrl() ;url 会在后面被修改
+                this.objUrl["title"] := objHttp["title"] ;和 getCurrentPage("json") 同格式
+            } else {
+                this.objUrl := objHttp.jsonUrl() ;url 会在后面被修改
+            }
+        }
+
+        ;pathname前面要带 /
+        httpOpen(pathname, bResponse:=false) {
+            this.http.open('GET', format("http://127.0.0.1:{1}/json{2}", this.DebugPort,pathname))
+            resSend := this.http.send()
+            return bResponse ? JSON.parse(this.http.responseText) : resSend
+        }
+
+        saveIco() {
+            if !this.HasProp("faviconUrl")
+                return
+            fp := format("{1}\{2}.{3}",A_Desktop,this.title,RegExReplace(this.faviconUrl,".*\."))
+            download(this.faviconUrl, fp)
+            ;_TC.runc(fp, 0, false)
+        }
+
+        ;call("browser.close")
+        call(DomainAndMethod, Params:="", WaitForResponse:=true) {
+            if (this.readyState != 1)
+                throw error("Not connected to tab")
+            ; Use a temporary variable for ID in case more calls are made
+            ; before we receive a response.
+            this.sendText(JSON.stringify(map("id",idx:=this.idx+=1, "params",Params?Params:{}, "method",DomainAndMethod), 0))
+            if (!WaitForResponse)
+                return
+            ; Wait for the response
+            this.responses[idx] := false
+            while (this.readyState == 1 && !this.responses[idx]) {
+                sleep(20)
+            }
+            ; Get the response, check if it's an error
+            response := this.responses.delete(idx)
+            if !(response is map)
+                return
+            if (response.has("error"))
+                throw error("Chrome indicated error in response",, JSON.stringify(response['error']))
+            if (response.has("result"))
+                return response["result"]
+        }
+
+        ; https://chromedevtools.github.io/devtools-protocol/1-3/Runtime/#method-evaluate
+        ;判断null用 evaluate(js)["value"] is ComValue
+        ;ahk传入变量：直接修改 jsCode
+        ;TODO 生产订单列表，返回null，console测试正常 evaluate('console.log(document.querySelector(".main_Table"));')
+        evaluate(jsCode, key:="") {
+            response := this.call('Runtime.evaluate', {
+                expression: jsCode,
+                objectGroup: "console",
+                includeCommandLineAPI: JSON.true,
+                silent: JSON.false,
+                returnByValue: JSON.true, ;支持返回数组等格式
+                userGesture: JSON.true,
+                awaitPromise: JSON.false
+            })
+            if (response is map) {
+                if (response.has("ErrorDetails"))
+                    throw error(response["result"]["description"],, JSON.stringify(response["ErrorDetails"]))
+                return (key != "") ? response["result"].get(key, "") : response["result"]
+            } else {
+                throw error(A_ThisFunc)
+            }
+        }
+
+        close() {
+            this.httpOpen(format("/close/{1}",this.id))
+			this.__Delete()
+        }
+
+        ;TODO
+        ;getFrameTree() => this("Page.getFrameTree")
+
+        ;在当前标签打开 NOTE 注意信息更新问题
+        navigate(url, bActive:=true) {
+            this("Page.navigate", map("url",url))
+            this.setProp(url)
+            if (bActive)
+                this.activate()
+        }
+
+        activate() => this.httpOpen(format("/activate/{1}",this.id))
+        WaitForLoad(DesiredState:="complete", Interval:=100) {
+            while (this.evaluate('document.readyState',"value") != DesiredState)
+                sleep(Interval)
+        }
+        onClose() => this.reconnect()
+        onMessage(msg) {
+            data := JSON.parse(msg)
+            if (data.has('id') && this.responses.has(data['id']))
+                this.responses[data['id']] := data
+            ;try (this.callback)(msg)
+        }
     }
 }

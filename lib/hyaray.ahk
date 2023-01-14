@@ -37,6 +37,7 @@ sendEx(arr*) {
                 SendText(v)
         }
     }
+    return 1
 }
 
 deepclone(obj) {
@@ -479,6 +480,7 @@ hyf_runByIE(url:="") { ;关闭当前窗口
 hyf_findFile(dirIn, arrNoExt, ext:="") {
     if (DirExist(dirIn)) {
         dir := dirIn
+        ;OutputDebug(format("i#{1} {2}:dir={3}", A_LineFile,A_LineNumber,dir))
         res := ""
     } else {
         SplitPath(dirIn,, &dir)
@@ -491,13 +493,17 @@ hyf_findFile(dirIn, arrNoExt, ext:="") {
         arrNoExt := [arrNoExt]
     loop(arrNoExt.length) {
         fp := findPath(arrNoExt[-A_Index]) ;NOTE 从后向前遍历
-        if (fp != "")
+        if (fp != "") {
+            ;OutputDebug(format("i#{1} {2}:found 【{3}】", A_LineFile,A_LineNumber,fp))
             return fp
+        } else {
+            ;OutputDebug(format("i#{1} {2}:not found 【{4}】in dir={3}", A_LineFile,A_LineNumber,dir, arrNoExt[-A_Index]))
+        }
     }
     return res
     findPath(noExt) {
         ;先在子文件夹中找？
-        loop files, format("{1}\*", dir), "D" { ;明确的文件名，则只遍历文件夹，NOTE 不能有多文件
+        loop files, format("{1}\*", dir), "DR" { ;明确的文件名，则只遍历文件夹，NOTE 不能有多文件
             if (ext == "*") {
                 loop files, format("{1}\{2}.{3}", A_LoopFileFullPath,noExt,ext) ;明确的文件名，则只遍历文件夹，NOTE 不能有多文件
                     return A_LoopFileFullPath
@@ -673,6 +679,49 @@ hyf_onekeyHide() {
                 WinHide
         }
     }
+}
+
+;https://www.autohotkey.com/boards/viewtopic.php?f=82&t=112505&p=501016
+; SYSTEM_HANDLE_TABLE_ENTRY_INFO_EX
+; https://www.geoffchappell.com/studies/windows/km/ntoskrnl/api/ex/sysinfo/handle_ex.htm
+; https://www.geoffchappell.com/studies/windows/km/ntoskrnl/api/ex/sysinfo/handle_table_entry_ex.htm
+hyf_GetOpenedFiles(pid, fun:=unset) {
+    hProcess := dllcall("OpenProcess", "UInt",0x40, "UInt",0, "UInt",pid, "Ptr") ;PROCESS_DUP_HANDLE
+    obj := map()
+    res := size := 1, failed := false
+    while res != 0 && !(A_Index = 100 && failed := true) {
+        buf := buffer(size, 0)
+        res := dllcall("ntdll\NtQuerySystemInformation", "Int",0x40, "Ptr",buf, "UInt",size, "UIntP",&size, "UInt") ;info
+    }
+    if failed {
+        dllcall("CloseHandle", "Ptr", hProcess)
+        throw "NtQuerySystemInformation failed, NTSTATUS: " . res
+    }
+    numberOfHandles := numget(buf, "Ptr")
+    VarSetStrCapacity(&filePath, 1026)
+    structSize := A_PtrSize*3 + 16 ; size of SYSTEM_HANDLE_TABLE_ENTRY_INFO_EX
+    loop numberOfHandles {
+        ProcessId := numget(buf, A_PtrSize*2 + structSize*(A_Index-1) + A_PtrSize, "UInt")
+        if (pid == ProcessId) {
+            handleValue := numget(buf, A_PtrSize*2 + structSize*(A_Index-1) + A_PtrSize*2, "Pre")
+            dllcall("DuplicateHandle", "Ptr",hProcess, "Ptr",handleValue, "Ptr",dllcall("GetCurrentProcess"), "PtrP",&lpTargetHandle:=0, "UInt",0, "UInt",0, "UInt",2) ;DUPLICATE_SAME_ACCESS=2
+            if (dllcall("GetFileType", "Ptr", lpTargetHandle) == 1) && dllcall("GetFinalPathNameByHandle", "Ptr",lpTargetHandle, "Str",filePath, "UInt",512, "UInt", 0) ;;FILE_TYPE_DISK=1
+                obj[RegExReplace(filePath, "^\\\\\?\\")] := ""
+            dllcall("CloseHandle", "Ptr", lpTargetHandle)
+        }
+    }
+    dllcall("CloseHandle", "Ptr", hProcess)
+    arr := []
+    if isset(fun) {
+        for k, v in obj {
+            if (fun(k))
+                arr.push(k)
+        }
+    } else {
+        for k, v in obj
+            arr.push(k)
+    }
+    return arr
 }
 
 hyf_getDocumentPath(winTitle:="") { ;获取当前窗口编辑文档的路径
@@ -1581,6 +1630,76 @@ hyf_tooltip(str) {
     tooltip(str)
     hyf_input()
     tooltip
+}
+
+;arrIn 如果是一维，会自动转成二维(以1-9当key)
+;arrIn := [
+;   ["J","jpg"],
+;   ["P","png"],
+;]
+;arrRes := hyf_tooltipAsMenu(arrIn)
+;if (!arrRes.length)
+;    return
+;msgbox(json.stringify(arrRes, 4))
+hyf_tooltipAsMenu(arrIn, strTip:="", x:=8, y:=8) {
+    static level := 19
+    if (!arrIn.length)
+        return []
+    if !isobject(arrIn[1]) { ;一维转成[hot, item]
+        for k, v in arrIn
+            arrIn[k] := [k, v]
+    }
+    if (arrIn.length == 1)
+        return arrIn[1]
+    strTip := (strTip!="") ? strTip . "`n`n" : ""
+    tooltip(strTip . arr2str(arrIn), x, y, level)
+    arrKeys := [] ;按键列表
+    loop {
+        key := hyf_input(true)
+        if (key == "escape") {
+            tooltip(,,, level)
+            return []
+        } else if (key = "space") { ;TODO 接受空格
+            arrKeys.push(A_Space)
+        } else if (strlen(key) > 1) {
+            arrKeys.push(key)
+        } else if (strlen(key) == 1) {
+            arrKeys.push(StrUpper(key))
+        } else { ;用不到
+            tooltip(,,, level)
+            return []
+        }
+        ;通过 arrKeys 获取筛选后的内容 arrThis
+        arrThis := arrIn
+        for keyLoop in arrKeys
+            arrThis := getArrByKey(arrThis, keyLoop)
+        ;单结果则直接返回，否则继续 tooltip
+        if (arrThis.length == 0) {
+            return []
+        } else if (arrThis.length == 1) {
+            tooltip(,,, level)
+            return arrThis[1]
+        } else
+            tooltip(strTip . arr2str(arrThis), x, y, level)
+    }
+    getArrByKey(arr, key:="") { ;根据 key 获取子arr
+        if (key == "")
+            return arr
+        ;hyf_objView(arr, key)
+        for v in arr {
+            if (v[1] = key) ;TODO 多项
+                return [v]
+        }
+        ;没结果退出
+        tooltip(,x,y, level)
+        return []
+    }
+    arr2str(arr) { ;arr 根据 sKey 转为字符串
+        str := ""
+        for arrSub in arr
+            str .= format("({1})`t{2}`n", arrSub[1],arrSub[2])
+        return str
+    }
 }
 
 ;*************以下为函数配套的子程序*****************

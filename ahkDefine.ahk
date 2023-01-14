@@ -41,7 +41,7 @@ company := "My Company"
 #include lib\Yaml.ahk
 
 ;#include lib\Class_Socket.ahk
-#include lib\WebSocket.ahk
+#include lib\Class_CDP.ahk
 #include lib\Class_Pinyin.ahk
 #include lib\hyaray.ahk
 #include lib\Class_Mouse.ahk
@@ -50,6 +50,4 @@ company := "My Company"
 #include lib\Class_Gdip.ahk
 
 #include lib\Explorer.ahk
-#include lib\Class_CDP.ahk
-#include lib\CentBrowser.ahk
 
