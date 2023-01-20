@@ -14,16 +14,23 @@ class _CDP {
     ;统一管理各 Chrome 系浏览器的实例
     static getInstance(name, key:="") {
         if (!_CDP.objInstance.has(name)) {
-            OutputDebug(format("w#{1} {2}:A_ThisFunc={3} create instanceCDP of {4} key={5}", A_LineFile,A_LineNumber,A_ThisFunc,name,key))
+            ;OutputDebug(format("w#{1} {2}:A_ThisFunc={3} create instanceCDP of {4} key={5}", A_LineFile,A_LineNumber,A_ThisFunc,name,key))
             _CDP.objInstance[name] := _CDP(_CDP.getInfo(name)*)
         } else {
-            OutputDebug(format("w#{1} {2}:A_ThisFunc={3} exist {4} instanceCDP, key={5}", A_LineFile,A_LineNumber,A_ThisFunc,name,key))
+            ;OutputDebug(format("w#{1} {2}:A_ThisFunc={3} exist {4} instanceCDP, key={5}", A_LineFile,A_LineNumber,A_ThisFunc,name,key))
         }
         oCDP := _CDP.objInstance[name]
         switch key {
             case "": return oCDP
             case "page": return oCDP.getPage()
             default: return oCDP.getCurrentPage(key)
+        }
+    }
+
+    static deleteInstance(name, key:="") {
+        if (!_CDP.objInstance.has(name)) {
+            ;OutputDebug(format("w#{1} {2}:A_ThisFunc={3} create instanceCDP of {4} key={5}", A_LineFile,A_LineNumber,A_ThisFunc,name,key))
+            _CDP.objInstance[name] := ""
         }
     }
 
@@ -52,9 +59,6 @@ class _CDP {
         ;this.sParam .= ' ' . flags
     }
 
-    ;Escape a string in a manner suitable for command line parameters
-    CliEscape(Param) => format('"{1}"', RegExReplace(Param, '(\\*)"', '$1$1\"'))
-
     ;通用命令行参数获取 pid
     FindInstances() {
         for item in ComObjGet('winmgmts:').ExecQuery(format("SELECT CommandLine,ProcessId FROM Win32_Process WHERE Name = '{1}'", this.exeName)) {
@@ -66,30 +70,22 @@ class _CDP {
                     "pid", item.ProcessId,
                 )
             } else {
-                OutputDebug(format("d#{1} {2}:not matched CommandLine={3}", A_LineFile,A_LineNumber,item.CommandLine))
+                ;OutputDebug(format("d#{1} {2}:not matched CommandLine={3}", A_LineFile,A_LineNumber,item.CommandLine))
             }
         }
         return map()
     }
 
-    ;pathname前面要带 /
-    httpOpen(pathname, bResponse:=false) {
-        this.http.open('GET', format("http://127.0.0.1:{1}/json{2}", this.DebugPort,pathname))
-        resSend := this.http.send()
-        return bResponse ? JSON.parse(this.http.responseText) : resSend
-    }
-
     ;NOTE 有些页面只限制打开1个，规则在哪里指定
     ;往往在 __new 里被调用 或见 CDPdo.openUrl()
     tabOpenLink(arrUrl:="", funAfterDo:="", bActive:=true) { ;about:blank chrome://newtab
-        OutputDebug(format("i#{1} {2}:A_ThisFunc={3}", A_LineFile,A_LineNumber,A_ThisFunc))
+        ;OutputDebug(format("i#{1} {2}:A_ThisFunc={3}", A_LineFile,A_LineNumber,A_ThisFunc))
         if (arrUrl is string)
             arrUrl := (arrUrl == "") ? [] : [arrUrl]
         if (arrUrl.length > 1)
             bActive := false
         ;bActive := (A_Index==arrUrl.length) ? bActive : false ;只激活最后一个标签
-        if (this.hwnd := this.detect()) {
-            OutputDebug(format("i#{1} {2}:detect hwnd={3}", A_LineFile,A_LineNumber,this.hwnd))
+        if (this.detect()) {
             if (arrUrl.length) {
                 objPage := this.getPageList(, "host")
                 ;OutputDebug(format("i#{1} {2}:{3} objPage={4}", A_LineFile,A_LineNumber,A_ThisFunc,json.stringify(objPage,4)))
@@ -117,14 +113,17 @@ class _CDP {
                         this.httpOpen("/new?" . urlOpen) ;TODO 哪里有问题
                 }
             }
-            try {
-                WinShow(this.hwnd)
-            } catch {
-                OutputDebug(format("i#{1} {2}:not found hwnd={3} ", A_LineFile,A_LineNumber,this.hwnd))
-            } else {
-                WinActivate(this.hwnd)
-                WinMaximize(this.hwnd)
-            }
+            WinShow(this.hwnd)
+            WinActivate(this.hwnd)
+            WinMaximize(this.hwnd)
+            ;try {
+            ;    WinShow(this.hwnd)
+            ;} catch {
+            ;    OutputDebug(format("i#{1} {2}:not found hwnd={3} ", A_LineFile,A_LineNumber,this.hwnd))
+            ;} else {
+            ;    WinActivate(this.hwnd)
+            ;    WinMaximize(this.hwnd)
+            ;}
         } else { ;新打开
             urls := ''
             for url in arrUrl
@@ -149,30 +148,31 @@ class _CDP {
         }
     }
 
-    ;核实并获取Chrome的 pid 和 hwnd
-    ;0 不检测
-    ;1 检测不到则关闭当前浏览器
-    ;2 检测不到则关闭并正确打开浏览器
-    ;返回 hwnd
+    ;核实并赋值Chrome的 this.pid 和 this.hwnd
+    ;返回 this.hwnd
+    ;tp 检测不到浏览器的处理方式
+    ;	0 什么也不做
+    ;	1 关闭当前浏览器
+    ;	2 关闭并正确打开浏览器
     detect(tp:=0) {
         if (this.hwnd && ProcessExist(this.pid))
             return this.hwnd
         if (ProcessExist(this.exeName)) { ;可能脚本重启等原因丢失了数据
             this.pid := this.FindInstances().get("pid", 0)
-            OutputDebug(format("i#{1} {2}:detect获取pid={3}", A_LineFile,A_LineNumber,this.pid))
+            ;OutputDebug(format("i#{1} {2}:detect获取pid={3}", A_LineFile,A_LineNumber,this.pid))
             if (this.pid) {
                 saveDetect := A_DetectHiddenWindows
                 DetectHiddenWindows(true)
                 for winHwnd in WinGetList("ahk_class Chrome_WidgetWin_1 ahk_pid " . this.pid) {
                     try {
                         titleLoop := WinGetTitle(winHwnd)
-                        OutputDebug(format("i#{1} {2}:detect遍历titleLoop={3}", A_LineFile,A_LineNumber,titleLoop))
+                        ;OutputDebug(format("i#{1} {2}:detect遍历titleLoop={3}", A_LineFile,A_LineNumber,titleLoop))
                     } catch {
-                        OutputDebug(format("i#{1} {2}:detect WinGetTitle异常", A_LineFile,A_LineNumber))
+                        ;OutputDebug(format("i#{1} {2}:detect WinGetTitle异常", A_LineFile,A_LineNumber))
                         continue
                     }
                     if (titleLoop ~= "\S") {
-                        OutputDebug(format("i#{1} {2}:this.hwnd={3},title={4}", A_LineFile,A_LineNumber,this.hwnd,titleLoop))
+                        ;OutputDebug(format("i#{1} {2}:this.hwnd={3},title={4}", A_LineFile,A_LineNumber,this.hwnd,titleLoop))
                         this.hwnd := winHwnd
                         break
                     }
@@ -234,7 +234,6 @@ class _CDP {
             for objHttp in this.httpOpen("", true) {
                 if (objHttp["type"] == "page" && objHttp["title"] != "DevTools") { ;NOTE by 火冷 <2022-10-01 17:42:12>
                     objHttp["url"] := rtrim(objHttp["url"], "/")
-                    ;OutputDebug(format("i#{1} {2}:key={3} currentObj={4}", A_LineFile,A_LineNumber,key,json.stringify(objHttp,4)))
                     OutputDebug(format("i#{1} {2}:{3} getCurrentPage key={4}", A_LineFile,A_LineNumber,A_ThisFunc,key))
                     switch key {
                         case "json": ;增加个 title
@@ -270,7 +269,7 @@ class _CDP {
         if (funTrue == "")
             funTrue := (obj)=>obj["type"] == "page"
         arr := this.httpOpen("", true)
-        OutputDebug(format("i#{1} {2}:arr={3}", A_LineFile,A_LineNumber,json.stringify(arr,4)))
+        ;OutputDebug(format("i#{1} {2}:arr={3}", A_LineFile,A_LineNumber,json.stringify(arr,4)))
         if (keyJson == "")
             arrRes := []
         else
@@ -297,12 +296,22 @@ class _CDP {
             }
         }
         if (keyJson == "") {
-            OutputDebug(format("i#{1} {2}:arrRes={3}", A_LineFile,A_LineNumber,json.stringify(arrRes,4)))
+            ;OutputDebug(format("i#{1} {2}:arrRes={3}", A_LineFile,A_LineNumber,json.stringify(arrRes,4)))
             return arrRes
         } else {
-            OutputDebug(format("i#{1} {2}:objRes={3}", A_LineFile,A_LineNumber,json.stringify(objRes,4)))
+            ;OutputDebug(format("i#{1} {2}:objRes={3}", A_LineFile,A_LineNumber,json.stringify(objRes,4)))
             return objRes
         }
+    }
+
+    ;Escape a string in a manner suitable for command line parameters
+    CliEscape(Param) => format('"{1}"', RegExReplace(Param, '(\\*)"', '$1$1\"'))
+
+    ;pathname前面要带 /
+    httpOpen(pathname, bResponse:=false) {
+        this.http.open('GET', format("http://127.0.0.1:{1}/json{2}", this.DebugPort,pathname))
+        resSend := this.http.send()
+        return bResponse ? JSON.parse(this.http.responseText) : resSend
     }
 
     ;closeNewtab(id:="") {
@@ -448,10 +457,10 @@ class _CDP {
     }
     */
     class CDPP extends WebSocket {
-        idx := 0
-        responses := map()
 
         __new(objHttp, http) {
+            this.idx := 0
+            this.responses := map()
             RegExMatch(objHttp["webSocketDebuggerUrl"], 'ws://[\d\.]+:(\d+)', &m)
             this.DebugPort := m[1]
             this.setProp(objHttp)
@@ -468,53 +477,29 @@ class _CDP {
 
         __delete() {
             ;SetTimer(keepalive, 0)
-            super.close()
+            super.__delete()
         }
 
-        setProp(objHttp) {
-            if (isobject(objHttp)) {
-                for k, v in objHttp
-                    this.%k% := v
-                this.objUrl := objHttp["url"].jsonUrl() ;url 会在后面被修改
-                this.objUrl["title"] := objHttp["title"] ;和 getCurrentPage("json") 同格式
-            } else {
-                this.objUrl := objHttp.jsonUrl() ;url 会在后面被修改
-            }
-        }
-
-        ;pathname前面要带 /
-        httpOpen(pathname, bResponse:=false) {
-            this.http.open('GET', format("http://127.0.0.1:{1}/json{2}", this.DebugPort,pathname))
-            resSend := this.http.send()
-            return bResponse ? JSON.parse(this.http.responseText) : resSend
-        }
-
-        saveIco() {
-            if !this.HasProp("faviconUrl")
-                return
-            fp := format("{1}\{2}.{3}",A_Desktop,this.title,RegExReplace(this.faviconUrl,".*\."))
-            download(this.faviconUrl, fp)
-            ;_TC.runc(fp, 0, false)
-        }
-
-        ;call("browser.close")
-        call(DomainAndMethod, Params:="", WaitForResponse:=true) {
+		call(DomainAndMethod, Params?, WaitForResponse := true) {
             if (this.readyState != 1)
                 throw error("Not connected to tab")
-            ; Use a temporary variable for ID in case more calls are made
+            ; Use a temporary variable for id in case more calls are made
             ; before we receive a response.
-            this.sendText(JSON.stringify(map("id",idx:=this.idx+=1, "params",Params?Params:{}, "method",DomainAndMethod), 0))
-            if (!WaitForResponse)
-                return
-            ; Wait for the response
-            this.responses[idx] := false
-            while (this.readyState == 1 && !this.responses[idx]) {
-                sleep(20)
-            }
-            ; Get the response, check if it's an error
-            response := this.responses.delete(idx)
-            if !(response is map)
-                return
+			if !(idx := this.idx += 1)
+				idx := this.idx += 1
+			this.sendText(JSON.stringify(map('id', idx, 'params', Params ?? {}, 'method', DomainAndMethod), 0))
+			if (!WaitForResponse)
+				return
+			; Wait for the response
+			this.responses[idx] := false
+			while (this.readyState = 1 && !this.responses[idx])
+				Sleep(20)
+
+			; Get the response, check if it's an error
+			if !response := this.responses.Delete(idx)
+				throw Error('Not connected to tab')
+			if !(response is Map)
+				return response
             if (response.has("error"))
                 throw error("Chrome indicated error in response",, JSON.stringify(response['error']))
             if (response.has("result"))
@@ -549,8 +534,22 @@ class _CDP {
 			this.__Delete()
         }
 
-        ;TODO
-        ;getFrameTree() => this("Page.getFrameTree")
+        activate() => this.httpOpen(format("/activate/{1}",this.id))
+        WaitForLoad(DesiredState:="complete", Interval:=100) {
+            while (this.evaluate('document.readyState',"value") != DesiredState)
+                sleep(Interval)
+        }
+		onClose(*) {
+			try this.reconnect()
+			catch WebSocket.Error
+				this.__Delete()
+		}
+        onMessage(msg) {
+            data := JSON.parse(msg)
+			if this.responses.Has(id := data.Get('id', 0))
+				this.responses[id] := data
+            ;try (this.callback)(msg)
+        }
 
         ;在当前标签打开 NOTE 注意信息更新问题
         navigate(url, bActive:=true) {
@@ -560,17 +559,34 @@ class _CDP {
                 this.activate()
         }
 
-        activate() => this.httpOpen(format("/activate/{1}",this.id))
-        WaitForLoad(DesiredState:="complete", Interval:=100) {
-            while (this.evaluate('document.readyState',"value") != DesiredState)
-                sleep(Interval)
+        setProp(objHttp) {
+            if (isobject(objHttp)) {
+                for k, v in objHttp
+                    this.%k% := v
+                this.objUrl := objHttp["url"].jsonUrl() ;url 会在后面被修改
+                this.objUrl["title"] := objHttp["title"] ;和 getCurrentPage("json") 同格式
+            } else {
+                this.objUrl := objHttp.jsonUrl() ;url 会在后面被修改
+            }
         }
-        onClose() => this.reconnect()
-        onMessage(msg) {
-            data := JSON.parse(msg)
-            if (data.has('id') && this.responses.has(data['id']))
-                this.responses[data['id']] := data
-            ;try (this.callback)(msg)
+
+        ;pathname前面要带 /
+        httpOpen(pathname, bResponse:=false) {
+            this.http.open('GET', format("http://127.0.0.1:{1}/json{2}", this.DebugPort,pathname))
+            resSend := this.http.send()
+            return bResponse ? JSON.parse(this.http.responseText) : resSend
         }
+
+        saveIco() {
+            if !this.HasProp("faviconUrl")
+                return
+            fp := format("{1}\{2}.{3}",A_Desktop,this.title,RegExReplace(this.faviconUrl,".*\."))
+            download(this.faviconUrl, fp)
+            ;_TC.runc(fp, 0, false)
+        }
+
+        ;TODO
+        ;getFrameTree() => this("Page.getFrameTree")
+
     }
 }

@@ -1045,7 +1045,7 @@ class IUIAutomationElement extends IUIABase {
         CoordMode("mouse", "Screen")
         ;记录原位置
         MouseGetPos(&x0, &y0)
-        OutputDebug(format("d#{1} {2}:arrXY={3}", A_LineFile,A_LineNumber,json.stringify(arrXY)))
+        OutputDebug(format("i#{1} {2}:{3} arrXY={4}", A_LineFile,A_LineNumber,A_ThisFunc,json.stringify(arrXY,4)))
         MouseMove(arrXY[1], arrXY[2], 0)
         sleep(20)
         (cnt) && click(cnt)
@@ -1603,7 +1603,7 @@ class IUIAutomationElement extends IUIABase {
 
     ;通过 elField 获取表格内容
     ;tp 0=obj 1=arrData 2=arrTable
-    getTableData(tp:=false) {
+    getTableData(tp:=false, toStr:=false) {
         oRV := UIA.RawViewWalker()
         elTable := oRV.GetParentElement(this)
         loop(2) {
@@ -1630,10 +1630,10 @@ class IUIAutomationElement extends IUIABase {
         else
             funGetValue := (el)=>el.CurrentName
         switch tp {
-            case 2:
-                arr2 := [arrField]
             case 1:
                 arr2 := []
+            case 2:
+                arr2 := [arrField]
         }
         loop {
             if (tp == 0) {
@@ -1660,7 +1660,7 @@ class IUIAutomationElement extends IUIABase {
             catch
                 break
         }
-        return arr2
+        return toStr ? arr2.toTable() : arr2
     }
 
     ;TODO 待完善

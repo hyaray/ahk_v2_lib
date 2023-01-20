@@ -24,7 +24,7 @@ class _String {
     static regCode := "i)^(ah[k2]|js|vim|html?|wxml|css|wxss|lua|hh[cpk])$"
     static regText := "i)^(ah[k2]|js|sh|log|vim|md|yaml|html?|wxml|css|wxss|lua|hh[cpk]|csv|json|txt|ini)$"
     static regAudeo := "i)^(wav|mp3|m4a|wma)$"
-    static regVideo := "i)^(mp4|wmv|mkv|m4a|rm(vb)?|flv|mpeg|avi)$"
+    static regVideo := "i)^(mp4|wmv|mkv|m4a|m4s|rm(vb)?|flv|mpeg|avi)$"
     static regZip := "i)^(7z|zip|rar|iso|img|gz|cab|jar|arj|lzh|ace|tar|GZip|uue|bz2)$"
 
     __item[i] {
@@ -56,6 +56,15 @@ class _String {
     right(n) => substr(this, -n)
     split(p*) => StrSplit(this, p*)
 
+    fn2fp(dir:="") {
+        (dir == "") && dir := A_Desktop
+        return format("{1}\{2}",dir,this)
+    }
+    fnn2fp(ext:="", dir:="") {
+        (dir == "") && dir := A_Desktop
+        return (ext=="") ? format("{1}\{2}",dir,this) : format("{1}\{2}.{3}",dir,this,ext)
+    }
+
     ;路径相关
     fn() {
         fp := this
@@ -81,12 +90,12 @@ class _String {
             ext := this
         return toLower ? StrLower(ext) : ext
     }
-    noExt() {
+    fnn() { ;不带扩展名的文件名
         fp := this
         if (instr(fp, "/"))
             fp := StrReplace(fp, "/", "\")
-        SplitPath(fp,,,, &noExt)
-        return noExt
+        SplitPath(fp,,,, &fnn)
+        return fnn
     }
     drv() {
         fp := this
@@ -109,7 +118,6 @@ class _String {
         SplitPath(this,, &dir, &ext)
         return format("{1}\{2}.{3}", dir,noExtNew,ext)
     }
-
     ;noExt64名称再替换空格为_
     noExt64(dealSpace:=false) { ;去除_x64.exe内容的名称(比如abc_x64.exe转成abc)
         res := RegExReplace(this, "i)_?(x?(64))?(\.\w+)?$")
@@ -305,7 +313,7 @@ class _String {
     }
 
     ;按行转成obj，key为 A_LoopField，值为个数n
-    toObj(hasEmpty:=false) {
+    toMap(hasEmpty:=false) {
         obj := map()
         obj.default := 0
         loop parse, rtrim(this,"`r`n"), "`n", "`r" {
@@ -666,22 +674,9 @@ class _String {
         return res
     }
 
-    ;通过文件名快速获取完整路径
-    ;noExt.fp(ext, dir)
-    noExt2fp(ext, dir:="") {
-        if (dir == "")
-            dir := A_Desktop
-        return format("{1}\{2}.{3}",dir,this,ext)
-    }
-    fn2fp(dir:="") {
-        if (dir == "")
-            dir := A_Desktop
-        return format("{1}\{2}",dir,this)
-    }
-
     ;-----------------------多行-------------------------
     ;获取重复项
-    getSame() => this.toObj().filter((k,v)=>v>1)
+    getSame() => this.toMap().filter((k,v)=>v>1)
     deleteSame(hasEmpty:=false) {
         obj := map()
         obj.default := 0
@@ -698,7 +693,7 @@ class _String {
         return rtrim(res, "`r`n")
     }
     ;删除重复行
-    deleteSameOrderByObj(hasEmpty:=false) => "`n".join(this.toObj(hasEmpty).keys())
+    deleteSameOrderByObj(hasEmpty:=false) => "`n".join(this.toMap(hasEmpty).keys())
 
     ;fun(A_LoopField, A_Index)
     dealByLine(fun) {
@@ -1216,8 +1211,8 @@ class _String {
     ;TODO 函数表达式定义方式：用户输入字符串
     grep(reg, funMatch, startPos:=1) {
         str := this
-        while RegExMatch(str, reg, &m, startPos) { ; 由于每次要计算，必须一个个处理
-            str := RegExReplace(str, reg, sNew:=funMatch.call(m),, 1, startPos)
+        while (RegExMatch(str, reg, &m, startPos)) { ; 由于每次要计算，必须一个个处理
+            str := RegExReplace(str, reg, sNew:=funMatch(m),, 1, startPos)
             startPos := m.pos(0) + strlen(sNew)
         }
         return str
@@ -1532,11 +1527,16 @@ class _String {
             obj["hash"] := ""
         ;再获取 search
         if (instr(sNow,"?")) {
-            ;obj["search"] :=  "?" . RegExReplace(sNow, ".*\?")
             obj["search"] :=  substr(sNow, instr(sNow,"?"))
+            obj["objSearch"] := map()
+            for tmp in StrSplit(substr(obj["search"], 2), "&") {
+                arrTmp := StrSplit(tmp, "=")
+                obj["objSearch"][arrTmp[1]] := arrTmp[2]
+            }
             sNow := substr(sNow, 1, strlen(sNow)-strlen(obj["search"]))
-        } else
+        } else {
             obj["search"] := ""
+        }
         ;剩余即是 pathname
         obj["pathname"] := rtrim(sNow, "/")
         ;hyf_objView(obj)

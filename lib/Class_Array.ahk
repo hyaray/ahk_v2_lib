@@ -50,6 +50,7 @@ class _Array extends Array {
         return arr0
     }
 
+    ;不要最后一个 end=-1
     slice(start:=1, end:=0, step:=1) {
         len := this.length
         i := start < 1 ? len + start : start
@@ -85,7 +86,14 @@ class _Array extends Array {
         return arrRes
     }
 
-    ;目前是
+    toMapAsKey(v:="") {
+        obj := map()
+        for v in this
+            obj[v] := v
+        return obj
+    }
+
+    ;目前只在 _Pwd 里使用
     ;[ [A1,B1], [A2,B2] ] [title1, title2]
     ;{
     ;    title1 : [A1,B1],
@@ -96,7 +104,7 @@ class _Array extends Array {
     ;    title1 : [A1,A2],
     ;    title2 : [B1,B2],
     ;}
-    toMap(arrTitle:=unset) {
+    toMapByArray(arrTitle:=unset) {
         arr := this
         obj := map()
         if (isset(arrTitle)) {
@@ -230,10 +238,10 @@ class _Array extends Array {
         return res
     }
 
-    sort(arr, tp:="") { ;默认升序，D为降序
+    sort(tp:="") { ;默认升序，D为降序
         obj := map()
         obj.default := 0
-        for v in arr
+        for v in this
             obj[v]++
         arrRes := []
         if (tp == "") {
