@@ -229,25 +229,23 @@ class _CDP {
     getCurrentPage(key:="") {
         this.detect(true)
         ;debug 模式获取
-        try {
-            ;OutputDebug(format("i#{1} {2}:httpAll={3}", A_LineFile,A_LineNumber,json.stringify(this.httpOpen("",true),4)))
-            for objHttp in this.httpOpen("", true) {
-                if (objHttp["type"] == "page" && objHttp["title"] != "DevTools") { ;NOTE by 火冷 <2022-10-01 17:42:12>
-                    objHttp["url"] := rtrim(objHttp["url"], "/")
-                    OutputDebug(format("i#{1} {2}:{3} getCurrentPage key={4}", A_LineFile,A_LineNumber,A_ThisFunc,key))
-                    switch key {
-                        case "json": ;增加个 title
-                            jsonPage := objHttp["url"].jsonUrl()
-                            jsonPage["title"] := objHttp["title"]
-                            return jsonPage
-                        case "arr": ;标题+url
-                        case "": return objHttp
-                        default: return objHttp[key]
-                    }
+        ;OutputDebug(format("i#{1} {2}:httpAll={3}", A_LineFile,A_LineNumber,json.stringify(this.httpOpen("",true),4)))
+        for objHttp in this.httpOpen("", true) {
+            if (objHttp["type"] == "page" && objHttp["title"] != "DevTools") { ;NOTE by 火冷 <2022-10-01 17:42:12>
+                objHttp["url"] := rtrim(objHttp["url"], "/")
+                OutputDebug(format("i#{1} {2}:{3} getCurrentPage key={4}", A_LineFile,A_LineNumber,A_ThisFunc,key))
+                switch key {
+                    case "json": ;增加个 title
+                        jsonPage := objHttp["url"].jsonUrl()
+                        jsonPage["title"] := objHttp["title"]
+                        return jsonPage
+                    case "arr": ;标题+url
+                    case "": return objHttp
+                    default:
+                        jsonPage := objHttp["url"].jsonUrl()
+                        return jsonPage.get(key, objHttp.get(key, ""))
                 }
             }
-        } catch {
-            return map()
         }
     }
 
@@ -308,10 +306,10 @@ class _CDP {
     CliEscape(Param) => format('"{1}"', RegExReplace(Param, '(\\*)"', '$1$1\"'))
 
     ;pathname前面要带 /
-    httpOpen(pathname, bResponse:=false) {
+    httpOpen(pathname, toJson:=false) {
         this.http.open('GET', format("http://127.0.0.1:{1}/json{2}", this.DebugPort,pathname))
         resSend := this.http.send()
-        return bResponse ? JSON.parse(this.http.responseText) : resSend
+        return toJson ? JSON.parse(this.http.responseText) : resSend
     }
 
     ;closeNewtab(id:="") {
@@ -343,11 +341,6 @@ class _CDP {
     ;static ClosePage(opts, MatchMode:='exact') {
     ;    for page in this.FindPages(opts, MatchMode)
     ;        return this.httpOpen("/close/" . page["id"])
-    ;}
-
-    ;static ActivatePage(opts, MatchMode:='exact') {
-    ;    for page in this.FindPages(opts, MatchMode)
-    ;        return this.httpOpen("/activate/" . page["id"])
     ;}
 
     ;https://player.bilibili.com/player.html?aid=976962208&bvid=BV1244y1Y7VR&cid=457445567&page=1
@@ -440,7 +433,28 @@ class _CDP {
     ;    msgbox("【保护您和您的设备不受危险网站的侵害】选项取消打勾")
     ;}
 
-    getPage() => _CDP.CDPP(this.getCurrentPage(), this.http)
+    getPage(funObj:=unset, tp:="id") {
+        if (isset(funObj)) {
+            arr := this.httpOpen("", true)
+            for objHttp in arr {
+                if (objHttp["type"] == "page" && objHttp["title"] != "DevTools") {
+                    if (funObj(objHttp["url"].jsonUrl()))
+                        return (tp != "") ? objHttp["id"] : _CDP.CDPP(objHttp, this.http)
+                }
+            }
+        } else {
+            return _CDP.CDPP(this.getCurrentPage(), this.http)
+        }
+    }
+
+    activatePage(funObj) {
+        id := this.getPage(funObj)
+        if (id != "") {
+            this.httpOpen("/activate/" . id)
+            return 1
+        }
+        return 0
+    }
 
     /*
     CDP https://chromedevtools.github.io/devtools-protocol/1-3/Page
@@ -521,6 +535,7 @@ class _CDP {
                 awaitPromise: JSON.false
             })
             if (response is map) {
+                ;OutputDebug(format("i#{1} {2}:{3} response={4}", A_LineFile,A_LineNumber,A_ThisFunc,json.stringify(response,4)))
                 if (response.has("ErrorDetails"))
                     throw error(response["result"]["description"],, JSON.stringify(response["ErrorDetails"]))
                 return (key != "") ? response["result"].get(key, "") : response["result"]
@@ -536,8 +551,14 @@ class _CDP {
 
         activate() => this.httpOpen(format("/activate/{1}",this.id))
         WaitForLoad(DesiredState:="complete", Interval:=100) {
-            while (this.evaluate('document.readyState',"value") != DesiredState)
-                sleep(Interval)
+            loop {
+                state := this.evaluate('document.readyState',"value")
+                OutputDebug(format("i#{1} {2}:{3} state={4}", A_LineFile,A_LineNumber,A_ThisFunc,state))
+                if (this.evaluate('document.readyState',"value") != DesiredState)
+                    sleep(Interval)
+                else
+                    return 1
+            }
         }
 		onClose(*) {
 			try this.reconnect()
@@ -571,10 +592,10 @@ class _CDP {
         }
 
         ;pathname前面要带 /
-        httpOpen(pathname, bResponse:=false) {
+        httpOpen(pathname, toJson:=false) {
             this.http.open('GET', format("http://127.0.0.1:{1}/json{2}", this.DebugPort,pathname))
             resSend := this.http.send()
-            return bResponse ? JSON.parse(this.http.responseText) : resSend
+            return toJson ? JSON.parse(this.http.responseText) : resSend
         }
 
         saveIco() {

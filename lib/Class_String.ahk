@@ -24,7 +24,7 @@ class _String {
     static regCode := "i)^(ah[k2]|js|vim|html?|wxml|css|wxss|lua|hh[cpk])$"
     static regText := "i)^(ah[k2]|js|sh|log|vim|md|yaml|html?|wxml|css|wxss|lua|hh[cpk]|csv|json|txt|ini)$"
     static regAudeo := "i)^(wav|mp3|m4a|wma)$"
-    static regVideo := "i)^(mp4|wmv|mkv|m4a|m4s|rm(vb)?|flv|mpeg|avi)$"
+    static regVideo := "i)^(mp4|wmv|mkv|m4a|m4s|ts|rm(vb)?|flv|mpeg|avi)$"
     static regZip := "i)^(7z|zip|rar|iso|img|gz|cab|jar|arj|lzh|ace|tar|GZip|uue|bz2)$"
 
     __item[i] {
@@ -72,6 +72,18 @@ class _String {
             fp := StrReplace(fp, "/", "\")
         SplitPath(fp, &fn)
         return fn
+    }
+    dn() { ;文件夹名
+        fp := this
+        if (instr(fp, "/"))
+            fp := StrReplace(fp, "/", "\")
+        if (DirExist(fp)) { ;已是目录路径
+            SplitPath(fp, &dn)
+        } else {
+            SplitPath(fp,, &dir)
+            SplitPath(dir, &dn)
+        }
+        return dn
     }
     dir() {
         fp := this
@@ -1526,12 +1538,13 @@ class _String {
         } else
             obj["hash"] := ""
         ;再获取 search
-        if (instr(sNow,"?")) {
-            obj["search"] :=  substr(sNow, instr(sNow,"?"))
+        if (substr(sNow, 1, 1) == "?" && instr(sNow, "&")) {
+            obj["search"] := substr(sNow, instr(sNow,"?"))
             obj["objSearch"] := map()
             for tmp in StrSplit(substr(obj["search"], 2), "&") {
                 arrTmp := StrSplit(tmp, "=")
-                obj["objSearch"][arrTmp[1]] := arrTmp[2]
+                if (arrTmp.length == 2)
+                    obj["objSearch"][arrTmp[1]] := arrTmp[2]
             }
             sNow := substr(sNow, 1, strlen(sNow)-strlen(obj["search"]))
         } else {

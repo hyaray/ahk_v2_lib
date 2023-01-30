@@ -206,37 +206,63 @@ class _GDIP {
     }
 
     ;NOTE 进一步抽象见 _UIADo.rectControls
+    ;arrFontOpt
+    ;   arrText
+    ;   opts
+    ;   funcRect
     ;aRect 画框
     ;oGui := _GDIP.rectMark(el.GetBoundingRectangle())
     ;oGui := _GDIP.rectMark(_Win.toRect(this.winInfo["winID"]))
     ;标窗口
     ;WinGetPos(&x, &y, &w, &h, hwnd)
     ;_GDIP.rectMark([x,y,w,h])
-    static rectMark(aRects, keyWaitClose:="", arrStyle:=unset) {
+    static rectMark(aRects, keyWaitClose:="", arrRectStyle:=unset, arrFontOpt:=unset) {
+        objFontOpts := map(
+            "font", "宋体",
+            "size", 16,
+            "rows", 1, ;行数(默认1)
+            "align", 0, ;左对齐(默认1居中)
+            "style", 1, ;加粗(默认0)
+        )
         if (!isobject(aRects[1]))
             aRects := [aRects]
-        if (!isset(arrStyle))
-            arrStyle := [0xffFF0000, 2, 0] ;clPen, wPen
+        if (!isset(arrRectStyle))
+            arrRectStyle := [0xffFF0000, 2, 0] ;clPen, wPen
         w := sysget(78)
         h := sysget(79)
         oHBitmap := GDIP_HBitmap(w,h)
         oGraphics := GDIP_Graphics(oHBitmap)
         oGraphics.GdipSetSmoothingMode(4)
-        oPen := GDIP_Pen(arrStyle[1], arrStyle[2])
+        oPen := GDIP_Pen(arrRectStyle[1], arrRectStyle[2])
+        ;文字相关
+        if (isset(arrFontOpt)) {
+            arrText := arrFontOpt[1]
+            if (arrFontOpt.length >= 2)
+                objFontOpts.coverByMap(arrFontOpt[2])
+            if (arrFontOpt.length < 3)
+                funcRect := rectDeal
+            else
+                funcRect := arrFontOpt[3]
+        }
         oGui := gui("-Caption +E0x80000 +LastFound +AlwaysOnTop +ToolWindow +OwnDialogs")
         oGui.Show("NA")
-        bOut := arrStyle.length >= 3 ? arrStyle[3] : false ;边框放在外面，而不是居中
+        bOut := arrRectStyle.length >= 3 ? arrRectStyle[3] : false ;边框放在外面，而不是居中
         for k, aRect in aRects {
-            if (bOut && arrStyle[2] > 1) {
-                n := arrStyle[2]//2
+            if (bOut && arrRectStyle[2] > 1) {
+                n := arrRectStyle[2]//2
                 aRect[1] -= n
                 aRect[2] -= n
                 aRect[3] += 2*n
                 aRect[4] += 2*n
             }
             oGraphics.GdipDrawRectangle(oPen.ptr, aRect)
+            ;文字相关
+            if (isset(arrFontOpt)) {
+                aRectFont := funcRect(aRect)
+                oGraphics.DrawText1(arrText[k], objFontOpts, aRectFont)
+            }
         }
-        oGraphics.UpdateLayeredWindow(oGui.hwnd, [0,0,w,h])
+        oGraphics.UpdateLayeredWindow(oGui, [0,0,w,h])
         oGraphics.SelectObject()
         if (keyWaitClose is string) {
             if (keyWaitClose == "")
@@ -248,6 +274,12 @@ class _GDIP {
                 WinWaitClose(keyWaitClose)
                 oGui.destroy()
             }
+        }
+        rectDeal(rect) { ;默认在右侧显示(上下方会影响相邻控件内容)
+            arr := [rect[1]+rect[3]] ;NOTE 不能修改原数组
+            loop(3)
+                arr.push(rect[A_Index+1])
+            return arr
         }
     }
 
@@ -265,7 +297,7 @@ class _GDIP {
         oBrush := ""
         oGui := gui("-Caption +E0x80000 +LastFound +AlwaysOnTop +ToolWindow +OwnDialogs")
         oGui.Show("NA")
-        oGraphics.UpdateLayeredWindow(oGui.hwnd, [0,0,w,h])
+        oGraphics.UpdateLayeredWindow(oGui, [0,0,w,h])
         oGraphics.SelectObject()
         oHBitmap := ""
         oGraphics := ""
@@ -390,7 +422,7 @@ class _GDIP {
         showPath(arr) {
             oGraphics.GdipGraphicsClear()
             oGraphics.GdipDrawLines(oPen, arr)
-            oGraphics.UpdateLayeredWindow(oGui.hwnd, [xPath,yPath,wPath,hPath])
+            oGraphics.UpdateLayeredWindow(oGui, [xPath,yPath,wPath,hPath])
         }
         showTips() {
             resAll := getRes() ;NOTE 获取结果
@@ -409,7 +441,7 @@ class _GDIP {
             oGraphics1.GdipGraphicsClear() ;清除 TODO 只清除文字，不清除背景色
             oGraphics1.GdipFillRectangle(oBrush0, [0,0,wTip,hTip])
             oGraphics1.GdipDrawString(format("{1}　{2}`n{3}", resAll,exeName,sTip), oFont1, oStringFormat1, oBrush1, [0,0,wTip,hTip])
-            oGraphics1.UpdateLayeredWindow(oGui1.hwnd, [xTip,yTip,wTip,hTip])
+            oGraphics1.UpdateLayeredWindow(oGui1, [xTip,yTip,wTip,hTip])
         }
         getDirect(_x0,_y0,_x1,_y1) {
             return ["→","↗","↑","↖","←","↙","↓","↘","→"][round(getAngle(_x0,_y0,_x1,_y1)/45 + 1)]
@@ -1854,6 +1886,11 @@ class GDIP_Graphics extends _GDIP {
         return dllcall("gdiplus\GdipDrawString", "Ptr",this, "WStr",sText, "int",-1, "Ptr",pFont, "Ptr",bufRectF, "Ptr",pStringFormat, "Ptr",pBrush)
     }
 
+    GdipNewPrivateFontCollection() {
+        dllcall("gdiplus\GdipNewPrivateFontCollection", "ptr*",&hFontCollection:=0)
+        return hFontCollection
+    }
+
     /*
     opts := "x10p y60p w80p Centre cff000000 r4 s18p Bold"
     x10p表示百分比
@@ -1941,50 +1978,6 @@ class GDIP_Graphics extends _GDIP {
                     objType[tp] := m[2]
             }
         }
-        ; hyf_objView(objType)
-        ; pattern_opts := (A_AhkVersion < "2") ? "iO)" : "i)"
-        ; RegExMatch(opts, pattern_opts . "X([\-\d\.]+)(p*)", &xpos)
-        ; RegExMatch(opts, pattern_opts . "Y([\-\d\.]+)(p*)", &ypos)
-        ; RegExMatch(opts, pattern_opts . "W([\-\d\.]+)(p*)", &width)
-        ; RegExMatch(opts, pattern_opts . "H([\-\d\.]+)(p*)", &height)
-        ; RegExMatch(opts, pattern_opts . "C(?!(entre|enter))([a-f\d]+)", &Colour)
-        ; RegExMatch(opts, pattern_opts . "Top|Up|Bottom|Down|vCentre|vCenter", &vPos)
-        ; RegExMatch(opts, pattern_opts . "R(\d)", &Rendering)
-        ; RegExMatch(opts, pattern_opts . "S(\d+)(p*)", &Size)
-        ; ; if (Colour && !GdipDeleteBrush(this.GdipCloneBrush(Colour[2]))) {
-        ; ;     PassBrush := 1
-        ; ;     pBrush := Colour[2]
-        ; ; }
-        ; if !(width && IHeight) && ((xpos && xpos[2]) || (ypos && ypos[2]) || (width && width[2]) || (height && height[2]) || (Size && Size[2]))
-        ;     return -1
-        ; style := 0
-        ; Styles := "Regular|Bold|Italic|BoldItalic|Underline|Strikeout"
-        ; for k, valStyle in StrSplit(Styles, "|") {
-        ;     if (RegExMatch(opts, "\b" . valStyle))
-        ;         style |= (valStyle != "StrikeOut") ? (A_Index-1) : 8
-        ; }
-        ; Align := 0
-        ; Alignments := [
-        ;     "Near",
-        ;     "Left",
-        ;     "Centre",
-        ;     "Center",
-        ;     "Far",
-        ;     "Right",
-        ; ]
-        ; For k, valAlignment in Alignments {
-        ;     if (opts ~= "\b" . valAlignment)
-        ;         Align |= A_Index//2.1	; 0|0|1|1|2|2
-        ; }
-        ; xpos := (xpos && (xpos[1] != "")) ? (xpos[2] ? width*(xpos[1]/100) : xpos[1]) : 0
-        ; ypos := (ypos && (ypos[1] != "")) ? (ypos[2] ? height*(ypos[1]/100) : ypos[1]) : 0
-        ; width := (width && width[1]) ? (width[2] ? width*(width[1]/100) : width[1]) : width
-        ; height := (height && height[1]) ? (height[2] ? IHeight*(height[1]/100) : height[1]) : IHeight
-        ; Colour := "0x" . (Colour && Colour[2] ? Colour[2] : "ff000000")
-        ; ; if !PassBrush
-        ; ;     Colour := format("0x{1}", Colour && Colour[2] ? Colour[2] : "ff000000")
-        ; Rendering := (Rendering && (Rendering[1] >= 0) && (Rendering[1] <= 5)) ? Rendering[1] : 4
-        ; Size := (Size && (Size[1] > 0)) ? (Size[2] ? IHeight*(Size[1]/100) : Size[1]) : 12
         oFont := GDIP_Font(sFont, objType["s"])
         oStringFormat := GDIP_StringFormat(objType["NoWrap"])
         oBrush := GDIP_Brush(objType["c"])
@@ -1999,6 +1992,21 @@ class GDIP_Graphics extends _GDIP {
             _E := this.GdipDrawString(sText, oFont, oStringFormat, oBrush, aRect)
         ; if !PassBrush
         ;     Gdip_DeleteBrush(pBrush)
+        oBrush := ""
+        oStringFormat := ""
+        oFont := ""
+        return _E ? _E : arrRes
+    }
+
+    DrawText1(sText, o, aRect, Measure:=0) {
+        oFont := GDIP_Font(o.get("font","Arial"), o.get("size",12), o.get("style",0))
+        oStringFormat := GDIP_StringFormat(o.has("NoWrap") ? 0x4000 | 0x1000 : 0x4000)
+        oBrush := GDIP_Brush(o.get("color", 0xffFF0000))
+        this.GdipSetTextRenderingHint(o.get("rows", 1))
+        oStringFormat.GdipSetStringFormatAlign(o.get("align", 1))
+        arrRes := this.GdipMeasureString(sText, oFont, oStringFormat, aRect)
+        if (!Measure)
+            _E := this.GdipDrawString(sText, oFont, oStringFormat, oBrush, aRect)
         oBrush := ""
         oStringFormat := ""
         oFont := ""
@@ -2327,7 +2335,8 @@ class GDIP_Graphics extends _GDIP {
     ; 画布的坐标0点是相对 DC 的。而 DC 的坐标0点是相对屏幕的。
     ; 此时可以用 spy 工具观察，图片范围外是没有句柄的，也就是说，这是一个异型的界面。
     ;aRect =屏幕上显示的位置大小
-    UpdateLayeredWindow(hwnd, aRect, alpha:=255) {
+    UpdateLayeredWindow(oGui, aRect, alpha:=255) {
+        hwnd := oGui.hwnd
         if (!hwnd || !this.hDC)
             msgbox(A_ThisFunc)
         w := aRect[3]
@@ -2525,37 +2534,34 @@ class GDIP_Brush extends _GDIP {
 class GDIP_Font extends _GDIP {
     ptr := 0
 
-    ;oInstance
+    ;param
     ;   oDC
     ;   oFontFamily
     ;   sFont
-    __new(oInstance:="Arial", size:=12) {
-        res := 0
-        if (isobject(oInstance)) {
-            if (oInstance is GDIP_Graphics)
-                res := dllcall("gdiplus\GdipCreateFontFromDC", "ptr",oInstance.hDC, "ptr*",&pFont:=0)
-            else if (oInstance is GDIP_FontFamily)
-                this.GdipCreateFont(oInstance.ptr, size)
+    __new(param:="Arial", size:=12, style:=0) {
+        if (isobject(param)) {
+            if (param is GDIP_Graphics) {
+                if (dllcall("gdiplus\GdipCreateFontFromDC", "ptr",param.hDC, "ptr*",&pFont:=0))
+                    msgbox(A_ThisFunc)
+            } else if (param is GDIP_FontFamily) {
+                this.GdipCreateFont(param, size, style)
+            }
         } else { ;字体名称
-            oFontFamily := GDIP_FontFamily(oInstance)
-            this.GdipCreateFont(oFontFamily, size)
-            oFontFamily := ""
+            this.GdipCreateFont(GDIP_FontFamily(param), size, style)
         }
-        if (res)
-            msgbox(A_ThisFunc)
     }
 
     __delete() => dllcall("gdiplus\GdipDeleteFont", "ptr",this)
 
-    ; Regular = 0
-    ; Bold = 1
-    ; Italic = 2
-    ; BoldItalic = 3
-    ; Underline = 4
-    ; Strikeout = 8
+    ;style
+    ;	Regular = 0
+    ;	Bold = 1
+    ;	Italic = 2
+    ;	BoldItalic = 3
+    ;	Underline = 4
+    ;	Strikeout = 8
     GdipCreateFont(pFontFamily, size, style:=0) {
-        res := dllcall("gdiplus\GdipCreateFont", "ptr",pFontFamily, "float",size, "uint",style, "uint",0, "ptr*",&pFont:=0)
-        if (res)
+        if (dllcall("gdiplus\GdipCreateFont", "ptr",pFontFamily, "float",size, "uint",style, "uint",0, "ptr*",&pFont:=0))
             msgbox(A_ThisFunc)
         return this.ptr := pFont
     }
@@ -2563,7 +2569,7 @@ class GDIP_Font extends _GDIP {
 
 class GDIP_FontFamily {
     __new(sFont) {
-        res := dllcall("gdiplus\GdipCreateFontFamilyFromName", "ptr",strptr(sFont), "ptr",0, "ptr*",&pFontFamily:=0)
+        dllcall("gdiplus\GdipCreateFontFamilyFromName", "ptr",strptr(sFont), "ptr",0, "ptr*",&pFontFamily:=0)
         if (!pFontFamily) {
             msgbox(format("字体{1}不存在", sFont),,0x40000)
             exit
@@ -2576,40 +2582,37 @@ class GDIP_FontFamily {
 }
 
 ;ss
-;文字在框中的对齐方式
+/*
+文字在框中的对齐方式
+https://learn.microsoft.com/zh-cn/dotnet/api/system.drawing.stringformatflags?view=dotnet-plat-ext-7.0
+StringFormatFlags;
+    StringFormatFlagsDirectionRightToLeft    = 0x0001 ❎从右往左
+    StringFormatFlagsDirectionVertical       = 0x0002 ❎垂直对齐
+    StringFormatFlagsNoFitBlackBox           = 0x0004 允许部分字符延伸该字符串的布局矩形
+    StringFormatFlagsDisplayFormatControl    = 0x0020 ❎显示控制字符
+    StringFormatFlagsNoFontFallback          = 0x0400 ❎不支持的字符，禁用回退到可选字体(一般是方块)
+    StringFormatFlagsMeasureTrailingSpaces   = 0x0800 ❎包含末尾空格
+    StringFormatFlagsNoWrap                  = 0x1000 ❎禁用自动换行
+    StringFormatFlagsLineLimit               = 0x2000 只想看到整行，则✅
+    StringFormatFlagsNoClip                  = 0x4000 ✅允许显示字形符号的伸出部分和延伸到矩形外的未换行文本
+langId: Defines the language this _StringFormat object should use.
+I don't actually know any besides 0 which is LANG_NEUTRAL and represents the users language - further research is necessary.
+*/
 class GDIP_StringFormat extends _GDIP {
-
-    /*
-    formatFlags: Defines some settings of the _StringFormat object
-    typedef enum  {
-        StringFormatFlagsDirectionRightToLeft    = 0x0001,
-        StringFormatFlagsDirectionVertical       = 0x0002,
-        StringFormatFlagsNoFitBlackBox           = 0x0004,
-        StringFormatFlagsDisplayFormatControl    = 0x0020,
-        StringFormatFlagsNoFontFallback          = 0x0400,
-        StringFormatFlagsMeasureTrailingSpaces   = 0x0800,
-        StringFormatFlagsNoWrap                  = 0x1000,
-        StringFormatFlagsLineLimit               = 0x2000,
-        StringFormatFlagsNoClip                  = 0x4000
-    } StringFormatFlags;
-    langId: Defines the language this _StringFormat object should use.
-    I don't actually know any besides 0 which is LANG_NEUTRAL and represents the users language - further research is necessary.
-    */
 
     __new(formatFlags:=0, langId:=0) => this.GdipCreateStringFormat(formatFlags, langId)
 
     __delete() => dllcall("gdiplus\GdipDeleteStringFormat", "ptr",this)
 
-    GdipCreateStringFormat(formatFlags, langId) {
+    GdipCreateStringFormat(formatFlags, langId:=0) {
         res := dllcall("gdiplus\GdipCreateStringFormat", "uint",formatFlags, "UShort",langId, "ptr*",&pStringFormat:=0)
         if (res)
             msgbox(A_ThisFunc)
         this.ptr := pStringFormat
     }
 
-    ; Near = 0
-    ; Center = 1
-    ; Far = 2
+    ;左 中 右
+    ;0  1  2
     GdipSetStringFormatAlign(align:=1) => dllcall("gdiplus\GdipSetStringFormatAlign", "ptr",this, "int",align)
 
 }

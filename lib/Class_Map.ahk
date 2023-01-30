@@ -14,9 +14,11 @@ class _Map extends map {
     ;CaseSense := 0
     ;Default := ""
 
-    index(isValue:=0, i:=1) {
+    ; i同array的序号
+    index(isValue:=0, i:=-1) {
         e := this.__enum()
-        numput("uint", this.count-1-i, objptr(e), 6*A_PtrSize+16)
+        i := (i < 0) ? this.count-1+i : i-2
+        numput("uint", i, objptr(e), 6*A_PtrSize+16)
         e(&k)
         return isValue ? this[k] : k
     }
@@ -40,6 +42,13 @@ class _Map extends map {
         for k, v in this
             arr.push(k)
         return arr
+    }
+
+    ;obj的值覆盖this
+    coverByMap(obj) {
+        for k, v in obj
+            this[k] := v
+        return this
     }
 
     values(i:=0) {

@@ -28,7 +28,7 @@ NOTE NOTE NOTE 思路：
                不需要保存 elWin，而是一次性用完就丢。
                比如Excel的【查找和替换】对话框，可用下面方法获取 Name="范围(H)": 的 ComboBox
                el := UIA.FindElement(WinGetID("A"), "ComboBox", "范围(H):")
-               如果值不是精确匹配，比如查找部分匹配的，把 FindControl的flag参数设置为1
+               如果值不是精确匹配，比如查找部分匹配的，把 FindControl的flag参数设置为2(见PropertyConditionFlags)
                TIM 选择表情
                    el := UIA.FindElement(WinGetID("A"), "ComboBox", "选择表情", "LegacyIAccessibleDescription")
                TabItem
@@ -1002,7 +1002,7 @@ class IUIAutomationElement extends IUIABase {
     * @param propertyId The property identifier. `Name`(default)
     * @param waittime Waiting time for control element to appear.
     this 生成后出现的元素，用此方法也能获取，说明 this 是动态的
-    flag != 0 则为包含value，而不是精确匹配
+    flag == 2 则为包含value，而不是精确匹配
     */
     FindControl(ControlType, value, field:="Name", msWait:=0, flag:=0) {
         if !(ControlType is integer) {
@@ -1011,7 +1011,7 @@ class IUIAutomationElement extends IUIABase {
             } else {
                 ControlType := UIA.ControlType.%ControlType%
                 if (flag)
-                    cond := UIA.CreateAndCondition(UIA.CreatePropertyCondition(30003,ControlType), UIA.CreatePropertyConditionEx(UIA.property.%field%, value))
+                    cond := UIA.CreateAndCondition(UIA.CreatePropertyCondition(30003,ControlType), UIA.CreatePropertyConditionEx(UIA.property.%field%, value, flag))
                 else
                     cond := UIA.CreateAndCondition(UIA.CreatePropertyCondition(30003,ControlType), UIA.CreatePropertyCondition(UIA.property.%field%, value))
             }
@@ -1035,7 +1035,7 @@ class IUIAutomationElement extends IUIABase {
         WinGetClientPos(&xClient, &yClient) ;见 UIA.FindElement()
         arrXY[1] -= xClient
         arrXY[2] -= yClient
-        OutputDebug(format("i#{1} {2}:{3} arrClientXY={4}", A_LineFile,A_LineNumber,A_ThisFunc,json.stringify(arrXY,4)))
+        OutputDebug(format("i#{1} {2}:{3} arrControl={4}", A_LineFile,A_LineNumber,A_ThisFunc,json.stringify(arrXY)))
         ControlClick(format("X{1} Y{2}", arrXY*))
         return arrXY
     }
@@ -1045,7 +1045,7 @@ class IUIAutomationElement extends IUIABase {
         CoordMode("mouse", "Screen")
         ;记录原位置
         MouseGetPos(&x0, &y0)
-        OutputDebug(format("i#{1} {2}:{3} arrXY={4}", A_LineFile,A_LineNumber,A_ThisFunc,json.stringify(arrXY,4)))
+        OutputDebug(format("i#{1} {2}:{3} arrMouse={4}", A_LineFile,A_LineNumber,A_ThisFunc,json.stringify(arrXY)))
         MouseMove(arrXY[1], arrXY[2], 0)
         sleep(20)
         (cnt) && click(cnt)
@@ -1134,6 +1134,26 @@ class IUIAutomationElement extends IUIABase {
         }
         return elFocus
     }
+    ;鼠标要移能能滚动的位置，一开始要滚到右上方，再慢慢往下滚
+    FindByScroll(arrFind, cntTop, cntDown, cntLoop:=5) {
+        loop { ;没找到，需要往下滚动
+            el := this.FindControl(arrFind*)
+            if (isobject(el) && el.GetBoundingRectangle()[2])
+                break
+            else
+                OutputDebug(format("i#{1} {2}:{3} A_Index={4} rect={5}", A_LineFile,A_LineNumber,A_ThisFunc,A_Index,json.stringify(el.GetBoundingRectangle())))
+            if (A_Index == 1) { ;先回到最上方
+                send(format("{WheelUp {1}}", cntTop))
+            } else if (A_Index > cntLoop) {
+                return
+            } else {
+                OutputDebug(format("i#{1} {2}:{3} down", A_LineFile,A_LineNumber,A_ThisFunc))
+                send(format("{WheelDown {1}}", cntDown))
+            }
+            sleep(100)
+        }
+        return el
+    }
     ;这个方法专门用在下拉框选择上：前面需要点击，后面需要确定选择
     ComboboxSelectListItem(name) {
         this.ClickByControl() ;NOTE 有时需要先点击才会出现列表(比如Excel的数据验证窗口)
@@ -1156,17 +1176,19 @@ class IUIAutomationElement extends IUIABase {
         if (this.GetControlType() ~= "i)^(Button|RadioButton|CheckBox|ComboBox)$") {
             oTG := this.GetCurrentPattern("toggle")
             if (this.GetCurrentPropertyValue("ToggleToggleState") != bChecked) { ;(oTG.CurrentToggleState != bChecked)
-                if (method == "")
-                    oTG.Toggle()
-                else
-                    this.%method%() ;作为补充
+                switch method {
+                    case "": oTG.Toggle()
+                    case "ClickByMouse": this.ClickByMouse(1)
+                    default: this.%method%() ;作为补充
+                }
             }
         } else if (this.GetControlType() ~= "i)^(ListItem|TabItem)$") {
             if (this.GetCurrentPropertyValue("SelectionItemIsSelected") != bChecked)
-                if (method == "")
-                    this.GetCurrentPattern("SelectionItem").select()
-                else
-                    this.%method%() ;作为补充
+                switch method {
+                    case "": this.GetCurrentPattern("SelectionItem").select()
+                    case "ClickByMouse": this.ClickByMouse(1)
+                    default: this.%method%() ;作为补充
+                }
         }
     }
     ;包含坐标，以下对 CheckBox 作了特殊处理 by 火冷 <2022-11-10 21:28:47>
@@ -1192,6 +1214,18 @@ class IUIAutomationElement extends IUIABase {
         } else {
             return false
         }
+    }
+
+    ;等待 funTrue(el) = true
+    waitByFunc(funTrue, msWait:=3000) {
+        endTime := A_TickCount + msWait
+        loop {
+            if (funTrue(this))
+                return true
+            else
+                sleep(500)
+        } until (A_TickCount >= endTime)
+        return false
     }
 
     GetAllCurrentPropertyValue() {
@@ -1459,9 +1493,9 @@ class IUIAutomationElement extends IUIABase {
                 s .= format("{1}=`t{2}`n", k,v)
         }
         tooltip(s,,, 9)
-        if (bSec)
+        if (bSec) {
             SetTimer(func("tooltip").bind(,,, 9), -(bSec*1000))
-        else { ;
+        } else { ;
             ih := InputHook()
             ih.VisibleNonText := false
             ih.KeyOpt("{all}", "E")
@@ -1605,14 +1639,19 @@ class IUIAutomationElement extends IUIABase {
     ;tp 0=obj 1=arrData 2=arrTable
     getTableData(tp:=false, toStr:=false) {
         oRV := UIA.RawViewWalker()
-        elTable := oRV.GetParentElement(this)
-        loop(2) {
-            if (elTable.CurrentControlType != UIA.ControlType.Table)
-                elTable := oRV.GetParentElement(elTable)
-            else
-                break
+        if (this.CurrentControlType != UIA.ControlType.Table) {
+            elTable := oRV.GetParentElement(this)
+            loop(2) {
+                if (elTable.CurrentControlType != UIA.ControlType.Table) {
+                    elTable := oRV.GetParentElement(elTable)
+                } else {
+                    OutputDebug(format("i#{1} {2}:{3} not found elTable", A_LineFile,A_LineNumber,A_ThisFunc))
+                    res := tp ? [] : map()
+                    return toStr ? res.toTable() : res
+                }
+            }
         }
-        ;获取标题
+        ;获取标题(可能没有)
         elHeader := oRV.GetFirstChildElement(elTable)
         arrField := []
         for el in elHeader.FindAll(UIA.CreateTrueCondition(), 2)

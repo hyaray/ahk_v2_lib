@@ -225,24 +225,6 @@ hyf_setClip(str, stip:="已复制", n:=3000) {
     SetTimer(tooltip, -n)
 }
 
-;如果可直接键盘输出，一般用 SendText
-;用剪切板发送字符串
-hyf_paste(str, k:="") {
-    c := A_Clipboard
-    A_Clipboard := str
-    while(A_Clipboard != str)
-        sleep(10)
-    if (0) ;待完善
-        send("{shift down}{ins}{shift up}")
-    else
-        send("{ctrl down}v{ctrl up}")
-    sleep(20)
-    if (k != "")
-        send(k)
-    sleep(100)
-    A_Clipboard := c
-}
-
 RegExist(dir) {
     loop reg, dir, "KV"
         return true
@@ -1491,7 +1473,7 @@ hyf_selectByArr(arr2, indexKey:=1, sPyAndIndex:="21", bDistinct:=false) {
 
 ;defButton是默认按钮前面的text内容
 ;hyf_GuiMsgbox(map("a",132,"b",22), "aaa")
-hyf_GuiMsgbox(obj, title:="", defButton:="", oGui:="", times:=0) {
+hyf_GuiMsgbox(obj, title:="", defButton:="", fun:=unset, oGui:="", times:=0) {
     if (!isobject(obj))
         return
     if (obj is array && !obj.length)
@@ -1504,15 +1486,24 @@ hyf_GuiMsgbox(obj, title:="", defButton:="", oGui:="", times:=0) {
         oGui.SetFont("cBlue s13")
         oGui.OnEvent("escape",doEscape)
     }
+    funDo := isset(fun) ? fun : hyf_GuiMsgbox_1
     for k, v in obj {
         x := times*30 + 10 ;缩进30，离左边缘10
         oGui.AddText("section x" . x, k)
-        if (isobject(v))
-            %A_ThisFunc%(v, title, defButton, oGui, times+1)
-        else if (defButton != "") && (k = defButton)
-            oGui.AddButton("ys yp-5 default", v).OnEvent("click", hyf_GuiMsgbox_1)
-        else
-            oGui.AddButton("ys yp-5", v).OnEvent("click", hyf_GuiMsgbox_1)
+        if (isobject(v)) {
+            if (v is ComValue) {
+                oGui.AddButton("ys yp-5", "ComValue").OnEvent("click", funDo)
+            } else {
+                %A_ThisFunc%(v, title, defButton, funDo, oGui, times+1)
+            }
+        } else if (defButton != "") && (k = defButton) {
+            oGui.AddButton("ys yp-5 default", v).OnEvent("click", funDo)
+        } else {
+            try
+                oGui.AddButton("ys yp-5", v).OnEvent("click", funDo)
+            catch
+                oGui.AddButton("ys yp-5", v)
+        }
     }
     if (times = 0)
         oGui.show("center")

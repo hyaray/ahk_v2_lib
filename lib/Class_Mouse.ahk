@@ -391,7 +391,7 @@ class _Mouse {
 
     ;如果x是数组，则y直接当n用(调用时不需要中间空一个参数) NOTE
     ;NOTE 鼠标会停留
-    static clickR(x, y:=0, n:=1) {
+    static clickR(x:=0, y:=0, n:=1) {
         if (isobject(x)) {
             MouseMove(x[1], x[2], 0, "R")
             sleep(20)
