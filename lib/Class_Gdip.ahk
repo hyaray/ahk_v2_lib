@@ -255,6 +255,10 @@ class _GDIP {
                 aRect[3] += 2*n
                 aRect[4] += 2*n
             }
+            if (A_Index == 1) { ;记录坐标，鼠标移到对应位置
+                xSave := aRect[1]+aRect[3]//2
+                ySave := aRect[2]+aRect[4]//2
+            }
             oGraphics.GdipDrawRectangle(oPen.ptr, aRect)
             ;文字相关
             if (isset(arrFontOpt)) {
@@ -262,6 +266,10 @@ class _GDIP {
                 oGraphics.DrawText1(arrText[k], objFontOpts, aRectFont)
             }
         }
+        cmMouse := A_CoordModeMouse
+        CoordMode("Mouse", "screen")
+        MouseMove(xSave, ySave)
+        CoordMode("Mouse", cmMouse)
         oGraphics.UpdateLayeredWindow(oGui, [0,0,w,h])
         oGraphics.SelectObject()
         if (keyWaitClose is string) {

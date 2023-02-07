@@ -1138,10 +1138,11 @@ class IUIAutomationElement extends IUIABase {
     FindByScroll(arrFind, cntTop, cntDown, cntLoop:=5) {
         loop { ;没找到，需要往下滚动
             el := this.FindControl(arrFind*)
-            if (isobject(el) && el.GetBoundingRectangle()[2])
-                break
-            else
+            if (el is IUIAutomationElement) {
+                if (el.GetBoundingRectangle()[2])
+                    break
                 OutputDebug(format("i#{1} {2}:{3} A_Index={4} rect={5}", A_LineFile,A_LineNumber,A_ThisFunc,A_Index,json.stringify(el.GetBoundingRectangle())))
+            }
             if (A_Index == 1) { ;先回到最上方
                 send(format("{WheelUp {1}}", cntTop))
             } else if (A_Index > cntLoop) {
@@ -1641,7 +1642,7 @@ class IUIAutomationElement extends IUIABase {
         oRV := UIA.RawViewWalker()
         if (this.CurrentControlType != UIA.ControlType.Table) {
             elTable := oRV.GetParentElement(this)
-            loop(2) {
+            loop(3) {
                 if (elTable.CurrentControlType != UIA.ControlType.Table) {
                     elTable := oRV.GetParentElement(elTable)
                 } else {
@@ -1650,6 +1651,8 @@ class IUIAutomationElement extends IUIABase {
                     return toStr ? res.toTable() : res
                 }
             }
+        } else {
+            elTable := this
         }
         ;获取标题(可能没有)
         elHeader := oRV.GetFirstChildElement(elTable)

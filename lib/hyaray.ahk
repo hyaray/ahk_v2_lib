@@ -220,8 +220,10 @@ hyf_getSelect(bVimNormal:=false, bInput:=false) {
 
 ;设置剪切板并提示
 hyf_setClip(str, stip:="已复制", n:=3000) {
+    if (str == "")
+        return
     A_Clipboard := str
-    tooltip(stip . "`n`n" . str)
+    tooltip(format("{1}`n`n{2}", stip,str))
     SetTimer(tooltip, -n)
 }
 

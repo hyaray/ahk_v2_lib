@@ -527,6 +527,35 @@ class _Mouse {
         CoordMode("mouse", cmMouse)
     }
 
+    static moveWindow(ThisHotkey) {
+        key := RegExReplace(ThisHotkey, ".*\s")
+        CoordMode "Mouse" ; Switch to screen/absolute coordinates.
+        MouseGetPos &x0Mouse, &y0Mouse, &hwnd
+        WinGetPos &x0Win, &y0Win,,, hwnd
+        if (!WinGetMinMax(hwnd))  ; Only if the window isn't maximized 
+            SetTimer(watchMouse, 10) ; Track the mouse as the user drags it.
+        watchMouse() {
+            if !GetKeyState(key, "P") {  ; Button has been released, so drag is complete.
+                SetTimer(watchMouse, 0)
+                return
+            }
+            if GetKeyState("Escape", "P") {  ; Escape has been pressed, so drag is cancelled.
+                SetTimer(watchMouse, 0)
+                WinMove(x0Win, y0Win,,, hwnd)
+                return
+            }
+            ; Otherwise, reposition the window to match the change in mouse coordinates
+            ; caused by the user having dragged the mouse:
+            CoordMode("Mouse")
+            MouseGetPos &x1Mouse, &y1Mouse
+            WinGetPos &x1Win, &y1Win,,, hwnd
+            SetWinDelay -1   ; Makes the below move faster/smoother.
+            WinMove x1Win + x1Mouse - x0Mouse, y1Win + y1Mouse - y0Mouse,,, hwnd
+            x0Mouse := x1Mouse  ; Update for the next timer-call to this subroutine.
+            y0Mouse := y1Mouse
+        }
+    }
+
 }
 
 ;和当前鼠标有关的坐标在 _Mouse

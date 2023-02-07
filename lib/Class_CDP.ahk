@@ -155,11 +155,13 @@ class _CDP {
     ;	1 关闭当前浏览器
     ;	2 关闭并正确打开浏览器
     detect(tp:=0) {
-        if (this.hwnd && ProcessExist(this.pid))
+        if (this.hwnd && ProcessExist(this.pid)) {
+            OutputDebug(format("i#{1} {2}:{3} existed hwnd={4} this.pid={5}", A_LineFile,A_LineNumber,A_ThisFunc,this.hwnd,this.pid))
             return this.hwnd
+        }
         if (ProcessExist(this.exeName)) { ;可能脚本重启等原因丢失了数据
             this.pid := this.FindInstances().get("pid", 0)
-            ;OutputDebug(format("i#{1} {2}:detect获取pid={3}", A_LineFile,A_LineNumber,this.pid))
+            OutputDebug(format("i#{1} {2}:{3} existed pid={4}", A_LineFile,A_LineNumber,A_ThisFunc,this.pid))
             if (this.pid) {
                 saveDetect := A_DetectHiddenWindows
                 DetectHiddenWindows(true)
@@ -221,7 +223,7 @@ class _CDP {
         "faviconUrl": "https://mat1.gtimg.com/www/icon/favicon2.ico",
         "id": "8A5B6CDB1ABE9E40BAD3C9902841BBE2",
         "title": "腾讯首页",
-        "type": "page",
+        "type": "page", //background_page other iframe
         "url": "https://www.qq.com",
         "webSocketDebuggerUrl": "ws://127.0.0.1:9222/devtools/page/8A5B6CDB1ABE9E40BAD3C9902841BBE2"
     }
@@ -230,16 +232,16 @@ class _CDP {
         this.detect(true)
         ;debug 模式获取
         ;OutputDebug(format("i#{1} {2}:httpAll={3}", A_LineFile,A_LineNumber,json.stringify(this.httpOpen("",true),4)))
-        for objHttp in this.httpOpen("", true) {
+        for objHttp in this.httpOpen() {
             if (objHttp["type"] == "page" && objHttp["title"] != "DevTools") { ;NOTE by 火冷 <2022-10-01 17:42:12>
                 objHttp["url"] := rtrim(objHttp["url"], "/")
                 OutputDebug(format("i#{1} {2}:{3} getCurrentPage key={4}", A_LineFile,A_LineNumber,A_ThisFunc,key))
                 switch key {
                     case "json": ;增加个 title
                         jsonPage := objHttp["url"].jsonUrl()
-                        jsonPage["title"] := objHttp["title"]
+                        ;jsonPage["title"] := objHttp["title"]
                         return jsonPage
-                    case "arr": ;标题+url
+                    case "arr": return [objHttp["title"], objHttp["url"]] ;标题+url
                     case "": return objHttp
                     default:
                         jsonPage := objHttp["url"].jsonUrl()
@@ -249,16 +251,9 @@ class _CDP {
         }
     }
 
-    ;Firefox UIA.ElementFromHandle(WinActive("A")).FindFirst(UIA.CreatePropertyCondition("AutomationId", "urlbar-input")).GetCurrentPropertyValue("ValueValue")
-    getUrl() => this.getCurrentPage("url")
-    ;删除末尾的 - Cent Browser
-    getTitle() => this.getCurrentPage("title")
-
     /*
-    Queries Chrome for a list of pages that expose a debug interface.
-    In addition to standard tabs, these include pages such as extension
-    configuration pages.
     所有标签+插件的信息
+    顺序为最近激活的顺序，当前页为第一个
     keyJson
         ="" 则返回数组
         否则应设置为 jsonUrl 包含的 key，返回以 keyJson | "href" 为索引的 map(用来判断xx页面是否存在)
@@ -266,7 +261,7 @@ class _CDP {
     getPageList(funTrue:="", keyJson:="") {
         if (funTrue == "")
             funTrue := (obj)=>obj["type"] == "page"
-        arr := this.httpOpen("", true)
+        arr := this.httpOpen()
         ;OutputDebug(format("i#{1} {2}:arr={3}", A_LineFile,A_LineNumber,json.stringify(arr,4)))
         if (keyJson == "")
             arrRes := []
@@ -306,10 +301,13 @@ class _CDP {
     CliEscape(Param) => format('"{1}"', RegExReplace(Param, '(\\*)"', '$1$1\"'))
 
     ;pathname前面要带 /
-    httpOpen(pathname, toJson:=false) {
+    httpOpen(pathname:="") {
         this.http.open('GET', format("http://127.0.0.1:{1}/json{2}", this.DebugPort,pathname))
-        resSend := this.http.send()
-        return toJson ? JSON.parse(this.http.responseText) : resSend
+        try
+            resSend := this.http.send()
+        catch as e
+            msgbox(format("{1}`nhttp://127.0.0.1:{2}/json{3}", A_ThisFunc,this.DebugPort,pathname) . "`n" . json.stringify(e, 4))
+        return pathname=="" ? JSON.parse(this.http.responseText) : resSend
     }
 
     ;closeNewtab(id:="") {
@@ -433,13 +431,13 @@ class _CDP {
     ;    msgbox("【保护您和您的设备不受危险网站的侵害】选项取消打勾")
     ;}
 
-    getPage(funObj:=unset, tp:="id") {
+    getPage(funObj:=unset) {
         if (isset(funObj)) {
-            arr := this.httpOpen("", true)
+            arr := this.httpOpen()
             for objHttp in arr {
                 if (objHttp["type"] == "page" && objHttp["title"] != "DevTools") {
                     if (funObj(objHttp["url"].jsonUrl()))
-                        return (tp != "") ? objHttp["id"] : _CDP.CDPP(objHttp, this.http)
+                        return _CDP.CDPP(objHttp, this.http)
                 }
             }
         } else {
@@ -448,12 +446,11 @@ class _CDP {
     }
 
     activatePage(funObj) {
-        id := this.getPage(funObj)
-        if (id != "") {
-            this.httpOpen("/activate/" . id)
-            return 1
+        oPage := this.getPage(funObj)
+        if (isobject(oPage)) {
+            oPage.activate()
+            return oPage
         }
-        return 0
     }
 
     /*
@@ -585,17 +582,20 @@ class _CDP {
                 for k, v in objHttp
                     this.%k% := v
                 this.objUrl := objHttp["url"].jsonUrl() ;url 会在后面被修改
-                this.objUrl["title"] := objHttp["title"] ;和 getCurrentPage("json") 同格式
+                ;this.objUrl["title"] := objHttp["title"] ;和 getCurrentPage("json") 同格式
             } else {
                 this.objUrl := objHttp.jsonUrl() ;url 会在后面被修改
             }
         }
 
         ;pathname前面要带 /
-        httpOpen(pathname, toJson:=false) {
+        httpOpen(pathname:="") {
             this.http.open('GET', format("http://127.0.0.1:{1}/json{2}", this.DebugPort,pathname))
-            resSend := this.http.send()
-            return toJson ? JSON.parse(this.http.responseText) : resSend
+            try
+                resSend := this.http.send()
+            catch as e
+                msgbox(format("{1}`nhttp://127.0.0.1:{2}/json{3}", A_ThisFunc,this.DebugPort,pathname) . "`n" . json.stringify(e, 4))
+            return pathname=="" ? JSON.parse(this.http.responseText) : resSend
         }
 
         saveIco() {

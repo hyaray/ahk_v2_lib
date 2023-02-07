@@ -15,32 +15,38 @@ class _Map extends map {
     ;Default := ""
 
     ; i同array的序号
-    index(isValue:=0, i:=-1) {
+    _index(isValue:=0, i:=-1) {
         e := this.__enum()
         i := (i < 0) ? this.count-1+i : i-2
         numput("uint", i, objptr(e), 6*A_PtrSize+16)
-        e(&k)
+        e(&k:=0)
         return isValue ? this[k] : k
     }
-
-    toString() => super.toJson()
-
     ;参考python
     ;如果指定了i，则返回对应序号的k
-    keys(i:=0) {
-        if (i) {
-            if (i > 0) ;1=-1 2=0
-                idx := i-2
-            else ;-1=count-2 -2=count-3
-                idx := this.count - (abs(i) + 1)
-            e := this.__enum()
-            numput("uint", idx, objptr(e), 6*A_PtrSize+16)
-            e(&k)
-            return k
-        }
+    keys(i:=unset) {
+        if (isset(i))
+            return this._index(0, i)
         arr := []
         for k, v in this
             arr.push(k)
+        return arr
+    }
+
+    values(i:=unset) {
+        if (isset(i))
+            return this._index(1, i)
+        arr := []
+        for k, v in this
+            arr.push(v)
+        return arr
+    }
+
+    ;转成二维数组
+    items() {
+        arr := []
+        for k, v in this
+            arr.push([k, v])
         return arr
     }
 
@@ -51,28 +57,49 @@ class _Map extends map {
         return this
     }
 
-    values(i:=0) {
-        if (i) {
-            if (i > 0)
-                idx := i-2
-            else
-                idx := this.count - (abs(i) + 1)
-            e := this.__enum()
-            numput("uint", idx, objptr(e), 6*A_PtrSize+16)
-            e(&k)
-            return this[k]
+    ;添加 obj 中不存在的键
+    extend(obj) {
+        for k, v in obj {
+            if (!this.has(k))
+                this[k] := v
         }
-        arr := []
-        for k, v in this
-            arr.push(v)
-        return arr
+        return this
     }
 
-    items() {
-        arr := []
-        for k, v in this
-            arr.push([k, v])
-        return arr
+    toString() => super.toJson()
+
+    ;arrKey 分别为 key [前,后,每个key之间]的符号定义
+    ;arrValue 分别为 value [前,后]的符号定义
+    /*
+    比如 obj := map(
+        "a", [a1,a2],
+        "b", [b3,b4],
+    )
+    转成 2 级markdown，并每个 key 中间插入空行
+    obj.toStringEx(["## ","`n","`n"], ["### ","`n"])
+    结果:
+    ## a
+    ### a1
+    ### a2
+    
+    ## b
+    ### b3
+    ### b4
+    */
+    ;NOTE 暂不支持嵌套
+    toStringEx(arrKey, arrValue) {
+        res := ""
+        for title, arr in this {
+            res .= format("{1}{2}{3}", arrKey[1],title,arrKey[2])
+            if (arr is array) {
+                for v in arr
+                    res .= format("{1}{2}{3}", arrValue[1],v,arrValue[2])
+            } else {
+                res .= format("{1}{2}{3}", arrValue[1],arr,arrValue[2])
+            }
+            (arrKey.length > 2) && res .= arrKey[3]
+        }
+        return rtrim(res, arrKey[3])
     }
 
     ;转成表格字符串(方便查看)

@@ -1484,6 +1484,7 @@ class _String {
     main	a
     port	80
     pathname	/dir/aa.html
+    pathnames	["dir","aa.html"](若有)
     search	?ver=1
     hash	#h
     */
@@ -1538,7 +1539,7 @@ class _String {
         } else
             obj["hash"] := ""
         ;再获取 search
-        if (substr(sNow, 1, 1) == "?" && instr(sNow, "&")) {
+        if (instr(sNow, "?")) {
             obj["search"] := substr(sNow, instr(sNow,"?"))
             obj["objSearch"] := map()
             for tmp in StrSplit(substr(obj["search"], 2), "&") {
@@ -1552,7 +1553,8 @@ class _String {
         }
         ;剩余即是 pathname
         obj["pathname"] := rtrim(sNow, "/")
-        ;hyf_objView(obj)
+        if (obj["pathname"] ~= "\S{2,}")
+            obj["pathnames"] := StrSplit(ltrim(obj["pathname"],"/"), "/")
         return (strlen(key) && obj.has(key)) ? obj[key] : obj
     }
 
