@@ -168,9 +168,7 @@ class _CDP {
                 for winHwnd in WinGetList("ahk_class Chrome_WidgetWin_1 ahk_pid " . this.pid) {
                     try {
                         titleLoop := WinGetTitle(winHwnd)
-                        ;OutputDebug(format("i#{1} {2}:detect遍历titleLoop={3}", A_LineFile,A_LineNumber,titleLoop))
                     } catch {
-                        ;OutputDebug(format("i#{1} {2}:detect WinGetTitle异常", A_LineFile,A_LineNumber))
                         continue
                     }
                     if (titleLoop ~= "\S") {
@@ -181,10 +179,10 @@ class _CDP {
                 }
                 DetectHiddenWindows(saveDetect)
                 if (this.hwnd) {
-                    OutputDebug(format("i#{1} {2}:detect重新获取chrome.hwnd={3}", A_LineFile,A_LineNumber,this.hwnd))
+                    OutputDebug(format("i#{1} {2}:{3} 重新获取hwnd={4}", A_LineFile,A_LineNumber,A_ThisFunc,this.hwnd))
                     return this.hwnd
                 } else {
-                    OutputDebug(format("i#{1} {2}:detect无法获取chrome.hwnd", A_LineFile,A_LineNumber))
+                    OutputDebug(format("i#{1} {2}:{3} 无法获取hwnd", A_LineFile,A_LineNumber,A_ThisFunc))
                 }
             } else if (tp) {
                 ;NOTE 找不到，是否结束所有进程
@@ -235,7 +233,7 @@ class _CDP {
         for objHttp in this.httpOpen() {
             if (objHttp["type"] == "page" && objHttp["title"] != "DevTools") { ;NOTE by 火冷 <2022-10-01 17:42:12>
                 objHttp["url"] := rtrim(objHttp["url"], "/")
-                OutputDebug(format("i#{1} {2}:{3} getCurrentPage key={4}", A_LineFile,A_LineNumber,A_ThisFunc,key))
+                OutputDebug(format("i#{1} {2}:{3} key={4}", A_LineFile,A_LineNumber,A_ThisFunc,key))
                 switch key {
                     case "json": ;增加个 title
                         jsonPage := objHttp["url"].jsonUrl()
@@ -306,7 +304,7 @@ class _CDP {
         try
             resSend := this.http.send()
         catch as e
-            msgbox(format("{1}`nhttp://127.0.0.1:{2}/json{3}", A_ThisFunc,this.DebugPort,pathname) . "`n" . json.stringify(e, 4))
+            msgbox(format("{1}`nhttp://127.0.0.1:{2}/json{3}`n{4}", A_ThisFunc,this.DebugPort,pathname,json.stringify(e, 4)))
         return pathname=="" ? JSON.parse(this.http.responseText) : resSend
     }
 
@@ -594,7 +592,7 @@ class _CDP {
             try
                 resSend := this.http.send()
             catch as e
-                msgbox(format("{1}`nhttp://127.0.0.1:{2}/json{3}", A_ThisFunc,this.DebugPort,pathname) . "`n" . json.stringify(e, 4))
+                msgbox(format("{1}`nhttp://127.0.0.1:{2}/json{3}`n{4}", A_ThisFunc,this.DebugPort,pathname,json.stringify(e, 4)))
             return pathname=="" ? JSON.parse(this.http.responseText) : resSend
         }
 

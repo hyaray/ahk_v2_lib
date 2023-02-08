@@ -6640,7 +6640,7 @@
 卞	biàn
 卟	bǔ
 占	zhān zhàn
-卡	qiǎ kǎ
+卡	kǎ qiǎ
 卢	lú
 卣	yǒu
 卤	lǔ
