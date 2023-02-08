@@ -60,20 +60,39 @@ class _CDP {
     }
 
     ;通用命令行参数获取 pid
-    FindInstances() {
+    FindInstance(key:=unset) {
         for item in ComObjGet('winmgmts:').ExecQuery(format("SELECT CommandLine,ProcessId FROM Win32_Process WHERE Name = '{1}'", this.exeName)) {
             if (RegExMatch(item.CommandLine, '--remote-debugging-port=(\d+)', &m)) {
                 ;OutputDebug(format("d#{1} {2}:return CommandLine={3}", A_LineFile,A_LineNumber,item.CommandLine))
-                return map(
-                    "DebugPort", m[1],
-                    "CommandLine", item.CommandLine,
-                    "pid", item.ProcessId,
-                )
+                if (isset(key)) {
+                    switch key {
+                        case "port": return m[1]
+                        case "pid": return item.ProcessId
+                        case "cmd": return item.CommandLine
+                        default: return
+                    }
+                } else {
+                    return map(
+                        "DebugPort", m[1],
+                        "CommandLine", item.CommandLine,
+                        "pid", item.ProcessId,
+                    )
+                }
             } else {
                 ;OutputDebug(format("d#{1} {2}:not matched CommandLine={3}", A_LineFile,A_LineNumber,item.CommandLine))
             }
         }
-        return map()
+        ;not found
+        if (isset(key)) {
+            switch key {
+                case "port": return 0
+                case "pid": return 0
+                case "cmd": return ""
+                default: return
+            }
+        } else {
+            return map()
+        }
     }
 
     ;NOTE 有些页面只限制打开1个，规则在哪里指定
@@ -160,7 +179,7 @@ class _CDP {
             return this.hwnd
         }
         if (ProcessExist(this.exeName)) { ;可能脚本重启等原因丢失了数据
-            this.pid := this.FindInstances().get("pid", 0)
+            this.pid := this.FindInstance("pid")
             OutputDebug(format("i#{1} {2}:{3} existed pid={4}", A_LineFile,A_LineNumber,A_ThisFunc,this.pid))
             if (this.pid) {
                 saveDetect := A_DetectHiddenWindows
@@ -227,7 +246,7 @@ class _CDP {
     }
     */
     getCurrentPage(key:="") {
-        this.detect(true)
+        ;this.detect(true)
         ;debug 模式获取
         ;OutputDebug(format("i#{1} {2}:httpAll={3}", A_LineFile,A_LineNumber,json.stringify(this.httpOpen("",true),4)))
         for objHttp in this.httpOpen() {
