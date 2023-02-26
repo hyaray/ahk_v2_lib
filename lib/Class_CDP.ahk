@@ -104,7 +104,7 @@ class _CDP {
         if (arrUrl.length > 1)
             bActive := false
         ;bActive := (A_Index==arrUrl.length) ? bActive : false ;只激活最后一个标签
-        if (this.detect()) {
+        if (this.detect(1)) {
             if (arrUrl.length) {
                 objPage := this.getPageList(, "host")
                 ;OutputDebug(format("i#{1} {2}:{3} objPage={4}", A_LineFile,A_LineNumber,A_ThisFunc,json.stringify(objPage,4)))
@@ -154,6 +154,7 @@ class _CDP {
             this.thisisunsafe(oPage)
             ;自动登录接口，为了解耦，不直接放实现函数
             if (funAfterDo) { ;TODO 判断条件不好获取
+                OutputDebug(format("i#{1} {2}:{3} WaitForLoad", A_LineFile,A_LineNumber,A_ThisFunc))
                 oPage.WaitForLoad()
                 funAfterDo(oPage)
             }
@@ -180,8 +181,8 @@ class _CDP {
         }
         if (ProcessExist(this.exeName)) { ;可能脚本重启等原因丢失了数据
             this.pid := this.FindInstance("pid")
-            OutputDebug(format("i#{1} {2}:{3} existed pid={4}", A_LineFile,A_LineNumber,A_ThisFunc,this.pid))
             if (this.pid) {
+                OutputDebug(format("i#{1} {2}:{3} existed pid={4}", A_LineFile,A_LineNumber,A_ThisFunc,this.pid))
                 saveDetect := A_DetectHiddenWindows
                 DetectHiddenWindows(true)
                 for winHwnd in WinGetList("ahk_class Chrome_WidgetWin_1 ahk_pid " . this.pid) {
@@ -203,17 +204,21 @@ class _CDP {
                 } else {
                     OutputDebug(format("i#{1} {2}:{3} 无法获取hwnd", A_LineFile,A_LineNumber,A_ThisFunc))
                 }
-            } else if (tp) {
-                ;NOTE 找不到，是否结束所有进程
-                OutputDebug(format("i#{1} {2}:关闭所有进程chrome.exe", A_LineFile,A_LineNumber))
-                for item in ComObjGet("winmgmts:").ExecQuery(format("select ProcessId from Win32_Process where name='{1}'", this.exeName))
-                    ProcessClose(item.ProcessId)
-                if (tp == 2) {
-                    return this.runChrome()
+            } else {
+                if (tp) {
+                    ;NOTE 找不到，是否结束所有进程
+                    OutputDebug(format("i#{1} {2}:关闭所有进程chrome.exe", A_LineFile,A_LineNumber))
+                    for item in ComObjGet("winmgmts:").ExecQuery(format("select ProcessId from Win32_Process where name='{1}'", this.exeName))
+                        ProcessClose(item.ProcessId)
+                    if (tp == 2) {
+                        return this.runChrome()
+                    } else {
+                        OutputDebug(format("i#{1} {2}:通用pid检测hwnd失败", A_LineFile,A_LineNumber))
+                        tooltip("待完善：通用pid检测hwnd失败")
+                        SetTimer(tooltip, -1000)
+                    }
                 } else {
-                    OutputDebug(format("i#{1} {2}:通用pid检测hwnd失败", A_LineFile,A_LineNumber))
-                    tooltip("待完善：通用pid检测hwnd失败")
-                    SetTimer(tooltip, -1000)
+                    OutputDebug(format("i#{1} {2}:{3} 现有进程非 CDP 模式，不处理", A_LineFile,A_LineNumber,A_ThisFunc))
                 }
             }
         }
@@ -254,10 +259,8 @@ class _CDP {
                 objHttp["url"] := rtrim(objHttp["url"], "/")
                 OutputDebug(format("i#{1} {2}:{3} key={4}", A_LineFile,A_LineNumber,A_ThisFunc,key))
                 switch key {
-                    case "json": ;增加个 title
-                        jsonPage := objHttp["url"].jsonUrl()
-                        ;jsonPage["title"] := objHttp["title"]
-                        return jsonPage
+                    case "title": return objHttp["title"]
+                    case "json": return objHttp["url"].jsonUrl()
                     case "arr": return [objHttp["title"], objHttp["url"]] ;标题+url
                     case "": return objHttp
                     default:
@@ -319,11 +322,16 @@ class _CDP {
 
     ;pathname前面要带 /
     httpOpen(pathname:="") {
-        this.http.open('GET', format("http://127.0.0.1:{1}/json{2}", this.DebugPort,pathname))
-        try
+        res := this.http.open('GET', format("http://127.0.0.1:{1}/json{2}", this.DebugPort,pathname))
+        OutputDebug(format("i#{1} {2}:{3} open res={4}", A_LineFile,A_LineNumber,A_ThisFunc,res))
+        try {
             resSend := this.http.send()
-        catch as e
-            msgbox(format("{1}`nhttp://127.0.0.1:{2}/json{3}`n{4}", A_ThisFunc,this.DebugPort,pathname,json.stringify(e, 4)))
+        } catch {
+            OutputDebug(format("i#{1} {2}:{3} rebuild http", A_LineFile,A_LineNumber,A_ThisFunc))
+            this.http := ComObject('WinHttp.WinHttpRequest.5.1')
+            res := this.http.open('GET', format("http://127.0.0.1:{1}/json{2}", this.DebugPort,pathname))
+            resSend := this.http.send()
+        }
         return pathname=="" ? JSON.parse(this.http.responseText) : resSend
     }
 
@@ -452,9 +460,12 @@ class _CDP {
         if (isset(funObj)) {
             arr := this.httpOpen()
             for objHttp in arr {
+                OutputDebug(format("i#{1} {2}:{3} objHttp={4}", A_LineFile,A_LineNumber,A_ThisFunc,json.stringify(objHttp,4)))
                 if (objHttp["type"] == "page" && objHttp["title"] != "DevTools") {
-                    if (funObj(objHttp["url"].jsonUrl()))
+                    if (funObj(objHttp["url"].jsonUrl())) {
+                        OutputDebug(format("i#{1} {2}:{3} url={4}", A_LineFile,A_LineNumber,A_ThisFunc,objHttp["url"]))
                         return _CDP.CDPP(objHttp, this.http)
+                    }
                 }
             }
         } else {
@@ -483,6 +494,7 @@ class _CDP {
         "url": "https://www.qq.com",
         "webSocketDebuggerUrl": "ws://127.0.0.1:9222/devtools/page/8A5B6CDB1ABE9E40BAD3C9902841BBE2"
     }
+    NOTE 此实例的 title 和 url 不会自动更新，如果网页发生变化需要重新获取
     */
     class CDPP extends WebSocket {
 
@@ -607,11 +619,16 @@ class _CDP {
 
         ;pathname前面要带 /
         httpOpen(pathname:="") {
-            this.http.open('GET', format("http://127.0.0.1:{1}/json{2}", this.DebugPort,pathname))
-            try
+            res := this.http.open('GET', format("http://127.0.0.1:{1}/json{2}", this.DebugPort,pathname))
+            OutputDebug(format("i#{1} {2}:{3} open res={4}", A_LineFile,A_LineNumber,A_ThisFunc,res))
+            try {
                 resSend := this.http.send()
-            catch as e
-                msgbox(format("{1}`nhttp://127.0.0.1:{2}/json{3}`n{4}", A_ThisFunc,this.DebugPort,pathname,json.stringify(e, 4)))
+            } catch {
+                OutputDebug(format("i#{1} {2}:{3} rebuild http", A_LineFile,A_LineNumber,A_ThisFunc))
+                this.http := ComObject('WinHttp.WinHttpRequest.5.1')
+                res := this.http.open('GET', format("http://127.0.0.1:{1}/json{2}", this.DebugPort,pathname))
+                resSend := this.http.send()
+            }
             return pathname=="" ? JSON.parse(this.http.responseText) : resSend
         }
 

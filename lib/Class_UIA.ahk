@@ -435,6 +435,15 @@ class UIA {
         }
     }
 
+    static FindsAndClick(ctlName, arrValue, xOffset) {
+        elWin := UIA.ElementFromHandle(WinExist("A"))
+        for val in arrValue {
+            if (el := elWin.FindControl(ctlName, val, "name"))
+                el.ClickByMouse(true, xOffset)
+        }
+        return elWin
+    }
+
     ;简易场景：由 hwnd 获取的 elWin 仅查找一次
     ;如果 elWin 要进行多次查找的，则用 elWin.FindControl
     ;为了区分名称，所以用了 FindElement
@@ -1172,6 +1181,12 @@ class IUIAutomationElement extends IUIABase {
             return el
         }
     }
+    FindsAndClick(ctlName, arrValue, xOffset) {
+        for val in arrValue {
+            if (el := this.FindControl(ctlName, val, "name"))
+                el.ClickByMouse(true, xOffset)
+        }
+    }
     ;NOTE NOTE NOTE method 一般用 ClickByControl ClickByMouse 备用
     SetChecked(bChecked, method:="") {
         if (this.GetControlType() ~= "i)^(Button|RadioButton|CheckBox|ComboBox)$") {
@@ -1182,14 +1197,19 @@ class IUIAutomationElement extends IUIABase {
                     case "ClickByMouse": this.ClickByMouse(1)
                     default: this.%method%() ;作为补充
                 }
+            } else {
+                OutputDebug(format("i#{1} {2}:{3} already checked", A_LineFile,A_LineNumber,A_ThisFunc))
             }
         } else if (this.GetControlType() ~= "i)^(ListItem|TabItem)$") {
-            if (this.GetCurrentPropertyValue("SelectionItemIsSelected") != bChecked)
+            if (this.GetCurrentPropertyValue("SelectionItemIsSelected") != bChecked) {
                 switch method {
                     case "": this.GetCurrentPattern("SelectionItem").select()
                     case "ClickByMouse": this.ClickByMouse(1)
                     default: this.%method%() ;作为补充
                 }
+            } else {
+                OutputDebug(format("i#{1} {2}:{3} already checked", A_LineFile,A_LineNumber,A_ThisFunc))
+            }
         }
     }
     ;包含坐标，以下对 CheckBox 作了特殊处理 by 火冷 <2022-11-10 21:28:47>

@@ -205,7 +205,7 @@ class _GDIP {
         return fp
     }
 
-    ;NOTE 进一步抽象见 _UIADo.rectControls
+    ;NOTE 进一步抽象见 UIAdo.rectControls
     ;arrFontOpt
     ;   arrText
     ;   opts

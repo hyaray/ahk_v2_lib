@@ -21,8 +21,8 @@ class _String {
     ;文件类型
     static regImage := "i)^(bmp|jpe|jpeg|jpg|png|gif|ico|psd|tif|tiff)$"
     ;   编程源代码
-    static regCode := "i)^(ah[k2]|js|vim|html?|wxml|css|wxss|lua|hh[cpk])$"
-    static regText := "i)^(ah[k2]|js|sh|log|vim|md|yaml|html?|wxml|css|wxss|lua|hh[cpk]|csv|json|txt|ini)$"
+    static regCode := "i)^(ah[k1]|js|sh|vim|bas|html?|wxml|css|wxss|lua|hh[cpk])$"
+    static regText := "i)^(ah[k1]|js|sh|vim|bas|html?|wxml|css|wxss|lua|hh[cpk]|md|yaml|log|csv|json|txt|ini)$"
     static regAudeo := "i)^(wav|mp3|m4a|wma)$"
     static regVideo := "i)^(mp4|wmv|mkv|m4a|m4s|ts|rm(vb)?|flv|mpeg|avi)$"
     static regZip := "i)^(7z|zip|rar|iso|img|gz|cab|jar|arj|lzh|ace|tar|GZip|uue|bz2)$"
@@ -1605,11 +1605,9 @@ class _String {
         ;reg := "i)(https?:[\x{00}-\x{FF}]+)(?:(\s|，|。|,|\r|\n|[\x{4E00}-\x{9FA5}]).*?(\w{4})(\W|$))?"
         reg := "i)(https?:\S+)(?:(\s|，|。|,|\r|\n|[\x{4E00}-\x{9FA5}]).*?(\w{4})(\W|$))?"
         if (RegExMatch(str, reg, &m)) {
-            ;msgbox(json.stringify(m, 4))
             return strlen(m[3]) ? format("{1}?pwd={2}", m[1],m[3]) : m[1] ;2022年03月28日经胡杨介绍更新格式
-        } else {
-            if (RegExMatch(str, reg, &m))
-                return format("{1}?pwd={2}", m[1],m[3])
+        } else if (RegExMatch(str, reg, &m)) {
+            return format("{1}?pwd={2}", m[1],m[3])
         }
     }
 

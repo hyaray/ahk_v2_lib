@@ -1,6 +1,7 @@
 ﻿;NOTE 光标用 CaretGetPos 获取
 ;修改光标见 _IME.curModify()
 ;鼠标点击和移动类
+;有些坐标需要进行 *A_ScreenDPI/100 来兼容
 
 class _Mouse {
     static bMoving := false
