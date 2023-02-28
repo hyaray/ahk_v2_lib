@@ -157,14 +157,13 @@ class _GDIP {
             MouseGetPos(&x1, &y1)
             x := min(x0, x1)
             y := min(y0, y1)
-            w := abs(x0 - x1)
-            h := abs(y0 - y1)
+            w := abs(x0 - x1)*96/A_ScreenDPI
+            h := abs(y0 - y1)*96/A_ScreenDPI
             oGui.show(format("x{1} y{2} w{3} h{4} NA", x,y,w,h))
             tooltip(format("{1},{2},{3},{4}",x,y,w,h))
         }
-        if (bHBitmap) {
+        if (bHBitmap)
             return 1
-        }
         ;oGuiBase.destroy()
         oGui.destroy()
         SetTimer(tooltip, -100)

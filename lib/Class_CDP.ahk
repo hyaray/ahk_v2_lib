@@ -393,7 +393,7 @@ class _CDP {
     ;翻译切换
     ;static translate() {
     ;    try {
-    ;        UIA.FindElement(WinActive("A"), "Button", "翻译此页").GetCurrentPattern("Invoke").Invoke_Invoke()
+    ;        UIA.FindElement(, "Button", "翻译此页").GetCurrentPattern("Invoke").Invoke_Invoke()
     ;    } catch {
     ;        send("{RButton}")
     ;        sleep(100)

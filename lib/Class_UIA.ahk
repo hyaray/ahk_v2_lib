@@ -24,13 +24,13 @@ NOTE NOTE NOTE 思路：
         2.2如果是非标准窗口，一般先获取整个窗口控件 elWin := UIA.ElementFromHandle(hwnd)，再【搜索】特定的控件
         搜索方法：
             ①只搜索一次：
-               推荐用封装的函数 UIA.FindElement(WinGetID("A"), 控件名, 其他字段值, 其他字段名(默认"name"))
+               推荐用封装的函数 UIA.FindElement(, 控件名, 其他字段值, 其他字段名(默认"name"))
                不需要保存 elWin，而是一次性用完就丢。
                比如Excel的【查找和替换】对话框，可用下面方法获取 Name="范围(H)": 的 ComboBox
-               el := UIA.FindElement(WinGetID("A"), "ComboBox", "范围(H):")
+               el := UIA.FindElement(, "ComboBox", "范围(H):")
                如果值不是精确匹配，比如查找部分匹配的，把 FindControl的flag参数设置为2(见PropertyConditionFlags)
                TIM 选择表情
-                   el := UIA.FindElement(WinGetID("A"), "ComboBox", "选择表情", "LegacyIAccessibleDescription")
+                   el := UIA.FindElement(, "ComboBox", "选择表情", "LegacyIAccessibleDescription")
                TabItem
                    el := elTab.FindControl("TabItem", ComValue(0xB,-1), "SelectionItemIsSelected")
                ListItem
@@ -435,20 +435,16 @@ class UIA {
         }
     }
 
-    static FindsAndClick(ctlName, arrValue, xOffset) {
-        elWin := UIA.ElementFromHandle(WinExist("A"))
-        for val in arrValue {
-            if (el := elWin.FindControl(ctlName, val, "name"))
-                el.ClickByMouse(true, xOffset)
-        }
-        return elWin
-    }
-
     ;简易场景：由 hwnd 获取的 elWin 仅查找一次
     ;如果 elWin 要进行多次查找的，则用 elWin.FindControl
     ;为了区分名称，所以用了 FindElement
+    ;批量查找，则直接定义 ControlType 为二维数组
     ;TODO 为了 ClickByControl，增加了dllcall 添加 hwnd
-    static FindElement(hwnd, ControlType, value:="", field:="Name", msWait:=0, flag:=0) { ; <2021-02-10 14:29:46> By hyaray
+    static FindElement(hwnd:=0, ControlType:="", value:="", field:="Name", msWait:=0, flag:=0) { ; <2021-02-10 14:29:46> By hyaray
+        if (!hwnd) {
+            hwnd := WinGetID("A") ;不影响 LastFoundWindow
+            OutputDebug(format("i#{1} {2}:{3} get hwnd={4}", A_LineFile,A_LineNumber,A_ThisFunc,hwnd))
+        }
         ;if (!dllcall("GetParent", "UInt",hwnd)) {
         ;    bIsWindow := true
         ;} else {
@@ -463,7 +459,10 @@ class UIA {
         ;        bIsWindow := true
         ;}
         bIsWindow := true
-        return this.ElementFromHandle(hwnd, bIsWindow).FindControl(ControlType, value, field, msWait, flag)
+        if (ControlType is array)
+            return this.ElementFromHandle(hwnd, bIsWindow).FindControls(ControlType)
+        else
+            return this.ElementFromHandle(hwnd, bIsWindow).FindControl(ControlType, value, field, msWait, flag)
         ;getWinIndex(id) {
         ;    loop {
         ;        id := dllcall("GetWindow", "uint",id, "int",2) ;1=上级窗口，比如谷歌翻译后，有个小弹框
@@ -1014,7 +1013,7 @@ class IUIAutomationElement extends IUIABase {
     flag == 2 则为包含value，而不是精确匹配
     */
     FindControl(ControlType, value, field:="Name", msWait:=0, flag:=0) {
-        if !(ControlType is integer) {
+        if (ControlType is string) {
             if (ControlType == "") { ;NOTE 非 Control 比如obsidian的【警报】
                 cond := UIA.CreatePropertyCondition(UIA.property.%field%, value)
             } else {
@@ -1032,6 +1031,22 @@ class IUIAutomationElement extends IUIABase {
             else if (A_TickCount > endtime)
                 return
         }
+    }
+    FindControls(arrParams) {
+        ;第1项为控件名，第2项为 arrValue
+        if (arrParams[1] is string) {
+            ctl := arrParams[1]
+            arrParams := arrParams[2]
+            for k, v in arrParams
+                arrParams[k] := [ctl, v]
+        }
+        OutputDebug(format("i#{1} {2}:{3} arrParams={4}", A_LineFile,A_LineNumber,A_ThisFunc,json.stringify(arrParams,4)))
+        arrEl := []
+        for arr in arrParams {
+            if (el := this.FindControl(arr*)) ;NOTE 每项 arr 的格式要匹配此方法
+                arrEl.push(el)
+        }
+        return arrEl
     }
     ;由于直接 Invoke|DoDefaultAction|Toggle 会无效，故增加了以下两个点击方式
     ;并且 GetBoundingRectangle 增加了获取中间坐标的选项
@@ -1181,11 +1196,13 @@ class IUIAutomationElement extends IUIABase {
             return el
         }
     }
-    FindsAndClick(ctlName, arrValue, xOffset) {
-        for val in arrValue {
-            if (el := this.FindControl(ctlName, val, "name"))
-                el.ClickByMouse(true, xOffset)
-        }
+    FindsAndClick(arrParams, xOffset) {
+        if (!arrParams.length)
+            return []
+        arrEl := this.FindControls(arrParams)
+        for el in arrEl
+            el.ClickByMouse(true, xOffset)
+        return arrEl
     }
     ;NOTE NOTE NOTE method 一般用 ClickByControl ClickByMouse 备用
     SetChecked(bChecked, method:="") {
