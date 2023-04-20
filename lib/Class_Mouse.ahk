@@ -1,18 +1,19 @@
 ﻿;NOTE 光标用 CaretGetPos 获取
 ;修改光标见 _IME.curModify()
 ;鼠标点击和移动类
-;有些坐标需要进行 *A_ScreenDPI/100 来兼容
+;TODO 坐标进行 *A_ScreenDPI/100 来兼容
 
 class _Mouse {
     static bMoving := false
     static speed := 1
 
-    static save() {
+    static save(md:="screen") {
         cmMouse := A_CoordModeMouse
-        CoordMode("mouse", "screen")
+        CoordMode("mouse", md)
         MouseGetPos(&xSave, &ySave)
         this.arrSave := [xSave, ySave]
         CoordMode("mouse", cmMouse)
+        return this.arrSave
     }
 
     static back(cnt:=0) {
@@ -77,14 +78,26 @@ class _Mouse {
     static getPosOfRect(w, h, target:=0) {
         CoordMode("mouse", "screen")
         MouseGetPos(&xMouse, &yMouse)
-        if ((xMouse > A_ScreenWidth) == target)
-            x := A_ScreenWidth//2 - w//2
-        else
-            x := (sysget(78)+A_ScreenWidth)//2 - w//2
-        if ((yMouse < A_ScreenHeight) == target)
-            y := A_ScreenHeight//2 - h//2
-        else
-            y := (sysget(79)+A_ScreenHeight)//2 - h//2
+        ;OutputDebug(format("i#{1} {2}:{3} xMouse={4} sysget(0)={5} sysget(78)={6}", A_LineFile,A_LineNumber,A_ThisFunc,xMouse,sysget(0),sysget(78)))
+        if ((xMouse < sysget(0)) != target) { ;主屏
+            x := sysget(0)//2
+            y := sysget(1)//2
+            ;OutputDebug(format("i#{1} {2}:{3} to main x={4} y={5}", A_LineFile,A_LineNumber,A_ThisFunc,x,y))
+        } else {
+            x := (sysget(78)+sysget(0))//2 - w//2
+            y := sysget(79)//2 - h//2
+            ;OutputDebug(format("i#{1} {2}:{3} to second x={4} y={5}", A_LineFile,A_LineNumber,A_ThisFunc,x,y))
+        }
+        ;if (yMouse > sysget(0)) {
+        ;    if (target)
+        ;        x := sysget(0)//2
+        ;    else
+        ;        x := sysget(78)//2 - w//2
+        ;}
+        ;if ((yMouse < A_ScreenHeight) == target)
+        ;    y := A_ScreenHeight//2 - h//2
+        ;else
+        ;    y := (sysget(79)+A_ScreenHeight)//2 - h//2
         return [x, y]
     }
 
@@ -246,26 +259,14 @@ class _Mouse {
 
     ;window坐标转screen坐标
     static toScreen(xWindow, yWindow:="") {
-        if (isobject(xWindow)) {
-            yWindow := xWindow[2] ;这句必须放前面
-            xWindow := xWindow[1]
-        }
         WinGetPos(&xWin, &yWin,,, "A")
         return [xWindow+xWin, yWindow+yWin]
     }
     static toWindow(xScreen, yScreen:="") {
-        if (isobject(xScreen)) {
-            yScreen := xScreen[2] ;这句必须放前面
-            xScreen := xScreen[1]
-        }
         WinGetPos(&xWin, &yWin,,, "A")
         return [xScreen-xWin, yScreen-yWin]
     }
     static toClient(xScreen, yScreen:="") {
-        if (isobject(xScreen)) {
-            yScreen := xScreen[2] ;这句必须放前面
-            xScreen := xScreen[1]
-        }
         WinGetClientPos(&xWin, &yWin,,, "A")
         return [xScreen-xWin, yScreen-yWin]
     }
@@ -273,13 +274,13 @@ class _Mouse {
     ;获取指定坐标点的鼠标光标特征码
     static shapeByWindow(x, y, toStr:=0) {
         this.moveByWindow(x, y)
-        MouseMove(X, Y, 0, "R")
+        MouseMove(x, y, 0, "R")
         return this.shapeResult(this.shapeBase(), toStr:=0)
     }
 
     ;获取指定坐标点的鼠标光标特征码
     static shapeR(x, y, toStr:=0) {
-        MouseMove(X, Y, 0, "R")
+        MouseMove(x, y, 0, "R")
         return this.shapeResult(this.shapeBase(), toStr)
     }
 
@@ -393,23 +394,19 @@ class _Mouse {
     ;如果x是数组，则y直接当n用(调用时不需要中间空一个参数) NOTE
     ;NOTE 鼠标会停留
     static clickR(x:=0, y:=0, n:=1) {
-        if (isobject(x)) {
-            MouseMove(x[1], x[2], 0, "R")
-            sleep(20)
-            click(y ? y : 1)
-        } else {
-            MouseMove(x, y, 0, "R")
-            sleep(20)
-            click(n)
-        }
+        _Mouse.moveR(x, y)
+        sleep(20)
+        click(n)
     }
+
+    static moveR(x:=0, y:=0, n:=1) => MouseMove(x.toDPI(), y.toDPI(), 0, "R")
 
     ;鼠标会回到原坐标
     static clickBackR(x, y:=1, n:=1) {
         cmMouse := A_CoordModeMouse
         CoordMode("mouse", "Screen")
         MouseGetPos(&x0, &y0)
-        if (isobject(x)) {
+        if (x is array) {
             MouseMove(x[1], x[2], 0, "R")
             sleep(20)
             click(y)
@@ -426,7 +423,7 @@ class _Mouse {
     static _move(mode, x, y) {
         cmMouse := A_CoordModeMouse
         CoordMode("mouse", mode)
-        if (isobject(x)) {
+        if (x is array) {
             if (x[1] < 0 || x[2] < 0) { ;处理负数(则用宽/高加上负数)
                 WinGetPos(,, &w, &h, "A")
                 if (x[1] < 0)

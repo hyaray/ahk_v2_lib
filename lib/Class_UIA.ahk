@@ -2,6 +2,7 @@
 * @author thqby, neptercn(v1 version)
 * @date 2021/11/24
 * @version 1.0.35
+;TODO 笔记本放大了 A_ScreenDPI，副屏显示器原尺寸，则 GetBoundingRectangle 坐标不对 <2023-03-20 20:26:14> hyaray
 
 NOTE NOTE NOTE 思路：
 说明：
@@ -27,10 +28,10 @@ NOTE NOTE NOTE 思路：
                推荐用封装的函数 UIA.FindElement(, 控件名, 其他字段值, 其他字段名(默认"name"))
                不需要保存 elWin，而是一次性用完就丢。
                比如Excel的【查找和替换】对话框，可用下面方法获取 Name="范围(H)": 的 ComboBox
-               el := UIA.FindElement(, "ComboBox", "范围(H):")
+               el := UIA.FindControl("ComboBox", "范围(H):")
                如果值不是精确匹配，比如查找部分匹配的，把 FindControl的flag参数设置为2(见PropertyConditionFlags)
                TIM 选择表情
-                   el := UIA.FindElement(, "ComboBox", "选择表情", "LegacyIAccessibleDescription")
+                   el := UIA.FindControl("ComboBox", "选择表情", "LegacyIAccessibleDescription")
                TabItem
                    el := elTab.FindControl("TabItem", ComValue(0xB,-1), "SelectionItemIsSelected")
                ListItem
@@ -80,7 +81,7 @@ NOTE NOTE NOTE 思路：
         获取 Tree 下所有 ListItem 名称
             elListItem.getTreeDataByDataItem()
         TODO 后期尽量用下面的通用方法代替
-            elParent.getSiblingItems()
+            elItem.getSiblingItems()
     5.操作控件，见类 IUIAutomationPattern 上方相关说明，可操作列表见 IUIAutomationPattern_vt
         激活控件
             el.SetFocus()
@@ -435,16 +436,22 @@ class UIA {
         }
     }
 
+    ;FindElement 去除了hwnd，和 elWin.FindControl 一致
+    static FindControl(ControlType:="", value:="", field:="Name", msWait:=0, flag:=0) {
+        hwnd := WinGetID("A") ;不影响 LastFoundWindow
+        bIsWindow := true
+        if (ControlType is array)
+            return this.ElementFromHandle(hwnd, bIsWindow).FindControls(ControlType)
+        else
+            return this.ElementFromHandle(hwnd, bIsWindow).FindControl(ControlType, value, field, msWait, flag)
+    }
+
     ;简易场景：由 hwnd 获取的 elWin 仅查找一次
     ;如果 elWin 要进行多次查找的，则用 elWin.FindControl
     ;为了区分名称，所以用了 FindElement
     ;批量查找，则直接定义 ControlType 为二维数组
     ;TODO 为了 ClickByControl，增加了dllcall 添加 hwnd
-    static FindElement(hwnd:=0, ControlType:="", value:="", field:="Name", msWait:=0, flag:=0) { ; <2021-02-10 14:29:46> By hyaray
-        if (!hwnd) {
-            hwnd := WinGetID("A") ;不影响 LastFoundWindow
-            OutputDebug(format("i#{1} {2}:{3} get hwnd={4}", A_LineFile,A_LineNumber,A_ThisFunc,hwnd))
-        }
+    static FindElement(hwnd, ControlType:="", value:="", field:="Name", msWait:=0, flag:=0) { ; <2021-02-10 14:29:46> By hyaray
         ;if (!dllcall("GetParent", "UInt",hwnd)) {
         ;    bIsWindow := true
         ;} else {
@@ -641,41 +648,37 @@ class UIA {
         ;OutputDebug(format("i#{1} {2}:elParent={3}", A_LineFile,A_LineNumber,json.stringify(elParent.allProperty(),4)))
         return findInSons(elParent)
         findInSons(elParent, mk:=0) {
-            try {
-                elSon := rvw.GetFirstChildElement(elParent)
-                ;OutputDebug(format("i#{1} {2}:get elSon={3}", A_LineFile,A_LineNumber,json.stringify(elSon.allProperty(),4)))
-            } catch { ;没儿子
-                ;OutputDebug(format("i#{1} {2}:no son, return parent", A_LineFile,A_LineNumber))
+            elSon := rvw.GetFirstChildElement(elParent)
+            ;OutputDebug(format("i#{1} {2}:get elSon={3}", A_LineFile,A_LineNumber,json.stringify(elSon.allProperty(),4)))
+            if (!isobject(elson)) ;没儿子
                 return elParent ;NOTE 可能是最终结果，由后续的 equals 判断
-            } else {
-                loop { ;在所有兄弟里找
-                    if (elSon.ContainXY(xScreen, yScreen, 1)) { ;包含坐标
-                        ;_GDIP.rectMark([elSon.GetBoundingRectangle()], "LButton")
-                        ;OutputDebug(format("d#{1} {2}:containXY=({3},{4}) elSon={5}", A_LineFile,A_LineNumber,xScreen,yScreen,json.stringify(elSon.allProperty(),4)))
-                        el := findInSons(elSon, 1) ;NOTE 递归查找最底层的元素
-                        if (el) {
-                            if (el.equals(elSon)) { ;NOTE NOTE NOTE 最终结果判断
-                                h := el.GetBoundingRectangle()[4]
-                                ;OutputDebug(format("w#{1} {2}:find this end height={3}", A_LineFile,A_LineNumber,h))
-                                if (h < 50) ;TODO 暂时用高度判断
-                                    return el
-                            } else {
+                ;OutputDebug(format("i#{1} {2}:no son, return parent", A_LineFile,A_LineNumber))
+            loop { ;在所有兄弟里找
+                if (elSon.ContainXY(xScreen, yScreen, 1)) { ;包含坐标
+                    ;_GDIP.rectMark([elSon.GetBoundingRectangle()], "LButton")
+                    ;OutputDebug(format("d#{1} {2}:containXY=({3},{4}) elSon={5}", A_LineFile,A_LineNumber,xScreen,yScreen,json.stringify(elSon.allProperty(),4)))
+                    el := findInSons(elSon, 1) ;NOTE 递归查找最底层的元素
+                    if (el) {
+                        if (el.equals(elSon)) { ;NOTE NOTE NOTE 最终结果判断
+                            h := el.GetBoundingRectangle()[4]
+                            ;OutputDebug(format("w#{1} {2}:find this end height={3}", A_LineFile,A_LineNumber,h))
+                            if (h < 50) ;TODO 暂时用高度判断
                                 return el
-                            }
+                        } else {
+                            return el
                         }
                     }
-                    ;父元素范围包含坐标，但所有子元素都不匹配，继续下面代码
-                    ;OutputDebug(format("d#{1} {2}:find son failed", A_LineFile,A_LineNumber))
-                    ;从后面兄弟里找
-                    try {
-                        elSon := rvw.GetNextSiblingElement(elSon)
-                        ;OutputDebug(format("i#{1} {2}:to elNext", A_LineFile,A_LineNumber))
-                    } catch {
-                        ;OutputDebug(format("d#{1} {2}:at last, name={3}", A_LineFile,A_LineNumber,elParent.CurrentName))
-                        if (elParent.CurrentName != "")
-                            return elParent ;TODO 儿子不全，返回父亲
-                        break
-                    }
+                }
+                ;父元素范围包含坐标，但所有子元素都不匹配，继续下面代码
+                ;OutputDebug(format("d#{1} {2}:find son failed", A_LineFile,A_LineNumber))
+                ;从后面兄弟里找
+                elSon := rvw.GetNextSiblingElement(elSon)
+                ;OutputDebug(format("i#{1} {2}:to elNext", A_LineFile,A_LineNumber))
+                if (!isobject(elson)) { ;没儿子
+                    ;OutputDebug(format("d#{1} {2}:at last, name={3}", A_LineFile,A_LineNumber,elParent.CurrentName))
+                    if (elParent.CurrentName != "")
+                        return elParent ;TODO 儿子不全，返回父亲
+                    break
                 }
             }
         }
@@ -1030,8 +1033,11 @@ class IUIAutomationElement extends IUIABase {
                 return el
             else if (A_TickCount > endtime)
                 return
+            else
+                sleep(200)
         }
     }
+    ;NOTE 是否保留未找到的元素
     FindControls(arrParams) {
         ;第1项为控件名，第2项为 arrValue
         if (arrParams[1] is string) {
@@ -1040,11 +1046,15 @@ class IUIAutomationElement extends IUIABase {
             for k, v in arrParams
                 arrParams[k] := [ctl, v]
         }
-        OutputDebug(format("i#{1} {2}:{3} arrParams={4}", A_LineFile,A_LineNumber,A_ThisFunc,json.stringify(arrParams,4)))
+        ;OutputDebug(format("i#{1} {2}:{3} arrParams={4}", A_LineFile,A_LineNumber,A_ThisFunc,json.stringify(arrParams,4)))
         arrEl := []
         for arr in arrParams {
-            if (el := this.FindControl(arr*)) ;NOTE 每项 arr 的格式要匹配此方法
+            if (el := this.FindControl(arr*)) { ;NOTE 每项 arr 的格式要匹配此方法
                 arrEl.push(el)
+            } else {
+                OutputDebug(format("w#{1} {2}:{3} arr={4}", A_LineFile,A_LineNumber,A_ThisFunc,json.stringify(arr,4)))
+                arrEl.push("")
+            }
         }
         return arrEl
     }
@@ -1052,24 +1062,24 @@ class IUIAutomationElement extends IUIABase {
     ;并且 GetBoundingRectangle 增加了获取中间坐标的选项
     ;NOTE 如果有 xOffset，则是相对于左/或右边缘，yOffset 同理
     ;TODO 如果 ElementFromHandle 传入控件id会出错
-    ClickByControl(xOffset:=0, yOffset:=0) {
-        arrXY := this.offsetOut(xOffset, yOffset)
+    ClickByControl(xOffset:=0, yOffset:=0, isOut:=1) {
+        arrXY := this.offsetOut(xOffset, yOffset, isOut)
         ;转成 client
         WinActive("ahk_id " . UIA.hwnd)
         WinGetClientPos(&xClient, &yClient) ;见 UIA.FindElement()
         arrXY[1] -= xClient
         arrXY[2] -= yClient
-        OutputDebug(format("i#{1} {2}:{3} arrControl={4}", A_LineFile,A_LineNumber,A_ThisFunc,json.stringify(arrXY)))
+        ;OutputDebug(format("i#{1} {2}:{3} arrControl={4}", A_LineFile,A_LineNumber,A_ThisFunc,json.stringify(arrXY)))
         ControlClick(format("X{1} Y{2}", arrXY*))
         return arrXY
     }
-    ClickByMouse(bStay:=false, xOffset:=0, yOffset:=0, cnt:=1) { ;优先用 ClickByControl 备用 TODO Button IsInvokePatternAvailable=false
-        arrXY := this.offsetOut(xOffset, yOffset)
+    ClickByMouse(bStay:=false, xOffset:=0, yOffset:=0, cnt:=1, isOut:=1) { ;优先用 ClickByControl 备用 TODO Button IsInvokePatternAvailable=false
+        arrXY := this.offsetOut(xOffset, yOffset, isOut)
         cmMouse := A_CoordModeMouse
         CoordMode("mouse", "Screen")
         ;记录原位置
         MouseGetPos(&x0, &y0)
-        OutputDebug(format("i#{1} {2}:{3} arrMouse={4}", A_LineFile,A_LineNumber,A_ThisFunc,json.stringify(arrXY)))
+        ;OutputDebug(format("i#{1} {2}:{3} arrMouse={4}", A_LineFile,A_LineNumber,A_ThisFunc,json.stringify(arrXY)))
         MouseMove(arrXY[1], arrXY[2], 0)
         sleep(20)
         (cnt) && click(cnt)
@@ -1079,30 +1089,56 @@ class IUIAutomationElement extends IUIABase {
         CoordMode("mouse", cmMouse)
         return arrXY
     }
+    ;主要配合 ClickByMouse 用
     ;以 xOffset为例, yOffset 同理
     ;   0 = 中点
     ;   负数 = 左边界再往左偏移(支持小数点按百分比计算)
     ;   正数 = 右边界再往右偏移(支持小数点按百分比计算)
-    ;见 xy.offsetOut
-    offsetOut(xOffset, yOffset) {
-        obj := this.CurrentBoundingRectangle
-        if (xOffset == 0)
-            x := (obj.left + obj.right) // 2
-        else if (xOffset < 0)
-            x := obj.left + xOffset
-        else if (xOffset < 1) ;小数
-            x := obj.left + (obj.right-obj.left) * xOffset
+    ;isOut 0=小数点计算内部偏移 1=小数点计算外部偏移
+    ;   isOut=0时：-0.1是右侧往左0.1宽 0.1是左侧往右0.1宽
+    ;   isOut=1时：-0.1是左侧往右0.1宽 0.1是右侧往右0.1宽
+    ;同 xy.offsetOut
+    offsetOut(xOffset, yOffset, isOut:=1) {
+        aRect := this.GetBoundingRectangle()
+        arrXY := []
+        if (isobject(xOffset)) ;NOTE 支持传入函数
+            arrXY.push(xOffset(aRect))
         else
-            x := obj.right + xOffset
-        if (yOffset == 0)
-            y := (obj.top + obj.bottom) // 2
-        else if (yOffset < 0)
-            y := obj.top + yOffset
-        else if (yOffset < 1) ;小数
-            y := obj.top + (obj.bottom-obj.top) * yOffset
+            arrXY.push(deal(xOffset,aRect[1],aRect[3]))
+        if (isobject(yOffset))
+            arrXY.push(yOffset(aRect))
         else
-            y := obj.bottom + yOffset
-        return [x, y]
+            arrXY.push(deal(yOffset,aRect[2],aRect[4]))
+        ;OutputDebug(format("i#{1} {2}:{3} aRect={4} arrXY={5}", A_LineFile,A_LineNumber,A_ThisFunc,json.stringify(aRect),json.stringify(arrXY)))
+        return arrXY
+        deal(v, x, w) {
+            ;TODO 去掉假浮点数
+            if (v is float && integer(v)==v)
+                v := integer(v)
+            if (v == 0) {
+                res := x + w // 2
+            } else if (v < 0) {
+                if (v is float) {
+                    if isOut
+                        res := x - round(w*abs(v))
+                    else
+                        res := x + w - round(w*abs(v))
+                } else {
+                    res := x - abs(v*A_ScreenDPI//96)
+                }
+            } else {
+                if (v is float) {
+                    if isOut
+                        res := x + w + round(w*v)
+                    else
+                        res := x + round(w*v)
+                } else if (v >= 1) {
+                    res := x + w + v*A_ScreenDPI//96
+                }
+            }
+            ;OutputDebug(format("i#{1} {2}:{3} v={4},x={5},w={6} isOut={7}, res={8}", A_LineFile,A_LineNumber,A_ThisFunc,v,x,w,isOut,res))
+            return res
+        }
     }
     ;tp=1 则返回中心点坐标[x,y](screen)
     GetBoundingRectangle(tp:=0) {
@@ -1122,7 +1158,7 @@ class IUIAutomationElement extends IUIABase {
     GetPrev(tp:=0) => this._ViewWalker(tp, "GetPreviousSiblingElement")
     GetFirst(tp:=0) => this._ViewWalker(tp, "GetFirstChildElement")
     GetLast(tp:=0) => this._ViewWalker(tp, "GetLastChildElement")
-    ;TODO 找不到出错无法用 try，如何先判断是否有 Next
+    ;找不到返回 ""
     _ViewWalker(tp, method) {
         switch tp {
         case 0: return UIA.RawViewWalker().%method%(this)
@@ -1136,6 +1172,15 @@ class IUIAutomationElement extends IUIABase {
         for v in arr
             res .= format("{:X}", v) . ","
         return rtrim(res, ",")
+    }
+    ;SendText更稳妥
+    SetValueEx(val, yOffset:=0) {
+        this.SetFocus()
+        SendText(val)
+        if (yOffset) { ;需要点击确认，如u9网页上
+            sleep(500)
+            this.ClickByMouse(true,, yOffset)
+        }
     }
     ;点击Text右侧以激活 Edit控件，并设置值
     ;arrFind 用于 FindControl 的所有参数
@@ -1158,12 +1203,12 @@ class IUIAutomationElement extends IUIABase {
         }
         return elFocus
     }
-    ;鼠标要移能能滚动的位置，一开始要滚到右上方，再慢慢往下滚
+    ;鼠标要移到能滚动的位置，一开始要滚到右上方，再慢慢往下滚
     FindByScroll(arrFind, cntTop, cntDown, cntLoop:=5) {
         loop { ;没找到，需要往下滚动
             el := this.FindControl(arrFind*)
             if (el is IUIAutomationElement) {
-                if (el.GetBoundingRectangle()[2])
+                if (el.GetBoundingRectangle()[2]) ;可能在页面底部看不清楚
                     break
                 OutputDebug(format("i#{1} {2}:{3} A_Index={4} rect={5}", A_LineFile,A_LineNumber,A_ThisFunc,A_Index,json.stringify(el.GetBoundingRectangle())))
             }
@@ -1196,6 +1241,7 @@ class IUIAutomationElement extends IUIABase {
             return el
         }
     }
+    ;FindsAndClick(["DataItem", arrName], -20)
     FindsAndClick(arrParams, xOffset) {
         if (!arrParams.length)
             return []
@@ -1219,6 +1265,7 @@ class IUIAutomationElement extends IUIABase {
             }
         } else if (this.GetControlType() ~= "i)^(ListItem|TabItem)$") {
             if (this.GetCurrentPropertyValue("SelectionItemIsSelected") != bChecked) {
+                OutputDebug(format("i#{1} {2}:{3} method={4}", A_LineFile,A_LineNumber,A_ThisFunc,method))
                 switch method {
                     case "": this.GetCurrentPattern("SelectionItem").select()
                     case "ClickByMouse": this.ClickByMouse(1)
@@ -1258,10 +1305,11 @@ class IUIAutomationElement extends IUIABase {
     waitByFunc(funTrue, msWait:=3000) {
         endTime := A_TickCount + msWait
         loop {
-            if (funTrue(this))
+            if (funTrue(this)) {
                 return true
-            else
+            } else {
                 sleep(500)
+            }
         } until (A_TickCount >= endTime)
         return false
     }
@@ -1665,9 +1713,8 @@ class IUIAutomationElement extends IUIABase {
         arr := []
         loop {
             arr.push(funGetValue(elItem))
-            try
-                elItem := oRV.GetNextSiblingElement(elItem)
-            catch
+            elItem := oRV.GetNextSiblingElement(elItem)
+            if (!isobject(elItem))
                 break
         }
         return arr
@@ -1734,9 +1781,8 @@ class IUIAutomationElement extends IUIABase {
                 }
                 arr2.push(arr)
             }
-            try
-                elLine := oRV.GetNextSiblingElement(elLine)
-            catch
+            elLine := oRV.GetNextSiblingElement(elLine)
+            if (!isobject(elLine ))
                 break
         }
         return toStr ? arr2.toTable() : arr2
@@ -2916,19 +2962,59 @@ class IUIAutomationTreeWalker extends IUIABase {
     ; An element can have additional child elements that do not match the current view condition and thus are not returned when navigating the element tree.
 
     ; Retrieves the parent element of the specified UI Automation element.
-    GetParentElement(element) => (comcall(3, this, "ptr",element, "ptr*",&parent:=0), IUIAutomationElement(parent))
+    GetParentElement(element) {
+        comcall(3, this, "ptr",element, "ptr*",&out:=0)
+        if (out) {
+            return IUIAutomationElement(out)
+        } else {
+            OutputDebug(format("w#{1} error", A_ThisFunc))
+            return
+        }
+    }
 
     ; Retrieves the first child element of the specified UI Automation element.
-    GetFirstChildElement(element) => (comcall(4, this, "ptr",element, "ptr*",&first:=0), IUIAutomationElement(first))
+    GetFirstChildElement(element) {
+        comcall(4, this, "ptr",element, "ptr*",&out:=0)
+        if (out) {
+            return IUIAutomationElement(out)
+        } else {
+            OutputDebug(format("w#{1} error", A_ThisFunc))
+            return
+        }
+    }
 
     ; Retrieves the last child element of the specified UI Automation element.
-    GetLastChildElement(element) => (comcall(5, this, "ptr",element, "ptr*",&last:=0), IUIAutomationElement(last))
+    GetLastChildElement(element) {
+        comcall(5, this, "ptr",element, "ptr*",&out:=0)
+        if (out) {
+            return IUIAutomationElement(out)
+        } else {
+            OutputDebug(format("w#{1} error", A_ThisFunc))
+            return
+        }
+    }
 
     ; Retrieves the next sibling element of the specified UI Automation element, and caches properties and control patterns.
-    GetNextSiblingElement(element) => (comcall(6, this, "ptr",element, "ptr*",&next:=0), IUIAutomationElement(next))
+    GetNextSiblingElement(element) {
+        comcall(6, this, "ptr",element, "ptr*",&out:=0)
+        if (out) {
+            return IUIAutomationElement(out)
+        } else {
+            OutputDebug(format("w#{1} error", A_ThisFunc))
+            return
+        }
+    }
 
     ; Retrieves the previous sibling element of the specified UI Automation element, and caches properties and control patterns.
-    GetPreviousSiblingElement(element) => (comcall(7, this, "ptr",element, "ptr*",&previous:=0), IUIAutomationElement(previous))
+    GetPreviousSiblingElement(element) {
+        comcall(7, this, "ptr",element, "ptr*",&out:=0)
+        if (out) {
+            return IUIAutomationElement(out)
+        } else {
+            OutputDebug(format("w#{1} error", A_ThisFunc))
+            return
+        }
+    }
 
     ; Retrieves the ancestor element nearest to the specified Microsoft UI Automation element in the tree view.
     ; The element is normalized by navigating up the ancestor chain in the tree until an element that satisfies the view condition (specified by a previous call to IUIAutomationTreeWalker,,Condition) is reached. If the root element is reached, the root element is returned, even if it does not satisfy the view condition.

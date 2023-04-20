@@ -2,7 +2,7 @@
 class Explorer {
 
     ;打印机→管理纸张
-    static print_papers() => UIA.FindElement(, "Button", "打印服务器属性").ClickByMouse()
+    static print_papers() => UIA.FindControl("Button", "打印服务器属性").ClickByMouse()
     ;static print_noSleep()
 
     static print_addPaper() {

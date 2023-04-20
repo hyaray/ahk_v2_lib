@@ -2,8 +2,8 @@
  * @description: YAML/JSON格式字符串序列化和反序列化, 修改自[HotKeyIt/Yaml](https://github.com/HotKeyIt/Yaml)
  * 修复了一些YAML解析的bug, 增加了对true/false/null类型的支持, 保留了数值的类型
  * @author thqby, HotKeyIt
- * @date 2023/01/15
- * @version 1.0.6
+ * @date 2023/02/23
+ * @version 1.0.7
  ***********************************************************************/
 
 class YAML {
@@ -20,7 +20,8 @@ class YAML {
 		keepbooltype ? (_true := YAML.true, _false := YAML.false, _null := YAML.null) : (_true := true, _false := false, _null := "")
 		if (text = "")
 			return []
-		else if InStr("[{", SubStr(text := LTrim(text, " `t`n`r"), 1, 1))
+        text := RegExReplace(text, "m)(\s|^)\#.*") ;NOTE 添加 by 火冷 <2023-03-05 11:02:21>
+		if InStr("[{", SubStr(text := LTrim(text, " `t`n`r"), 1, 1))
 			return PJ(&text, mergedarray)
 		return CY(&text, mergedarray)
 
@@ -66,7 +67,7 @@ class YAML {
 					else if LL < _LL
 						if !I[LL]
 							throw Error("Indentation problem.", 0, LF)
-						else L := I[LL] + (D[LL] is Map)
+						else L := I[LL] + (LL + 1 == _LL && Q != '' && D[LL] is Map && D[_LL] is Array)
 				}
 				if Trim(_[], " `t") = "-"	; empty sequence not cached by previous line
 					V := undefined, Q := "-"
@@ -185,7 +186,7 @@ class YAML {
 					if (q || !v || SubStr(Ltrim(StrGet(p + (c = "`n" ? 2 : 4)), " `t`r`n"), 1, 1) = "]") && P += c = "`n" ? 2 : 4
 						continue
 					else throw Error("Malformed inline YAML string.", 0, s "`n" StrGet(p - 6))
-				} else if !q && (c = " " || c = A_Tab) && (lf != "" && lf .= c, P += 2)
+				} else if !q && (c = " " || c = A_Tab) && (lf != '' && lf .= c, P += 2)
 					continue
 				else if !v && (c = '"' || c = "'") && (q := c, v := 1, P += 2)
 					continue
@@ -308,7 +309,7 @@ class YAML {
 					if J <= R
 						D .= (J + R < 0 ? "`n" CL(R + 2) : "") (F ? (%F%1 (Z ? "" : CO(value, J, R + 1, F)) %F%2) : ES(value, J, unicode_escaped, 0)) (OT = "Array" && O.Length = A_Index ? E : C)
 					else if ((D := D N CL(R + 1) S) || 1) && F
-						D .= Z ? Z : (J <= (R + 1) ? %F%1 : E) (F = "M" ? LTrim(CO(value, J, R, F), " `t`n") : CO(value, J, R + 1, F)) (J <= (R + 1) ? %F%2 : E)
+						D .= Z ? Z : (J <= (R + 1) ? %F%1 : E) (F = "M" ? LTrim(CO(value, J, R + 1, F), " `t`n") : CO(value, J, R + 1, F)) (J <= (R + 1) ? %F%2 : E)
 					else D .= ES(value, J, unicode_escaped, 2)
 				}
 			} else {

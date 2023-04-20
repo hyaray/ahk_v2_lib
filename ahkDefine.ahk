@@ -40,7 +40,7 @@ company := "My Company"
 #include lib\Class_Map.ahk
 #include lib\Yaml.ahk
 
-;#include lib\Class_Socket.ahk
+#include lib\Socket.ahk
 #include lib\Class_CDP.ahk
 #include lib\Class_Pinyin.ahk
 #include lib\hyaray.ahk

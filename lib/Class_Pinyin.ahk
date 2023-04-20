@@ -9,18 +9,17 @@ class _Pinyin {
 
     ;obj["为"] = ["wei2", wei1]
     ;tpAlpab 以 hān 为列
-    ;   a0 = hān
-    ;   A0 = Hān
     ;    a = h
     ;    A = H
     ;   aa = han
     ;   Aa = Han
+    ;   a0 = hān
+    ;   A0 = Hān
     ;   a1 = han1
     ;   A1 = Han1
     __new(tpAlpha:="Aa", toObj:=true) {
         SplitPath(A_LineFile,, &dir)
         this.sFile := rtrim(fileread("d:\TC\soft\AutoHotkey\lib\pinyin.txt","utf-8"),"`r`n")
-        l := strlen(tpAlpha)
         objTmp := map(
             "ā","a1", "á","a2", "ǎ","a3", "à","a4",
             "ō","o1", "ó","o2", "ǒ","o3", "ò","o4",
@@ -29,18 +28,25 @@ class _Pinyin {
             "ū","u1", "ú","u2", "ǔ","u3", "ù","u4",
             "ǖ","v1", "ǘ","v2", "ǚ","v3", "ǜ","v4",
         )
-        if (l == 1) { ;不带数字
-            this.sFile := RegExReplace(this.sFile, "\s.\K\S*") ;删除多余的内容
-            this.sFile := RegExReplace(this.sFile, "(\s(.))(\s\2)+", "$1") ;NOTE 删除多音字重复的声母
-            for sd, a1 in objTmp
-                this.sFile := RegExReplace(this.sFile, sd, substr(a1,1,1))
-            this.char := ""
-        } else if (l == 2) {
-            if (substr(tpAlpha, 2, 1) != "0") { ;非 ā模式
-                for sd, a1 in objTmp
-                    this.sFile := RegExReplace(this.sFile, sd . "(\w*)", format("{1}$1{2}", substr(a1,1,1),substr(a1,2,1)))
-            }
+        if (instr(tpAlpha,"_")) {
             this.char := " "
+            tpAlpha := StrReplace(tpAlpha, "_")
+        } else {
+            this.char := ""
+        }
+        switch strlen(tpAlpha) {
+            case 1: ;删除音标
+                this.sFile := RegExReplace(this.sFile, "\s.\K\S*") ;删除多余的内容
+                this.sFile := RegExReplace(this.sFile, "(\s(.))(\s\2)+", "$1") ;NOTE 删除多音字重复的声母
+                for sd, a1 in objTmp
+                    this.sFile := RegExReplace(this.sFile, sd, substr(a1,1,1))
+            case 2:
+                if (substr(tpAlpha, 2, 1) != "0") { ;非 ā模式
+                    for sd, a1 in objTmp
+                        this.sFile := RegExReplace(this.sFile, sd . "(\w*)", format("{1}$1{2}", substr(a1,1,1),substr(a1,2,1)))
+                }
+                if (substr(tpAlpha, 2, 1) == "a")
+                    this.sFile := RegExReplace(this.sFile, "\d")
         }
         ;转大写
         timeSave := A_TickCount

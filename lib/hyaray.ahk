@@ -19,10 +19,57 @@
 ;-----------------------------------calc-----------------------------------
 ;-----------------------------------Windows__-----------------------------------
 ;-----------------------------------Excel__-----------------------------------
-;-----------------------------------obj__-----------------------------------
+;-----------------------------------交互-----------------------------------
 */
 
 ;-----------------------------------general__-----------------------------------
+
+;插件A的子文件由A.ahk #include(NOTE 不包含可能有的定义文件A_define.ahk)
+;这里只include A.ahk
+;有需要定义的变量则单独放A_define.ahk
+
+hyf_checkNewPlugin(includeFile, arrDirs, strBefore:="", arrDefault:=unset) {
+    OutputDebug(format("i#{1} {2}:{3} start check {4}", A_LineFile,A_LineNumber,A_ThisFunc,includeFile))
+    if (!isset(arrDefault))
+        arrDefault := []
+    ext := (A_AhkVersion ~= "^2") ? "ahk" : "ah1" ;NOTE
+    strOld := FileRead(includeFile, "utf-8")
+    cntAll := arrDefault.length
+    objNum := map()
+    objNum.default := 0 ;记录各项目的总数
+    ;确保循环的内容都在includeFile里
+    for arrDir in arrDirs {
+        ;文件
+        loop files, format("{1}\{2}\*.{3}", arrDir[1],arrDir[2],ext) {
+            objNum[arrDir[2]]++
+            sLoop := format("{1}\{2}", arrDir[2],A_LoopFileName)
+            if (!instr(strOld, sLoop)) {
+                msgbox(sLoop,,0x40000)
+                return true
+            }
+        }
+        ;文件夹
+        loop files, format("{1}\{2}\*", arrDir[1],arrDir[2]), "D" {
+            if (A_LoopFileAttrib ~= "[HS]")
+                continue
+            objNum[arrDir[2]]++
+            sLoop := format("{1}\{2}\{3}{2}.{4}", arrDir[2], A_LoopFileName,strBefore,ext)
+            if (!instr(strOld, sLoop)) {
+                msgbox(sLoop,,0x40000)
+                return true
+            }
+        }
+    }
+    ;检查数字是否一致来判断是否有删除的插件
+    for k, v in objNum
+        cntAll += v
+    StrReplace(strOld, "`n", "",, &cnt)
+    if (cnt != cntAll) {
+        msgbox(objNum, format("总数不一致，获取 {1} 文件{2}", cntAll,cnt))
+        return true
+    }
+}
+
 ;数字则sleep，{xxx}开头则 SendText
 ;NOTE send("{1000}") 相当于 sleep(1000)，但有未知BUG，不要用
 ; sendEx("string1`n", 1000, "{tab}", "string2", 1000)
@@ -45,17 +92,17 @@ deepclone(obj) {
 	objs.default := ''
 	return clone(obj)
 	clone(obj) {
-		switch Type(obj) {
-			case 'Array', 'Map':
+		switch type(obj) {
+			case "Array", "Map":
 				o := obj.Clone()
 				for k, v in o
-					if IsObject(v)
+					if isobject(v)
 						o[k] := objs[p := ObjPtr(v)] || (objs[p] := clone(v))
 				return o
-			case 'Object':
+			case "Object":
 				o := obj.Clone()
 				for k, v in o.OwnProps()
-					if IsObject(v)
+					if isobject(v)
 						o.%k% := objs[p := ObjPtr(v)] || (objs[p] := clone(v))
 				return o
 			default:
@@ -117,10 +164,10 @@ hyf_getSelect(bVimNormal:=false, bInput:=false) {
         send("{ctrl down}c{ctrl up}")
     }
     if (ClipWait(0.2)) {
-        if (0)
-            res := trim(A_Clipboard) ;TODO 可能会耗时较长
+        if (WinActive("ahk_class OpusApp"))
+            res := RegExReplace(trim(A_Clipboard,"`r`n"), "^\d+(\.\d+)*\.?\s") ;word列表复制的内容
         else
-            res := A_Clipboard
+            res := A_Clipboard ;TODO 可trim(A_Clipboard)能会耗时较长
         ;OutputDebug(format("i#{1} {2}:res={3}", A_LineFile,A_LineNumber,res))
         A_Clipboard := clipSave
         return res
@@ -223,6 +270,8 @@ hyf_setClip(str, stip:="已复制", n:=3000) {
     if (str == "")
         return
     A_Clipboard := str
+    ;if (WinExist("ahk_class tooltips_class32"))
+    ;    tooltip
     tooltip(format("{1}`n`n{2}", stip,str))
     SetTimer(tooltip, -n)
 }
@@ -247,11 +296,11 @@ hyf_inputstr(str:="请输入", varDefault:="") {
 hyf_inputnum(str:="请输入数字", varDefault:="") {
     SetTimer((p*)=>WinSetAlwaysOnTop(true, "A"), -500)
     oInput := inputbox(str,,,varDefault)
-    if (oInput.result == "Cancel" || !(oInput.value ~= "^\d+(\.\d+)?$")) {
+    if (oInput.result == "Cancel" || !(oInput.value ~= "^-?\d+(\.\d+)?$")) {
         msgbox("错误：非数字",,0x40000)
         exit
     }
-    return oInput.value
+    return number(oInput.value)
 }
 
 ;#8::msgbox(hyf_input())
@@ -270,6 +319,44 @@ hyf_input(toLow:=false) {
     }
     suspend(false)
     return toLow ? StrLower(ih.EndKey) . ih.EndMods : ih.EndKey
+}
+
+;直接选择其中一项，也支持输入(优先)
+;适合选择项较少的场景
+hyf_selectSingle(arr, sTips:="") {
+    oGui := gui()
+    oGui.OnEvent("escape", doEscape)
+    oGui.OnEvent("close", doEscape)
+    oGui.SetFont("s16")
+    if (sTips != "")
+        oGui.AddText("x10", sTips . "`n")
+    for v in arr {
+        if (A_Index == 1)
+            oGui.AddRadio("checked", v)
+        else
+            oGui.AddRadio(, v)
+    }
+    ctlEdit := oGui.AddEdit("", "")
+    oGui.AddButton("default", "确认").OnEvent("click", funDo)
+    oGui.show()
+    res := ""
+    WinWaitClose(oGui)
+    return res
+    funDo(btn, p*) {
+        if (ctlEdit.value != "") {
+            res := ctlEdit.value
+        } else {
+            for ctl in oGui {
+                if (ctl.type == "Radio" && ctl.value) {
+                    res := ctl.text
+                    break
+                }
+            }
+        }
+        oGui.destroy()
+        return res
+    }
+    doEscape(oGui) => oGui.destroy()
 }
 
 ;支持多行的 inputbox
@@ -309,7 +396,7 @@ inputboxEX(tips, sDefaluet:="", sTitle:="", bEmpty:=false) {
 /*
 arr := [
  ["姓名", "name", "default"],
- ["性别", "gender", ["男","女"]],
+ ["性别", "2|gender", ["男","女"]],
  ["年龄", "n|age", "20"],
  ["是否党员", "b|dangyuan", 0],
  ["备注", "2|beizhu", ""],
@@ -326,22 +413,22 @@ msgbox(json.stringify(objOpt, 4))
 ;   数组，则为 AddComboBox
 ;bOne 表示限制单结果，则会在 Edit内容改变时，清空其他控件
 ;关闭则返回map()
-;NOTE 自动过滤空值
+;NOTE 自动过滤空值，数字返回的是字符串
 */
 hyf_inputOption(arr, sTips:="", bOne:=false) {
-    if (type(arr) == "Map") {
+    if (arr is map) {
         arr1 := arr.clone()
         for k, v in arr1
             arr.push([k,k,v])
     }
-    oGui := gui()
+    oGui := gui("+AlwaysOnTop +Border +LastFound +ToolWindow")
     oGui.OnEvent("escape", doEscape)
     oGui.OnEvent("close", doEscape)
     oGui.SetFont("cRed s22")
     if (sTips != "")
         oGui.AddText("x10", sTips . "`n")
-    oGui.SetFont("cDefault s13")
-    funOpt := (x)=>"ys w400 v" . x
+    oGui.SetFont("cDefault s11")
+    funOpt := (x,w:=600)=>format("ys v{1} w{2}", x,w) ;默认宽
     focusCtl := ""
     for a in arr {
         oGui.AddText("x10 section", a[1])
@@ -352,22 +439,23 @@ hyf_inputOption(arr, sTips:="", bOne:=false) {
                 opt := StrSplit(a[2], "|")[1]
                 a[2] := StrSplit(a[2], "|")[2]
                 if (opt == "n") { ;限制为数字
-                    oGui.AddEdit(funOpt(a[2]) . " number", a[3]).OnEvent("change", editChange)
+                    oGui.AddEdit(funOpt(a[2],100) . " number", a[3]).OnEvent("change", editChange)
                 } else if (opt == "b") { ;boolean
                     oGui.SetFont("cRed")
                     if (a[3])
-                        oGui.AddCheckbox(funOpt(a[2]) . " checked", "是")
+                        oGui.AddCheckbox(funOpt(a[2],100) . " checked", "是")
                     else
-                        oGui.AddCheckbox(funOpt(a[2]), "是")
+                        oGui.AddCheckbox(funOpt(a[2],100), "是")
                     oGui.SetFont("cDefault")
-                } else if (opt ~= "^\d+$") { ;r2
+                } else if (opt ~= "^\d+$") { ;多行
                     if (a[3] is array)
                         oGui.AddComboBox(format("choose{1} {2}", opt,funOpt(a[2])), a[3])
                     else
                         oGui.AddEdit(format("{1} r{2}", funOpt(a[2]),opt), a[3]).OnEvent("change", editChange)
                 }
-            } else if (a[3] is array) {
-                oGui.AddComboBox(funOpt(a[2]), a[3])
+            } else if (a[3] is array) { ;下拉框，根据内容设置长度
+                lMax := max(a[3].map(x=>strlen(x))*)
+                oGui.AddComboBox(funOpt(a[2],max(lMax*30, 50)), a[3])
             } else {
                 oGui.AddEdit(funOpt.call(a[2]), a[3]).OnEvent("change", editChange)
             }
@@ -406,7 +494,7 @@ hyf_inputOption(arr, sTips:="", bOne:=false) {
                 v := oGui[a[2]].value
             else
                 v := oGui[a[2]].text
-            if (type(v) == "String")
+            if (v is string)
                 v := trim(v) ;TODO 是否trim
             if (v != "")
                 objRes[a[2]] :=  v
@@ -765,7 +853,7 @@ hyf_getDocumentPath(winTitle:="") { ;获取当前窗口编辑文档的路径
 ;funHwnd 处理 hwnd 为 true 则添加
 ;hyf_hwnds("ahk_exe a.exe", (p)=>substr(WinGetClass(p"),1,4) == "Afx:")[1]
 ;hyf_hwnds("ahk_class Chrome_WidgetWin_1 ahk_exe chrome.exe")
-hyf_hwnds(winTitle, funHwnd:="") {
+hyf_hwnds(winTitle, funHwnd:=unset) {
     saveDetect := A_DetectHiddenWindows
     DetectHiddenWindows(true)
     arr := []
@@ -774,10 +862,10 @@ hyf_hwnds(winTitle, funHwnd:="") {
             titleLoop := WinGetTitle(hwnd)
         catch
             continue
-        if (isobject(funHwnd)) {
-            if (funHwnd.call(hwnd))
+        if (isset(funHwnd)) {
+            if (funHwnd(hwnd))
                 arr.push(hwnd)
-        } else if (instr(winTitle, "ahk_class")) {
+        } else if (instr(winTitle, "ahk_class ")) {
             if (titleLoop ~= "\S") ;指定了 ahk_class 则非空标题就添加
                 arr.push(hwnd)
         } else {
@@ -806,21 +894,6 @@ hyf_pids(exeName) {
     for item in ComObjGet("winmgmts:").ExecQuery(format("select ProcessId,name from Win32_Process where name='{1}'", exeName))
         arr.push(item["ProcessId"])
     return arr
-}
-
-;if (!instr(DriveGetList(), "w"))
-;   _Windows.vhdxLoad()
-hyf_vhdxLoad(arrVhdx) {
-    for arr in arrVhdx {
-        if (!instr(DriveGetList(), arr[1])) {
-            run(arr[2])
-            WinWait("ahk_class CabinetWClass ahk_exe explorer.exe")
-            try
-                WinClose
-            if (WinExist("新通知 ahk_class Windows.UI.Core.CoreWindow"))
-                WinClose
-        }
-    }
 }
 
 ;如果失败，可能是被应用程序占用，用 this.getPowershell("Get-WinEvent @map(logname='application','system';starttime=[datetime],,today;id=225) | select logname, timecreated, id, message")
@@ -1137,8 +1210,6 @@ hyf_getWorkbook(fp, bActive:=false) {
 ;名称参考python
 ;hyf_dir(_Excel, (p)=>p~="^__")
 hyf_dir(cls, funFilter:="", bShowValue:=false) {
-    ;if (type(cls) != "Class")
-    ;    return []
     if (type(cls) == "Class" && !isobject(funFilter)) {
         if (cls.prototype.__class == "_TC")
             funFilter := (p)=>p~="^(__|cm_)"
@@ -1249,6 +1320,7 @@ hyjson2arr(obj, mark:=1) {
 ;TODO  "`n`n" 这种字符串不兼容
 ;也可见 DynaRun.ahk https://www.autohotkey.com/board/topic/56141-ahkv2-dynarun-run-autohotkey-process-dynamically
 ;来源 run 的帮助文件
+;是单独的文件运行，所以不支持本脚本的代码，可用 _Do.doAny()
 hyf_pipeRun(code, fn:="", callback:=0) {
     if (fn == "")
         fn := A_ScriptDir
@@ -1297,6 +1369,9 @@ hyf_pipeRun(code, fn:="", callback:=0) {
         return true  ;  返回 1(true) 是回复此消息的传统方式.
     }
 }
+
+;-----------------------------------交互-----------------------------------
+;提供多种显示方式见 _Do.showBySelect
 
 ;去重或生成拼音都是根据 subArr[indexKey]
 ;indexKey 主值在 subArr 的序号(不能重复，否则返回结果有问题)
@@ -1522,62 +1597,67 @@ hyf_GuiListView(arr2, arrCol:="") {
     if (!arr2.length)
         return
     if (arr2.length == 1) {
-        hyf_GuiMsgbox(arr2[1])
+        hyf_msgbox(arr2[1])
         return
     }
-    wCol := 100
     if (!isobject(arr2))
         return
-    oGui := gui()
+    oGui := gui("+AlwaysOnTop +Border +OwnDialogs +ToolWindow")
+    oGui.BackColor := "222222"
+    oGui.SetFont("s13")
     oGui.OnEvent("escape",doEscape)
     if (!isobject(arrCol)) {
         arrCol := []
         for v in arr2[1]
             arrCol.push(A_Index)
     }
-    oLv := oGui.add("ListView", "w1200 r40", arrCol)
-    oLv.OnEvent("DoubleClick", do)
+    oLv := oGui.AddListView("checked w1200 r40", arrCol)
+    oLv.OnEvent("ItemCheck", do)
     oLv.SetFont("s12")
     oLv.opt("-Redraw")
     for k, arr in arr2
         oLv.add(, arr*)
     cntCol := oLv.GetCount("column")
-    loop(cntCol)
-        oLv.ModifyCol(A_Index, wCol . " +center")
+    oLv.ModifyCol()
+    ;loop(cntCol)
+    ;    oLv.ModifyCol(A_Index, wCol . " +center")
     oLv.opt("+Redraw")
-    oGui.show(format("w{1} center", wCol*cntCol+20))
-    return oGui
+    arrRes := []
+    oGui.show("w1000 center")
+    WinWaitClose(oGui)
+    tooltip
+    return arrRes
     doEscape(oGui) => oGui.destroy()
-    do(oLV, r, p*) { ;NOTE 要做的事
+    do(oLV, r, status) { ;NOTE 要做的事
         ;获取当前行整行内容
-        arrRes := []
-        loop(oLv.GetCount("column"))
-            arrRes.push(oLv.GetText(r, A_Index))
-        hyf_GuiMsgbox(arrRes)
+        ;GuiControlGet
+        if (status) {
+            arrRes.push([])
+            loop(oLv.GetCount("column")) {
+                arrRes[-1].push(oLv.GetText(r, A_Index))
+            }
+        } else {
+            v := oLv.GetText(r,1)
+            for arr in arrRes {
+                if (v = arr[1]) ;可能数字和字符串比较
+                    arrRes.RemoveAt(A_Index)
+            }
+        }
+        tooltip(arrRes.toTable())
         ;做任何事
         ;设置返回值
-        oGui.destroy()
+        ;oGui.destroy()
     }
 }
 
-;-----------------------------------obj__-----------------------------------
-;提示函数
-
-;提供多种显示方式
-;Excel单元格
-;txt
-;msgbox
-;tooltip
-;hyf_showObj 由于依赖其他库，写到 hyaray1.ahk
-
-hyf_obj2Str(obj, char:="`n", level:=0) {
+hyf_obj2str(obj, char:="`n", level:=0) {
     static t := "", s := ""
     if (level)
         t .= A_Tab ;前置tab显示级数
     else
         t := "", s := "" ;防止多次运行时结果叠加
     if (!isobject(obj))
-        return "非对象，值为`n" . obj
+        return obj ;"非对象，值为`n" . obj
     try { ;FIXME 无故出错
         for k, v in obj {
             if (isobject(v)) {
@@ -1600,15 +1680,15 @@ hyf_obj2Str(obj, char:="`n", level:=0) {
         return s
 }
 
-hyf_objView(obj, str:="", char:="`n", n:=0) {
+hyf_msgbox(obj, str:="", char:="`n", n:=0) {
     if (str != "")
-        return msgbox(str . "`n" . hyf_obj2Str(obj,char),,0x40000+n)
+        return msgbox(format("{1}`n{2}", str,hyf_obj2str(obj,char)),,0x40000+n)
     else
-        return msgbox(hyf_obj2Str(obj,char),,0x40000+n)
+        return msgbox(hyf_obj2str(obj,char),,0x40000+n)
 }
 
 hyf_objToolTip(obj, str:="", t:=0) {
-    res := str ? str . "`n" . hyf_obj2Str(obj, "`n") : hyf_obj2Str(obj, "`n")
+    res := str ? str . "`n" . hyf_obj2str(obj, "`n") : hyf_obj2str(obj, "`n")
     if (!t) {
         tooltip(res)
         hyf_input()
@@ -1619,7 +1699,8 @@ hyf_objToolTip(obj, str:="", t:=0) {
     }
 }
 
-hyf_tooltip(str) {
+;tooltip 后等待任意按键结束
+hyf_tooltipWait(str) {
     tooltip(str)
     hyf_input()
     tooltip
@@ -1678,7 +1759,7 @@ hyf_tooltipAsMenu(arrIn, strTip:="", x:=8, y:=8) {
     getArrByKey(arr, key:="") { ;根据 key 获取子arr
         if (key == "")
             return arr
-        ;hyf_objView(arr, key)
+        ;hyf_msgbox(arr, key)
         for v in arr {
             if (v[1] = key) ;TODO 多项
                 return [v]

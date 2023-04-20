@@ -1,4 +1,5 @@
 ﻿;AutoHotkey原生不支持对象，都要new才能用，所以用工具类更合适
+;如何判断二维数组 arr[1] is array?
 ;默认都是不修改原arr，方法内都会clone()并操作
 ;除了方法名以r开头的会修改原arr，且无返回值(rMoveDown)
 ;ip 1.2 转成 192.168.1.2
@@ -342,7 +343,7 @@ class _Array extends Array {
     }
 
     static oRemoveByValue(arr, value) { ;删除第一个对应的key
-        arr.RemoveAt(arr.index(value))
+        arr.RemoveAt(arr.indexOf(value))
     }
 
     ;[1,2,[3,4]]转为[1,2,3,4]

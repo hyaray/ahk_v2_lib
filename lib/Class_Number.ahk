@@ -59,6 +59,9 @@ class _Number {
 
     mod1(num, m) => mod(num-1, m)+1
 
+    toDPI() => integer(this*A_ScreenDPI/96)
+    fromDPI() => integer(this*96/A_ScreenDPI)
+
     ;转换
     ;Excel的列号
     ;xl.ConvertFormula("R99C99", -4150,1)
@@ -169,7 +172,7 @@ class _Number {
         }
         loop(26)
             obj.push(chr(64+A_Index))
-        ;hyf_objView(obj)
+        ;hyf_msgbox(obj)
         res := ""
         while(num > 0) {
             md := mod(num,r) ;逻辑和hyf_num2Column不一样

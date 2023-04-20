@@ -64,6 +64,9 @@ class _String {
         (dir == "") && dir := A_Desktop
         return (ext=="") ? format("{1}\{2}",dir,this) : format("{1}\{2}.{3}",dir,this,ext)
     }
+    fnn2fn(ext:="") {
+        return (ext=="") ? this : format("{1}.{2}",this,ext)
+    }
 
     ;路径相关
     fn() {
@@ -300,6 +303,23 @@ class _String {
 
     toIframe() => format('<iframe src="{1}"></iframe>', this)
 
+    ;每个字符转成ASCII
+    ;fmt会进制数
+    toAsc(fmt:=10) {
+        arr := []
+        switch fmt {
+            case 10:
+                loop parse, this
+                    arr.push(ord(A_LoopField))
+            case 16:
+                loop parse, this
+                    arr.push(format("0x{:04X}", ord(A_LoopField)))
+            default:
+        }
+        return arr
+    }
+
+    ;按行
     toArr(charLine:="", arrIdx:="", funLineFilter:=unset) {
         if (!isset(funLineFilter))
             funLineFilter := (p*)=>1
@@ -547,11 +567,11 @@ class _String {
                 ;重置 arrLine
                 arrLine := [sLine]
             }
-            ;hyf_objView(arrLine)
+            ;hyf_msgbox(arrLine)
         }
         ;添加最后一个结果
         arrRes.push(arrLine)
-        ;hyf_objView(arrRes)
+        ;hyf_msgbox(arrRes)
         if (!toArrayA)
             return arrRes
         ;转成 arrayA 供Excel写入
@@ -573,7 +593,7 @@ class _String {
         obj.default := 0
         loop(n1 := strlen(this)-1)
             obj[substr(this,A_Index,2)]++
-        ;hyf_objView(obj)
+        ;hyf_msgbox(obj)
         loop(n2 := strlen(str2)-1) {
             k := substr(str2,A_Index,2)
             if (obj[k] > 0) {
@@ -582,9 +602,9 @@ class _String {
                 ;msgbox(A_Index . "`n" . k . "`n" . n . "`n" . obj[k])
             }
             ;else
-                ;hyf_objView(obj, A_Index . k . "`n" . obj[k])
+                ;hyf_msgbox(obj, A_Index . k . "`n" . obj[k])
         }
-        ;hyf_objView(obj)
+        ;hyf_msgbox(obj)
         vDSC := round((2*n)/(n1+n2), 3)
         if (!vDSC || vDSC < 0.005) { ;round to 0 if less than 0.005
             return 0
@@ -606,7 +626,7 @@ class _String {
             arrSimilar[0,A_Index] := A_Index
         for k, v in arr1
             arrSimilar[A_Index,0] := A_Index
-        ;hyf_objView(arrSimilar)
+        ;hyf_msgbox(arrSimilar)
         cnt := 0
         loop(arr1.length) {
             cnt += 1
@@ -757,14 +777,6 @@ class _String {
             }
         }
         return str
-        zh2num(str) { ;必须全是(一|二|三|四|五|六|七|八|九|壹|贰|叁|肆|伍|陆|柒|捌|玖)，不支持 拾佰仟
-            res := ""
-            obj := map("零",0,"一",1,"二",2,"三",3,"四",4,"五",5,"六",6,"七",7,"八",8,"九",9,"十",10,
-                "壹",1,"贰",2,"叁",3,"肆",4,"伍",5,"陆",6,"柒",7,"捌",8,"玖",9)
-            loop parse, str
-                res .= obj[A_LoopField]
-            return res
-        }
     }
 
     ;一二三全部转成123(简单替换)
@@ -1230,7 +1242,7 @@ class _String {
         return str
     }
 
-    ;NOTE 实用
+    ;NOTE 实用，中文暂时不支持超出10
     add1(n:=1) { ;类似Excel的填充，最后一个数字+1
         if (n == 0)
             return this
@@ -1238,12 +1250,20 @@ class _String {
         if (str ~= "\d") { ;有数字
             RegExMatch(this, "^(.*?)(\d+)(\D*)$", &m)
             return m[1] . format(format("{:0{1}s}",strlen(m[2])), m[2]+n) . m[3]
-        } else if (i := (str ~= "一|二|三|四|五|六|七|八|九|十")) {
-            idx := map("零",0,"一",1,"二",2,"三",3,"四",4,"五",5,"六",6,"七",7,"八",8,"九",9,"十",10)[substr(str,i,1)]
+        } else if (i := (str ~= "零|一|二|三|四|五|六|七|八|九|十")) {
+            arr := ["零","一","二","三","四","五","六","七","八","九","十"]
             sBefore := substr(str,1,i-1)
             sAfter := substr(str,i+1)
-            arr := ["零","一","二","三","四","五","六","七","八","九","十"]
-            return format("{1}{2}{3}", sBefore,arr[idx+2],sAfter)
+            idx := arr.indexOf(substr(str,i,1))
+            if (!idx)
+                return this
+            try
+                return format("{1}{2}{3}", sBefore,arr[idx+n],sAfter)
+            catch
+                return this
+        } else {
+            OutputDebug(format("i#{1} {2}:{3} add1 not matched", A_LineFile,A_LineNumber,A_ThisFunc))
+            return str
         }
         ;return m[1] . (m[2]+1).zfill(strlen(m[2])) . m[3]
     }
@@ -1788,7 +1808,7 @@ class _String {
     }
 
     ;单个中文和编码(不含符号)
-    ; hyf_objView("八".getEncode("516B"))
+    ; hyf_msgbox("八".getEncode("516B"))
     ;GetStringEncoding(strVar) {
     ;    return ComObj(0x200C, DllCall("UdeExport\GetStringEncoding", "Ptr",&strVar, "Ptr"), 1)
     ;}
@@ -1964,6 +1984,7 @@ class _String {
     }
 
     ;TODO 返回数字还是字符串？
+    ;如果返回数字，直接用 integer("0xa0")
     h2d() { ;16进制转十进制
         num := this
         if !(instr(num, "0x"))

@@ -157,9 +157,10 @@ class _GDIP {
             MouseGetPos(&x1, &y1)
             x := min(x0, x1)
             y := min(y0, y1)
-            w := abs(x0 - x1)*96/A_ScreenDPI
-            h := abs(y0 - y1)*96/A_ScreenDPI
-            oGui.show(format("x{1} y{2} w{3} h{4} NA", x,y,w,h))
+            w := abs(x0 - x1)
+            h := abs(y0 - y1)
+            ;仅显示的宽高要进行调整
+            oGui.show(format("x{1} y{2} w{3} h{4} NA", x,y,integer(w*96/A_ScreenDPI),integer(h*96/A_ScreenDPI)))
             tooltip(format("{1},{2},{3},{4}",x,y,w,h))
         }
         if (bHBitmap)
@@ -176,7 +177,7 @@ class _GDIP {
     ; arrWH := [300,400]
     ;aRect的每个项目都可以是函数，参数是图片的[宽，高] arrWH
     ;转成 [100, 200, 110, 160]
-    static rectDeal(aRect, arrWH) {
+    static rectDefault(aRect, arrWH) {
         for k, v in aRect {
             if (isobject(v))
                 aRect[k] := v.call(arrWH)
@@ -217,8 +218,9 @@ class _GDIP {
     ;_GDIP.rectMark([x,y,w,h])
     static rectMark(aRects, keyWaitClose:="", arrRectStyle:=unset, arrFontOpt:=unset) {
         objFontOpts := map(
-            "font", "宋体",
+            "font", "微软雅黑",
             "size", 16,
+            "color", 0xffFF0000,
             "rows", 1, ;行数(默认1)
             "align", 0, ;左对齐(默认1居中)
             "style", 1, ;加粗(默认0)
@@ -239,14 +241,19 @@ class _GDIP {
             if (arrFontOpt.length >= 2)
                 objFontOpts.coverByMap(arrFontOpt[2])
             if (arrFontOpt.length < 3)
-                funcRect := rectDeal
+                funcRect := rectDefault
             else
                 funcRect := arrFontOpt[3]
         }
+        objFontOpts["size"] := round(objFontOpts["size"]*A_ScreenDPI/96)
+        ;OutputDebug(format("i#{1} {2}:{3} objFontOpts={4}", A_LineFile,A_LineNumber,A_ThisFunc,json.stringify(objFontOpts,4)))
         oGui := gui("-Caption +E0x80000 +LastFound +AlwaysOnTop +ToolWindow +OwnDialogs")
+        OnMessage(0x201, (p*)=>PostMessage(0xA1, 2))
         oGui.Show("NA")
         bOut := arrRectStyle.length >= 3 ? arrRectStyle[3] : false ;边框放在外面，而不是居中
         for k, aRect in aRects {
+            if (!arect.length)
+                continue
             if (bOut && arrRectStyle[2] > 1) {
                 n := arrRectStyle[2]//2
                 aRect[1] -= n
@@ -258,11 +265,13 @@ class _GDIP {
                 xSave := aRect[1]+aRect[3]//2
                 ySave := aRect[2]+aRect[4]//2
             }
-            oGraphics.GdipDrawRectangle(oPen.ptr, aRect)
+            oGraphics.GdipDrawRectangle(oPen, aRect)
             ;文字相关
             if (isset(arrFontOpt)) {
-                aRectFont := funcRect(aRect)
-                oGraphics.DrawText1(arrText[k], objFontOpts, aRectFont)
+                if (arrText.length>=k && arrText[k]!="") { ;有定义文字
+                    aRectFont := funcRect(aRect, arrText[k])
+                    oGraphics.DrawText1(arrText[k], objFontOpts, aRectFont)
+                }
             }
         }
         cmMouse := A_CoordModeMouse
@@ -282,10 +291,16 @@ class _GDIP {
                 oGui.destroy()
             }
         }
-        rectDeal(rect) { ;默认在右侧显示(上下方会影响相邻控件内容)
-            arr := [rect[1]+rect[3]] ;NOTE 不能修改原数组
-            loop(3)
-                arr.push(rect[A_Index+1])
+        rectDefault(rect, text:="") { ;默认在右侧显示(上下方会影响相邻控件内容)
+            arr := [rect[1]+rect[3], rect[2]] ;NOTE 不能修改原数组
+            ;文字宽，尽量保留，否则文字显示不全
+            if (strlen(text) < 10)
+                arr.push(200)
+            else if (strlen(text) < 20)
+                arr.push(300)
+            else if (strlen(text) < 40)
+                arr.push(400)
+            arr.push(rect[4]*2)
             return arr
         }
     }
@@ -2025,7 +2040,7 @@ class GDIP_Graphics extends _GDIP {
         bufOutRect := buffer(16, 0)
         res := dllcall("gdiplus\GdipMeasureString"
             , "ptr",this
-            , "ptr",strptr(sText)
+            , "ptr",strptr(string(sText))
             , "int",-1
             , "ptr",pFont
             , "ptr",pRect

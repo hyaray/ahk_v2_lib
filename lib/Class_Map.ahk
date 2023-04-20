@@ -33,6 +33,22 @@ class _Map extends map {
         return arr
     }
 
+    ;通过数组来获取值
+    getEx(arr, default:="") {
+        if (!arr.length)
+            return this
+        obj := this
+        for v in arr {
+            if (obj.has(v)) {
+                obj := obj[v]
+            } else {
+                obj := default
+                break
+            }
+        }
+        return obj
+    }
+
     values(i:=unset) {
         if (isset(i))
             return this._index(1, i)

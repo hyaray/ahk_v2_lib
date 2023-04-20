@@ -255,9 +255,9 @@ class _CDP {
         ;debug 模式获取
         ;OutputDebug(format("i#{1} {2}:httpAll={3}", A_LineFile,A_LineNumber,json.stringify(this.httpOpen("",true),4)))
         for objHttp in this.httpOpen() {
-            if (objHttp["type"] == "page" && objHttp["title"] != "DevTools") { ;NOTE by 火冷 <2022-10-01 17:42:12>
+            if (objHttp["type"] == "page" && !(objHttp["title"] ~= "^(DevTools|yonyou U9帮助)$")) { ;NOTE by 火冷 <2022-10-01 17:42:12>
                 objHttp["url"] := rtrim(objHttp["url"], "/")
-                OutputDebug(format("i#{1} {2}:{3} key={4}", A_LineFile,A_LineNumber,A_ThisFunc,key))
+                ;OutputDebug(format("i#{1} {2}:{3} key={4}", A_LineFile,A_LineNumber,A_ThisFunc,key))
                 switch key {
                     case "title": return objHttp["title"]
                     case "json": return objHttp["url"].jsonUrl()
@@ -323,7 +323,7 @@ class _CDP {
     ;pathname前面要带 /
     httpOpen(pathname:="") {
         res := this.http.open('GET', format("http://127.0.0.1:{1}/json{2}", this.DebugPort,pathname))
-        OutputDebug(format("i#{1} {2}:{3} open res={4}", A_LineFile,A_LineNumber,A_ThisFunc,res))
+        ;OutputDebug(format("i#{1} {2}:{3} open res={4}", A_LineFile,A_LineNumber,A_ThisFunc,res))
         try {
             resSend := this.http.send()
         } catch {
@@ -620,7 +620,7 @@ class _CDP {
         ;pathname前面要带 /
         httpOpen(pathname:="") {
             res := this.http.open('GET', format("http://127.0.0.1:{1}/json{2}", this.DebugPort,pathname))
-            OutputDebug(format("i#{1} {2}:{3} open res={4}", A_LineFile,A_LineNumber,A_ThisFunc,res))
+            ;OutputDebug(format("i#{1} {2}:{3} open res={4}", A_LineFile,A_LineNumber,A_ThisFunc,res))
             try {
                 resSend := this.http.send()
             } catch {

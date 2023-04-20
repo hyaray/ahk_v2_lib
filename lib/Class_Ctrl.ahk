@@ -175,11 +175,11 @@ class _Edit extends _Ctrl {
 
     ;获取选择区域的起始和末尾序号(0开始)
     ; https://docs.microsoft.com/en-us/windows/win32/controls/em-getsel
-    ; hyf_objView(_Edit("Edit1", "A").getSelectPos())
+    ; hyf_msgbox(_Edit("Edit1", "A").getSelectPos())
     getSelectPos() {
         sPos := buffer(4, 0)
         ePos := buffer(4, 0)
-        SendMessage(EM_GETSEL:=0xB0, &sPos, &ePos, "Edit1", "A")
+        SendMessage(0xB0, &sPos, &ePos, "Edit1", "A") ;EM_GETSEL
         s := numget(sPos, 0, "UPtr")
         e := numget(ePos, 0, "UPtr")
         return [s, e]
@@ -199,7 +199,7 @@ class _Edit extends _Ctrl {
     ;Edit 选择文本
     ;_Edit("Edit1", "A").select(1,5)
     select(start:=0, len:=-1) {
-        SendMessage(EM_SETSEL:=0xB1, start, start+len, this.ctl, this.hwnd)
+        SendMessage(0xB1, start, start+len, this.ctl, this.hwnd) ;EM_SETSEL
     }
 
 }
@@ -213,10 +213,10 @@ class _ListBox extends _Ctrl {
         ; msgbox(this.ctl . "`n" . this.hwnd)
     }
 
-    GetCount() => SendMessage(LB_GETCOUNT:=0x18B,,,, this.hCtl) + 1
+    GetCount() => SendMessage(0x18B,,,, this.hCtl) + 1 ;LB_GETCOUNT
 
     ;第1项为 1
-    getSelectedIndex() => SendMessage(LB_GETCURSEL:=0x188,,,, this.hCtl)+1
+    getSelectedIndex() => SendMessage(0x188,,,, this.hCtl)+1 ;LB_GETCURSEL
 
     getSelectedText() {
         idx := this.getSelectedIndex()
@@ -237,17 +237,17 @@ class _ListBox extends _Ctrl {
     ;TODO 有问题
     ;第 idx 行所有文本(一般需要 StrSplit)
     getTextByIndex(idx) {
-        len := SendMessage(LB_GETTEXTLEN:=0x18A, idx-1,,, this.hCtl)+1
+        len := SendMessage(0x18A, idx-1,,, this.hCtl)+1 ;LB_GETTEXTLEN
         var := buffer(len<<1, 0)
-        SendMessage(LB_GETTEXT:=0x189, idx-1, &var,, this.hCtl)+1
+        SendMessage(0x189, idx-1, &var,, this.hCtl)+1 ;LB_GETTEXT
         return strget(&var)
     }
 
-    setCurrent(idx) => SendMessage(LB_SETCURSEL:=0x186, idx-1,,, this.hCtl)
+    setCurrent(idx) => SendMessage(0x186, idx-1,,, this.hCtl) ;LB_SETCURSEL
     
     ;第 idx 项设置为列表框的第1个可见项
     setTop(idx) {
-        SendMessage(LB_SETTOPINDEX:=0x197, idx-1,,, this.hCtl)
+        SendMessage(0x197, idx-1,,, this.hCtl) ;LB_SETTOPINDEX
     }
 
     ;选中第 idx 个
@@ -259,7 +259,7 @@ class _ListBox extends _Ctrl {
         if (!idx)
             throw ValueError("idx == 0")
         if (0)
-            SendMessage(LB_SETCURSEL:=0x186, idx-1,,, this.hCtl) ;选中项优先在首行(NOTE 不会触发事件)
+            SendMessage(0x186, idx-1,,, this.hCtl) ;LB_SETCURSEL 选中项优先在首行(NOTE 不会触发事件)
         else
             ControlChooseIndex(idx, this.ctl, this.hwnd) ;选中项可能显示在末行
     }
@@ -273,7 +273,7 @@ class _ListBox extends _Ctrl {
     }
 
     selectAll() {
-        PostMessage(LB_SETSEL:=0x185, 1, -1,, this.hCtl)
+        PostMessage(0x185, 1, -1,, this.hCtl) ;LB_SETSEL
     }
 }
 
@@ -302,14 +302,14 @@ class _ListView extends _Ctrl {
         }
         return 0
     }
-    getSelectedCount() => SendMessage(LVM_GETSELECTEDCOUNT:=0x1032,,,, this.hCtl)
+    getSelectedCount() => SendMessage(0x1032,,,, this.hCtl) ;LVM_GETSELECTEDCOUNT
     getSelectedText() => ListViewGetContent("Selected", this.hCtl, this.hwnd)
     getSelectedIndex() { ;TODO 只返回1个(从0开始)
-        return SendMessage(LVM_GETSELECTIONMARK:=0x1042,,,, this.hCtl)
-        ;return SendMessage(LVM_GETITEMNEXT:=0x100c,-1,3,, this.hCtl) ;返回 4294967296 异常 http://msdn.microsoft.com/en-us/library/bb761057.aspx
+        return SendMessage(0x1042,,,, this.hCtl) ;LVM_GETSELECTIONMARK
+        ;return SendMessage(0x100c,-1,3,, this.hCtl) ;LVM_GETITEMNEXT 返回 4294967296 异常 http://msdn.microsoft.com/en-us/library/bb761057.aspx
     }
     ;getHoverIndex() { ;TODO 鼠标停留的序号(从0开始)
-    ;    return SendMessage(LVM_GETSELECTIONMARK:=0x1042,,,, this.hCtl)
+    ;    return SendMessage(0x1042,,,, this.hCtl) ;LVM_GETSELECTIONMARK
     ;}
 
     selectByInput(i:=1) {
@@ -333,8 +333,8 @@ class _ListView extends _Ctrl {
         numput("UPtr", stateMask:=2, bufLvItem, 16)
         oRB := RemoteBuffer(this.pid, bufLvItem.size)
         oRB.write(bufLvItem)
-        SendMessage(LVM_ENSUREVISIBLE:=0x1013, idx-1,,, "ahk_id" . this.hCtl)
-        SendMessage(LVM_SETITEMSTATE:=0x102B, idx-1, oRB.arrBuffer[1],, "ahk_id" . this.hCtl)
+        SendMessage(0x1013, idx-1,,, "ahk_id" . this.hCtl) ;LVM_ENSUREVISIBLE
+        SendMessage(0x102B, idx-1, oRB.arrBuffer[1],, "ahk_id" . this.hCtl) ;LVM_SETITEMSTATE
         ;PostMessage(0x1043,, 2,, "ahk_id" . ControlGetHwnd(ctl, winTitle))
     }
     setChecked(idx, bCheck:=true) {
@@ -344,7 +344,7 @@ class _ListView extends _Ctrl {
         numput("UPtr", stateMask:=0xF000, LVITEM, 16)
         oRB := RemoteBuffer(this.pid, size)
         oRB.write(LVITEM)
-        SendMessage(LVM_SETITEMSTATE:=0x102B, idx-1, oRB.arrBuffer[1],, this.hCtl)
+        SendMessage(0x102B, idx-1, oRB.arrBuffer[1],, this.hCtl) ;LVM_SETITEMSTATE
     }
     doubleClickByText(str) {
         idx := this.getIndexByText(str)
@@ -354,15 +354,16 @@ class _ListView extends _Ctrl {
     doubleClickByIndex(idx) {
         this.selectByIndex(idx) ;选中该项
         oRB := RemoteBuffer(this.pid, 8)
-        SendMessage(LVM_GETITEMPOSITION:=0x1010, idx-1, oRB.arrBuffer[1],, "ahk_id" . this.hCtl) ;http://msdn.microsoft.com/en-us/library/bb761048.aspx
+        ; http://msdn.microsoft.com/en-us/library/bb761048.aspx
+        SendMessage(0x1010, idx-1, oRB.arrBuffer[1],, "ahk_id" . this.hCtl) ;LVM_GETITEMPOSITION
         pXY := oRB.read()
         x := numget(pXY, 0, "UPtr")
         y := numget(pXY, 4, "UPtr")
-        PostMessage(WM_NCACTIVATE:=0x86,,,, this.hCtl)
+        PostMessage(0x86,,,, this.hCtl) ;WM_NCACTIVATE
         ;PostMessage(WM_LBUTTONDOWN:=0x201,, x&0xFFFF | y<<16,, this.hCtl)
         ;PostMessage(WM_LBUTTONUP:=0x202,, x&0xFFFF | y<<16,, this.hCtl)
-        PostMessage(WM_LBUTTONDBLCLCK:=0x203,, x&0xFFFF | y<<16,, this.hCtl)
-        PostMessage(WM_LBUTTONUP:=0x202,, x&0xFFFF | y<<16,, this.hCtl)
+        PostMessage(0x203,, x&0xFFFF | y<<16,, this.hCtl) ;WM_LBUTTONDBLCLCK
+        PostMessage(0x202,, x&0xFFFF | y<<16,, this.hCtl) ;WM_LBUTTONUP
     }
 
 }
@@ -376,13 +377,13 @@ class _Tab extends _Ctrl  {
 
     ;选中第几个标签(1开始)
     ; _Tab("SysTabControl321", "A").getSelectedIndex()
-    getSelectedIndex() => SendMessage(TCM_GETCURSEL:=0x130B,,,, this.hCtl) + 1
+    getSelectedIndex() => SendMessage(0x130B,,,, this.hCtl) + 1 ;TCM_GETCURSEL
 
-    getSelectedText() => this.arrText()[this.getSelectedIndex()]
+    getSelectedText() => this.getTabNames()[this.getSelectedIndex()]
 
     ;所有标签内容
     ;https://docs.microsoft.com/en-us/windows/win32/api/commctrl/ns-commctrl-tcitema
-    arrText() {
+    getTabNames() {
         sizeItem := 16 + A_PtrSize*3
         lMax := 260
         sizeMax := lMax * (1+1) ;文本总长度
@@ -395,42 +396,43 @@ class _Tab extends _Ctrl  {
         numput("UPtr", pText, bufTabItem, 8+A_PtrSize)
         numput("UPtr", lMax, bufTabItem, 8 + A_PtrSize*2, "int")
         oRB.write(bufTabItem, sizeItem)
-        arr := []
+        arrTabName := []
         loop(this.getCount()) {
-            if (SendMessage(TCM_GETITEM:=0x133C, A_Index-1, pTabItem,, this.hCtl)) ;写入 bufTabItem 到 pTabItem 位置
-                arr.push(oRB.read(1, 1, sizeItem, sizeMax))
+            if (SendMessage(0x133C, A_Index-1, pTabItem,, this.hCtl)) ;TCM_GETITEM 写入 bufTabItem 到 pTabItem 位置
+                arrTabName.push(oRB.read(1, 1, sizeItem, sizeMax))
             else
-                arr.push("")
+                arrTabName.push("")
         }
-        return arr
+        OutputDebug(format("i#{1} {2}:{3} arrTabName={4}", A_LineFile,A_LineNumber,A_ThisFunc,arrTabName))
+        return arrTabName
     }
 
-    getIndexByText(str) {
-        for i, v in this.arrText() {
+    ;数量
+    getCount() => SendMessage(0x1304,,,, this.hCtl) ;TCM_GETITEMCOUNT
+
+    getIndexByTabName(str) {
+        for i, v in this.getTabNames() {
             if (v == str)
                 return i
         }
         return 0
     }
 
-    ;数量
-    getCount() => SendMessage(TCM_GETITEMCOUNT:=0x1304,,,, this.hCtl)
-
-    ; 选中第n个标签
-    ;ControlChooseIndex(idx, ctl, "A")
-
-    ;根据名称选中
-    tabSelect(val) {
-        if (type(val) == "String")
-            idx := this.getIndexByText(val)
+    ;根据名称或序号选择
+    tabSelect(tabName) {
+        if (tabName is string)
+            idx := this.getIndexByTabName(tabName)
         else
-            idx := val
+            idx := tabName
         if (idx) {
+            OutputDebug(format("i#{1} {2}:{3} idx={4}", A_LineFile,A_LineNumber,A_ThisFunc,idx))
             ControlChooseIndex(idx, this.hCtl)
+            return idx
             ;SendMessage(TCM_SETCURFOCUS:=0x1330, idx-1,, this.hCtl)
             ;SendMessage(TCM_SETCURSEL:=0x130C, idx-1,, this.hCtl)
         } else {
-            throw ValueError(val . " not valid")
+            throw ValueError(tabName . " not valid")
+            return 0
         }
     }
 
@@ -440,8 +442,9 @@ class _Tab extends _Ctrl  {
 ; https://www.autohotkey.com/boards/viewtopic.php?t=4998
 ; SysTreeView321 根据路径选中项目
 class _TreeView extends _Ctrl {
-    __new(ctl, winTitle:="") {
+    __new(ctl, winTitle:="", ct:="TreeItem") {
         super.__new(ctl, winTitle)
+        this.ct := ct ;如果不
     }
 
     ; _TreeView("SysTreeView321", "A").getPath()
@@ -472,7 +475,7 @@ class _TreeView extends _Ctrl {
                 arr.push(this.GetText(pLoop))
                 pLoop := this.GetParent(pLoop)
             }
-            ; hyf_objView(arr, "SysTreeView321内容")
+            ; hyf_msgbox(arr, "SysTreeView321内容")
             res := arr.pop()
             loop(arr.length)
                 res .= "\" . arr[-A_Index]
@@ -482,27 +485,32 @@ class _TreeView extends _Ctrl {
 
     ;-------------以下为示例
     ;_TreeView("SysTreeView321", "A").selectByPath("安全设置\本地策略\用户权限分配")
+    ;_TreeView("SysTreeView321", "Windows 功能", "CheckBox").selectByPath("")
     selectByPath(path, bExpand:=false, bEnter:=false) {
         elParent := UIA.ElementFromHandle(this.hCtl) ;获取控件
         arrPath := StrSplit(path, "\")
-        for i, v in arrPath {
+        for k, v in arrPath {
             if (v == "*") {
-                cond := UIA.CreatePropertyCondition("ControlType","TreeItem")
+                cond := UIA.CreatePropertyCondition("ControlType",this.ct)
             } else {
                 if (instr(v, ":"))
                     v := format("{1} ({2})", DriveGetLabel(v),StrUpper(v))
                 ; tooltip(v)
                 ;查找下一级并展开
-                cond := UIA.CreateAndCondition(UIA.CreatePropertyCondition("ControlType","TreeItem"), UIA.CreatePropertyCondition("Name",v))
+                cond := UIA.CreateAndCondition(UIA.CreatePropertyCondition("ControlType",this.ct), UIA.CreatePropertyCondition("Name",v))
             }
             ;查找元素(按时间)
             endtime := A_TickCount + 3000
             loop {
                 el := elParent.FindFirst(cond, UIA.TreeScope.Children)
-                if (el := elParent.FindFirst(cond, UIA.TreeScope.Children))
+                if (el)
                     break
+                if (A_TickCount > endtime) {
+                    msgbox(v . "`n没找到")
+                    exit
+                }
             }
-            if (i == arrPath.length) { ;最后1项，直接选中结束
+            if (k == arrPath.length) { ;最后1项，直接选中结束
                 OutputDebug(format("i#{1} {2}:select-{3}", A_LineFile,A_LineNumber,v))
                 el.GetCurrentPattern("SelectionItem").Select()
                 if (bExpand) {
@@ -526,7 +534,8 @@ class _TreeView extends _Ctrl {
         }
         if (bEnter)
             send("{enter}")
-        return true
+        if el
+            return el
     }
 
     ; _TreeView("SysTreeView321", "A").expandOnlyThis()
@@ -559,10 +568,10 @@ class _TreeView extends _Ctrl {
     ;         TRUE if successful, or FALSE otherwise
     ;
     SetSelection(pItem) {
-        SendMessage(TVM_SELECTITEM:=0x110B, 0x9, pItem,, "ahk_id " this.hCtl)
-        ; SendMessage(TVM_SELECTITEM:=0x110B, 0x8, pItem,, "ahk_id " this.hCtl) ;NOTE 慎用，可能会造成无法选择其他项
-        ; SendMessage(TVM_SELECTITEM:=0x110B, 0x5, pItem,, "ahk_id " this.hCtl) ;TODO 好像多余
-        return SendMessage(TVM_SELECTITEM:=0x110B, 0x9|0x8000, pItem,, "ahk_id " this.hCtl)
+        SendMessage(0x110B, 0x9, pItem,, "ahk_id " this.hCtl) ;TVM_SELECTITEM
+        ; SendMessage(0x110B, 0x8, pItem,, "ahk_id " this.hCtl) ;TVM_SELECTITEM NOTE 慎用，可能会造成无法选择其他项
+        ; SendMessage(0x110B, 0x5, pItem,, "ahk_id " this.hCtl) ;TVM_SELECTITEM TODO 好像多余
+        return SendMessage(0x110B, 0x9|0x8000, pItem,, "ahk_id " this.hCtl) ;TVM_SELECTITEM
     }
     ;----------------------------------------------------------------------------------------------
     ; Method: GetSelection
@@ -574,7 +583,7 @@ class _TreeView extends _Ctrl {
     ; returns:
     ;         Handle to the selected item if successful, Null otherwise.
     ;
-    GetSelection() => SendMessage(TVM_GETNEXTITEM:=0x110A, 0x9,,, "ahk_id " this.hCtl)
+    GetSelection() => SendMessage(0x110A, 0x9,,, "ahk_id " this.hCtl) ;TVM_GETNEXTITEM
     ;----------------------------------------------------------------------------------------------
     ; Method: GetRoot
     ;         Retrieves the root item of the treeview
@@ -586,7 +595,7 @@ class _TreeView extends _Ctrl {
     ;         Handle to the topmost or very first item of the tree-view control
     ;         if successful, NULL otherwise.
     ;
-    GetRoot() => SendMessage(TVM_GETNEXTITEM:=0x110A, 0x0,,, "ahk_id " this.hCtl)
+    GetRoot() => SendMessage(0x110A, 0x0,,, "ahk_id " this.hCtl) ;TVM_GETNEXTITEM
     ;----------------------------------------------------------------------------------------------
     ; Method: GetParent
     ;         Retrieves an item's parent
@@ -598,7 +607,7 @@ class _TreeView extends _Ctrl {
     ;         Handle to the parent of the specified item. returns
     ;         NULL if the item being retrieved is the root node of the tree.
     ;
-    GetParent(pItem) => SendMessage(TVM_GETNEXTITEM:=0x110A, 0x3, pItem,, "ahk_id " this.hCtl)
+    GetParent(pItem) => SendMessage(0x110A, 0x3, pItem,, "ahk_id " this.hCtl) ;TVM_GETNEXTITEM
     ;----------------------------------------------------------------------------------------------
     ; Method: GetChild
     ;         Retrieves an item's first child
@@ -609,7 +618,7 @@ class _TreeView extends _Ctrl {
     ; returns:
     ;         Handle to the first Child of the specified item, NULL otherwise.
     ;
-    GetChild(pItem) => SendMessage(TVM_GETNEXTITEM:=0x110A, 0x4, pItem,, "ahk_id " this.hCtl)
+    GetChild(pItem) => SendMessage(0x110A, 0x4, pItem,, "ahk_id " this.hCtl) ;TVM_GETNEXTITEM
     ;----------------------------------------------------------------------------------------------
     ; Method: GetNext
     ;         returns the handle of the sibling below the specified item (or 0 if none).
@@ -654,17 +663,17 @@ class _TreeView extends _Ctrl {
             if (Root == -1) {
                 Root := pItem
             }
-            res := SendMessage(TVM_GETNEXTITEM:=0x110A, 0x4, pItem,, "ahk_id " this.hCtl)
+            res := SendMessage(0x110A, 0x4, pItem,, "ahk_id " this.hCtl) ;TVM_GETNEXTITEM
             if (res == 0) {
-                res := SendMessage(TVM_GETNEXTITEM:=0x110A, 0x1, pItem,, "ahk_id " this.hCtl)
+                res := SendMessage(0x110A, 0x1, pItem,, "ahk_id " this.hCtl) ;TVM_GETNEXTITEM
                 if (res == 0) {
                     loop {
-                        pItem := SendMessage(TVM_GETNEXTITEM:=0x110A, 0x3, pItem,, "ahk_id " this.hCtl)
+                        pItem := SendMessage(0x110A, 0x3, pItem,, "ahk_id " this.hCtl) ;TVM_GETNEXTITEM
                         if (pItem = Root) {
                             Root := -1
                             return 0
                         }
-                        res := SendMessage(TVM_GETNEXTITEM:=0x110A, 0x1, pItem,, "ahk_id " this.hCtl)
+                        res := SendMessage(0x110A, 0x1, pItem,, "ahk_id " this.hCtl) ;TVM_GETNEXTITEM
                     } until res
                 }
             }
@@ -672,9 +681,9 @@ class _TreeView extends _Ctrl {
         }
         Root := -1
         if (!pItem)
-            return SendMessage(TVM_GETNEXTITEM:=0x110A, 0x0,,, "ahk_id " this.hCtl)
+            return SendMessage(0x110A, 0x0,,, "ahk_id " this.hCtl) ;TVM_GETNEXTITEM
         else
-            return SendMessage(TVM_GETNEXTITEM:=0x110A, 0x1, pItem,, "ahk_id " this.hCtl)
+            return SendMessage(0x110A, 0x1, pItem,, "ahk_id " this.hCtl) ;TVM_GETNEXTITEM
     }
     ;----------------------------------------------------------------------------------------------
     ; Method: GetPrev
@@ -686,7 +695,7 @@ class _TreeView extends _Ctrl {
     ; returns:
     ;         Handle of the sibling above the specified item (or 0 if none).
     ;
-    GetPrev(pItem) => SendMessage(TVM_GETNEXTITEM:=0x110A, 0x2, pItem,, "ahk_id " this.hCtl)
+    GetPrev(pItem) => SendMessage(0x110A, 0x2, pItem,, "ahk_id " this.hCtl) ;TVM_GETNEXTITEM
     ;----------------------------------------------------------------------------------------------
     ; Method: Expand
     ;         Expands or collapses the specified tree node
@@ -782,7 +791,7 @@ class _TreeView extends _Ctrl {
         }
         txt := buffer(256, 0)
         oRB.write(&TvItem)
-        SendMessage(TVM_GETITEMW:=0x113E,, pTvItem,, "ahk_id " this.hCtl)
+        SendMessage(0x113E,, pTvItem,, "ahk_id " this.hCtl) ;TVM_GETITEMW
         return strget(oRB.read(2), 256)
     }
     ;----------------------------------------------------------------------------------------------
@@ -800,8 +809,7 @@ class _TreeView extends _Ctrl {
     ;         is destroyed and the handle is no longer valid.
     ;
     EditLabel(pItem) {
-        TVM_EDITLABEL := 1 ? 0x1141 : 0x110E
-        return SendMessage(TVM_EDITLABEL,, pItem,, "ahk_id " this.hCtl)
+        return SendMessage(0x1141,, pItem,, "ahk_id " this.hCtl) ;TVM_EDITLABEL
     }
     ;----------------------------------------------------------------------------------------------
     ; Method: GetCount
@@ -944,7 +952,7 @@ class _ComboBox extends _Ctrl {
     }
 
     ;TODO
-    indexOfComboBox(ctl:="ComboBox1", winTitle:="") => SendMessage(CB_GETCURSEL:=0x147,,, this.Ctl, winTitle)
+    indexOfComboBox(ctl:="ComboBox1", winTitle:="") => SendMessage(0x147,,, this.Ctl, winTitle) ;CB_GETCURSEL
 
 }
 
