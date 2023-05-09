@@ -42,6 +42,7 @@ company := "My Company"
 
 #include lib\Socket.ahk
 #include lib\Class_CDP.ahk
+#include lib\CentBrowser.ahk
 #include lib\Class_Pinyin.ahk
 #include lib\hyaray.ahk
 #include lib\Class_Mouse.ahk

@@ -44,6 +44,19 @@ class _Array extends Array {
         return 0
     }
 
+    ;删除重复
+    unique() {
+        arr := []
+        obj := map()
+        for v in this {
+            if (obj.has(v))
+                continue
+            arr.push(v)
+            obj[v] := 1
+        }
+        return arr
+    }
+
     extend(arr) {
         arr0 := this
         for v in arr

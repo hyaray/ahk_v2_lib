@@ -217,7 +217,6 @@ class _ListBox extends _Ctrl {
 
     ;第1项为 1
     getSelectedIndex() => SendMessage(0x188,,,, this.hCtl)+1 ;LB_GETCURSEL
-
     getSelectedText() {
         idx := this.getSelectedIndex()
         for sLine in ControlGetItems(this.ctl, this.hwnd) {
@@ -225,7 +224,8 @@ class _ListBox extends _Ctrl {
                 return sLine
         }
     }
-
+    ;当前行
+    index() => ControlGetIndex(this.hCtl)
     getIndexByText(str) {
         for sLine in ControlGetItems(this.ctl, this.hwnd) {
             if (sLine == str)
@@ -234,13 +234,14 @@ class _ListBox extends _Ctrl {
         throw ValueError("value not matched")
     }
 
-    ;TODO 有问题
-    ;第 idx 行所有文本(一般需要 StrSplit)
-    getTextByIndex(idx) {
+    ;第 idx 行(默认当前行)所有文本(一般需要 StrSplit)
+    getTextByIndex(idx:=unset) {
+        if (!isset(idx))
+            idx := ControlGetIndex(this.hCtl)
         len := SendMessage(0x18A, idx-1,,, this.hCtl)+1 ;LB_GETTEXTLEN
         var := buffer(len<<1, 0)
-        SendMessage(0x189, idx-1, &var,, this.hCtl)+1 ;LB_GETTEXT
-        return strget(&var)
+        SendMessage(0x189, idx-1, var,, this.hCtl)+1 ;LB_GETTEXT
+        return strget(var)
     }
 
     setCurrent(idx) => SendMessage(0x186, idx-1,,, this.hCtl) ;LB_SETCURSEL

@@ -12,10 +12,22 @@ NOTE NOTE NOTE 思路：
         IUIAutomationElement: element 的相关方法
         IUIAutomation***Pattern: element 可进行的操作，比如 Invoke(Button) SetValue(Edit) Select(SelectionItem)
         IUIAutomationCacheRequest: 批量获取信息时用此缓存加速
+            arr := [
+                "name",
+                "ControlType",
+                "LocalizedControlType",
+                "BoundingRectangle",
+                "IsEnabled",
+            ]
             rst := UIA.CreateCacheRequest()
-            rst.AddProperty(30005)
+            for propertyId in arr
+                rst.AddProperty(propertyId)
+            obj := map()
             elWin := UIA.ElementFromHandleBuildCache(WinGetID("A"), rst)
-            msgbox(elWin.GetCachedPropertyValue(30005))
+            for propertyId in arr
+                obj[propertyId] := this.GetCachedPropertyValue(propertyId)
+            return obj
+
         每个类都有个 __ 属性(用在 comcall)，其他基本上全是方法
 
 使用步骤：
@@ -437,13 +449,14 @@ class UIA {
     }
 
     ;FindElement 去除了hwnd，和 elWin.FindControl 一致
-    static FindControl(ControlType:="", value:="", field:="Name", msWait:=0, flag:=0) {
+    ;参数可用数组解包使用，名称暂定 UIEP(UIE的Param)
+    static FindControl(ControlType:="", value:="", field:="Name", flag:=0, ms:=0) {
         hwnd := WinGetID("A") ;不影响 LastFoundWindow
         bIsWindow := true
         if (ControlType is array)
             return this.ElementFromHandle(hwnd, bIsWindow).FindControls(ControlType)
         else
-            return this.ElementFromHandle(hwnd, bIsWindow).FindControl(ControlType, value, field, msWait, flag)
+            return this.ElementFromHandle(hwnd, bIsWindow).FindControl(ControlType, value, field, flag, ms)
     }
 
     ;简易场景：由 hwnd 获取的 elWin 仅查找一次
@@ -451,7 +464,7 @@ class UIA {
     ;为了区分名称，所以用了 FindElement
     ;批量查找，则直接定义 ControlType 为二维数组
     ;TODO 为了 ClickByControl，增加了dllcall 添加 hwnd
-    static FindElement(hwnd, ControlType:="", value:="", field:="Name", msWait:=0, flag:=0) { ; <2021-02-10 14:29:46> By hyaray
+    static FindElement(hwnd, ControlType:="", value:="", field:="Name", flag:=0, ms:=0) { ; <2021-02-10 14:29:46> By hyaray
         ;if (!dllcall("GetParent", "UInt",hwnd)) {
         ;    bIsWindow := true
         ;} else {
@@ -469,7 +482,7 @@ class UIA {
         if (ControlType is array)
             return this.ElementFromHandle(hwnd, bIsWindow).FindControls(ControlType)
         else
-            return this.ElementFromHandle(hwnd, bIsWindow).FindControl(ControlType, value, field, msWait, flag)
+            return this.ElementFromHandle(hwnd, bIsWindow).FindControl(ControlType, value, field, flag, ms)
         ;getWinIndex(id) {
         ;    loop {
         ;        id := dllcall("GetWindow", "uint",id, "int",2) ;1=上级窗口，比如谷歌翻译后，有个小弹框
@@ -749,6 +762,7 @@ class UIA {
     }
 
     ; Creates a condition that selects elements that have a property with the specified value, using optional flags.
+    ;NOTE value 区分大小写
     static CreatePropertyConditionEx(propertyId, value, flags:=2) {
         if !(propertyId is integer)
             propertyId := this.property.%propertyId%
@@ -935,14 +949,22 @@ class IUIAutomationBoolCondition extends IUIAutomationCondition {
 
 class IUIAutomationCacheRequest extends IUIABase {
     ; Adds a property to the cache request.
-    AddProperty(propertyId) {
-        if (type(propertyId) == "Array") {
-            for pid in propertyId
-                comcall(3, this, "int",pid)
+    ;NOTE 至少要添加一个属性，否则 rst 为空
+    ;内置属性，来源 claude
+    ;   ControlTypeId。元素的控件类型 ID,用于唯一标识元素类型。
+    ;   BoundingRectangle。元素在屏幕上的边界框坐标。
+    ;   NativeWindowHandle
+    AddProperty(arrPropertyId) {
+        if (arrPropertyId is array) {
+            for propertyId in arrPropertyId {
+                if (propertyId is string)
+                    propertyId := UIA.property.%propertyId%
+                comcall(3, this, "int",propertyId)
+            }
         } else {
-            if !(propertyId is integer)
-                propertyId := UIA.property.%propertyId%
-            comcall(3, this, "int",propertyId)
+            if (arrPropertyId is string)
+                arrPropertyId := UIA.property.%arrPropertyId%
+            comcall(3, this, "int",arrPropertyId)
         }
     }
 
@@ -1015,7 +1037,7 @@ class IUIAutomationElement extends IUIABase {
     this 生成后出现的元素，用此方法也能获取，说明 this 是动态的
     flag == 2 则为包含value，而不是精确匹配
     */
-    FindControl(ControlType, value, field:="Name", msWait:=0, flag:=0) {
+    FindControl(ControlType, value, field:="Name", flag:=0, ms:=0) {
         if (ControlType is string) {
             if (ControlType == "") { ;NOTE 非 Control 比如obsidian的【警报】
                 cond := UIA.CreatePropertyCondition(UIA.property.%field%, value)
@@ -1027,11 +1049,12 @@ class IUIAutomationElement extends IUIABase {
                     cond := UIA.CreateAndCondition(UIA.CreatePropertyCondition(30003,ControlType), UIA.CreatePropertyCondition(UIA.property.%field%, value))
             }
         }
-        endtime := A_TickCount + msWait
+        endtime := A_TickCount + ms
         loop {
-            if (el := this.FindFirst(cond))
+            el := this.FindFirst(cond)
+            if (el)
                 return el
-            else if (A_TickCount > endtime)
+            if (A_TickCount > endtime)
                 return
             else
                 sleep(200)
@@ -1046,6 +1069,7 @@ class IUIAutomationElement extends IUIABase {
             for k, v in arrParams
                 arrParams[k] := [ctl, v]
         }
+        timeSave := A_TickCount
         ;OutputDebug(format("i#{1} {2}:{3} arrParams={4}", A_LineFile,A_LineNumber,A_ThisFunc,json.stringify(arrParams,4)))
         arrEl := []
         for arr in arrParams {
@@ -1056,6 +1080,7 @@ class IUIAutomationElement extends IUIABase {
                 arrEl.push("")
             }
         }
+        OutputDebug(format("w#{1} {2}:{3} A_TickCount takes={4}", A_LineFile,A_LineNumber,A_ThisFunc,A_TickCount - timeSave))
         return arrEl
     }
     ;由于直接 Invoke|DoDefaultAction|Toggle 会无效，故增加了以下两个点击方式
@@ -1073,13 +1098,12 @@ class IUIAutomationElement extends IUIABase {
         ControlClick(format("X{1} Y{2}", arrXY*))
         return arrXY
     }
-    ClickByMouse(bStay:=false, xOffset:=0, yOffset:=0, cnt:=1, isOut:=1) { ;优先用 ClickByControl 备用 TODO Button IsInvokePatternAvailable=false
+    ClickByMouse(bStay:=true, xOffset:=0, yOffset:=0, cnt:=1, isOut:=1) { ;优先用 ClickByControl 备用 TODO Button IsInvokePatternAvailable=false
         arrXY := this.offsetOut(xOffset, yOffset, isOut)
         cmMouse := A_CoordModeMouse
         CoordMode("mouse", "Screen")
         ;记录原位置
         MouseGetPos(&x0, &y0)
-        ;OutputDebug(format("i#{1} {2}:{3} arrMouse={4}", A_LineFile,A_LineNumber,A_ThisFunc,json.stringify(arrXY)))
         MouseMove(arrXY[1], arrXY[2], 0)
         sleep(20)
         (cnt) && click(cnt)
@@ -1092,13 +1116,15 @@ class IUIAutomationElement extends IUIABase {
     ;主要配合 ClickByMouse 用
     ;以 xOffset为例, yOffset 同理
     ;   0 = 中点
-    ;   负数 = 左边界再往左偏移(支持小数点按百分比计算)
-    ;   正数 = 右边界再往右偏移(支持小数点按百分比计算)
-    ;isOut 0=小数点计算内部偏移 1=小数点计算外部偏移
-    ;   isOut=0时：-0.1是右侧往左0.1宽 0.1是左侧往右0.1宽
-    ;   isOut=1时：-0.1是左侧往右0.1宽 0.1是右侧往右0.1宽
-    ;同 xy.offsetOut
-    offsetOut(xOffset, yOffset, isOut:=1) {
+    ;   小数点则按宽的百分比
+    ;isOut
+    ;   1=往【外部】偏移，xOffset 情况如下
+    ;       -0.1=左侧往左0.1宽
+    ;        0.1=右侧往右0.1宽
+    ;   0=往【内部】偏移，xOffset 情况如下
+    ;       -0.1=右侧往左0.1宽
+    ;        0.1=左侧往右0.1宽
+    offsetOut(xOffset:=0, yOffset:=0, isOut:=1) {
         aRect := this.GetBoundingRectangle()
         arrXY := []
         if (isobject(xOffset)) ;NOTE 支持传入函数
@@ -1109,7 +1135,7 @@ class IUIAutomationElement extends IUIABase {
             arrXY.push(yOffset(aRect))
         else
             arrXY.push(deal(yOffset,aRect[2],aRect[4]))
-        ;OutputDebug(format("i#{1} {2}:{3} aRect={4} arrXY={5}", A_LineFile,A_LineNumber,A_ThisFunc,json.stringify(aRect),json.stringify(arrXY)))
+        OutputDebug(format("i#{1} {2}:{3} aRect={4} arrXY={5}", A_LineFile,A_LineNumber,A_ThisFunc,json.stringify(aRect),json.stringify(arrXY)))
         return arrXY
         deal(v, x, w) {
             ;TODO 去掉假浮点数
@@ -1151,19 +1177,20 @@ class IUIAutomationElement extends IUIABase {
     GetControlType() { ;字符串的控件类型 CurrentControlType 转成字符串
         return UIA.ControlType.%this.CurrentControlType%
     }
-    GetParent(tp:=0) { ;NOTE 用 tp=0 会比较好理解
-        return this._ViewWalker(tp, "GetParentElement")
-    }
+    ;NOTE 用 tp=0 会比较好理解
+    ;TODO 不稳定，连续使用说返回的是 string
+    GetParent(tp:=0) => this._ViewWalker(tp, "GetParentElement")
     GetNext(tp:=0) => this._ViewWalker(tp, "GetNextSiblingElement")
     GetPrev(tp:=0) => this._ViewWalker(tp, "GetPreviousSiblingElement")
     GetFirst(tp:=0) => this._ViewWalker(tp, "GetFirstChildElement")
     GetLast(tp:=0) => this._ViewWalker(tp, "GetLastChildElement")
     ;找不到返回 ""
     _ViewWalker(tp, method) {
+        OutputDebug(format("i#{1} {2}:{3} tp={4}", A_LineFile,A_LineNumber,A_ThisFunc,tp))
         switch tp {
-        case 0: return UIA.RawViewWalker().%method%(this)
-        case 1: return UIA.ControlViewWalker().%method%(this)
-        case 2: return UIA.ContentViewWalker().%method%(this)
+            case 0: return UIA.RawViewWalker().%method%(this)
+            case 1: return UIA.ControlViewWalker().%method%(this)
+            case 2: return UIA.ContentViewWalker().%method%(this)
         }
     }
     GetRuntimeIdEx() { ;获取和 inspect 同格式的 RuntimeId
@@ -1220,7 +1247,7 @@ class IUIAutomationElement extends IUIABase {
                 OutputDebug(format("i#{1} {2}:{3} down", A_LineFile,A_LineNumber,A_ThisFunc))
                 send(format("{WheelDown {1}}", cntDown))
             }
-            sleep(100)
+            sleep(200)
         }
         return el
     }
@@ -1302,8 +1329,8 @@ class IUIAutomationElement extends IUIABase {
     }
 
     ;等待 funTrue(el) = true
-    waitByFunc(funTrue, msWait:=3000) {
-        endTime := A_TickCount + msWait
+    waitByFunc(funTrue, ms:=3000) {
+        endTime := A_TickCount + ms
         loop {
             if (funTrue(this)) {
                 return true
@@ -1532,9 +1559,8 @@ class IUIAutomationElement extends IUIABase {
         return obj
     }
 
+    ;元素可能会变，所以一定要及时获取属性
     compareUIE(obj0) {
-        if (type(obj0) == "IUIAutomationElement")
-            obj0 := obj0.allProperty()
         obj0.default := ""
         obj1 := this.allProperty()
         obj1.default := ""
@@ -1810,8 +1836,13 @@ class IUIAutomationElement extends IUIABase {
     ; Retrieves the first child or descendant element that matches the specified condition.
     FindFirst(condition, scope:=4) {
         comcall(5, this, "int",scope, "ptr",condition, "ptr*",&found:=0)
-        if (found)
-            return IUIAutomationElement(found)
+        if (found) {
+            el := IUIAutomationElement(found)
+            if (el.GetBoundingRectangle()[3]) ;过滤没有宽度的异常元素
+                return el
+            else
+                OutputDebug(format("i#{1} {2}:{3} continue of el.width=0", A_LineFile,A_LineNumber,A_ThisFunc))
+        }
         ;throw TargetError("Target element not found.")
     }
 
@@ -1822,6 +1853,53 @@ class IUIAutomationElement extends IUIABase {
         if (found)
             return IUIAutomationElementArray(found)
         throw TargetError("Target elements not found.")
+    }
+
+    FindControlBuildCache(rst, ControlType, value, field:="Name", flag:=0, ms:=0) {
+        if (ControlType is string) {
+            if (ControlType == "") { ;NOTE 非 Control 比如obsidian的【警报】
+                cond := UIA.CreatePropertyCondition(UIA.property.%field%, value)
+            } else {
+                ControlType := UIA.ControlType.%ControlType%
+                if (flag)
+                    cond := UIA.CreateAndCondition(UIA.CreatePropertyCondition(30003,ControlType), UIA.CreatePropertyConditionEx(UIA.property.%field%, value, flag))
+                else
+                    cond := UIA.CreateAndCondition(UIA.CreatePropertyCondition(30003,ControlType), UIA.CreatePropertyCondition(UIA.property.%field%, value))
+            }
+        }
+        endtime := A_TickCount + ms
+        loop {
+            if (el := this.FindFirstBuildCache(cond, rst))
+                return el
+            else if (A_TickCount > endtime)
+                return
+            else
+                sleep(200)
+        }
+    }
+
+    ;NOTE 是否保留未找到的元素
+    FindControlsBuildCache(rst, arrParams) {
+        ;第1项为控件名，第2项为 arrValue
+        if (arrParams[1] is string) {
+            ctl := arrParams[1]
+            arrParams := arrParams[2]
+            for k, v in arrParams
+                arrParams[k] := [ctl, v]
+        }
+        timeSave := A_TickCount
+        ;OutputDebug(format("i#{1} {2}:{3} arrParams={4}", A_LineFile,A_LineNumber,A_ThisFunc,json.stringify(arrParams,4)))
+        arrEl := []
+        for arr in arrParams {
+            if (el := this.FindControl(rst, arr*)) { ;NOTE 每项 arr 的格式要匹配此方法
+                arrEl.push(el)
+            } else {
+                OutputDebug(format("w#{1} {2}:{3} arr={4}", A_LineFile,A_LineNumber,A_ThisFunc,json.stringify(arr,4)))
+                arrEl.push("")
+            }
+        }
+        OutputDebug(format("w#{1} {2}:{3} A_TickCount takes={4}", A_LineFile,A_LineNumber,A_ThisFunc,A_TickCount - timeSave))
+        return arrEl
     }
 
     ; Retrieves the first child or descendant element that matches the specified condition, prefetches the requested properties and control patterns, and stores the prefetched items in the cache.
@@ -2967,7 +3045,7 @@ class IUIAutomationTreeWalker extends IUIABase {
         if (out) {
             return IUIAutomationElement(out)
         } else {
-            OutputDebug(format("w#{1} error", A_ThisFunc))
+            ;OutputDebug(format("w#{1} error", A_ThisFunc))
             return
         }
     }
@@ -2978,7 +3056,7 @@ class IUIAutomationTreeWalker extends IUIABase {
         if (out) {
             return IUIAutomationElement(out)
         } else {
-            OutputDebug(format("w#{1} error", A_ThisFunc))
+            ;OutputDebug(format("w#{1} error", A_ThisFunc))
             return
         }
     }
@@ -2989,7 +3067,7 @@ class IUIAutomationTreeWalker extends IUIABase {
         if (out) {
             return IUIAutomationElement(out)
         } else {
-            OutputDebug(format("w#{1} error", A_ThisFunc))
+            ;OutputDebug(format("w#{1} error", A_ThisFunc))
             return
         }
     }
@@ -3000,7 +3078,7 @@ class IUIAutomationTreeWalker extends IUIABase {
         if (out) {
             return IUIAutomationElement(out)
         } else {
-            OutputDebug(format("w#{1} error", A_ThisFunc))
+            ;OutputDebug(format("w#{1} error", A_ThisFunc))
             return
         }
     }
@@ -3011,7 +3089,7 @@ class IUIAutomationTreeWalker extends IUIABase {
         if (out) {
             return IUIAutomationElement(out)
         } else {
-            OutputDebug(format("w#{1} error", A_ThisFunc))
+            ;OutputDebug(format("w#{1} error", A_ThisFunc))
             return
         }
     }

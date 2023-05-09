@@ -24,7 +24,7 @@ class _String {
     static regCode := "i)^(ah[k1]|js|sh|vim|bas|html?|wxml|css|wxss|lua|hh[cpk])$"
     static regText := "i)^(ah[k1]|js|sh|vim|bas|html?|wxml|css|wxss|lua|hh[cpk]|md|yaml|log|csv|json|txt|ini)$"
     static regAudeo := "i)^(wav|mp3|m4a|wma)$"
-    static regVideo := "i)^(mp4|wmv|mkv|m4a|m4s|ts|rm(vb)?|flv|mpeg|avi)$"
+    static regVideo := "i)^(mp4|wmv|mkv|m4a|m4s|rm(vb)?|flv|mpeg|avi)$"
     static regZip := "i)^(7z|zip|rar|iso|img|gz|cab|jar|arj|lzh|ace|tar|GZip|uue|bz2)$"
 
     __item[i] {
@@ -51,6 +51,18 @@ class _String {
 
     length => strlen(this)
     repeat(n) => StrReplace(format(format("{:{1}}",n),""), " ", this)
+    repeatArr(n, index:=unset) {
+        if (isset(index)) { ;当序号
+            arr := [this]
+            loop(n-1)
+                arr.push(this.add1(index*A_Index))
+        } else {
+        arr := []
+            loop(n)
+                arr.push(this)
+        }
+        return arr
+    }
 
     left(n) => substr(this, 1, n)
     right(n) => substr(this, -n)

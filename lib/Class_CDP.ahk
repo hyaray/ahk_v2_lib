@@ -547,8 +547,9 @@ class _CDP {
         }
 
         ; https://chromedevtools.github.io/devtools-protocol/1-3/Runtime/#method-evaluate
-        ;判断null用 evaluate(js)["value"] is ComValue
         ;ahk传入变量：直接修改 jsCode
+        ;返回值
+        ;   判断null用 evaluate(js)["value"] is ComValue
         ;TODO 生产订单列表，返回null，console测试正常 evaluate('console.log(document.querySelector(".main_Table"));')
         evaluate(jsCode, key:="") {
             response := this.call('Runtime.evaluate', {
@@ -564,6 +565,8 @@ class _CDP {
                 ;OutputDebug(format("i#{1} {2}:{3} response={4}", A_LineFile,A_LineNumber,A_ThisFunc,json.stringify(response,4)))
                 if (response.has("ErrorDetails"))
                     throw error(response["result"]["description"],, JSON.stringify(response["ErrorDetails"]))
+                else if (response.has("exceptionDetails"))
+                    throw error(response["result"]["description"],, JSON.stringify(response["exceptionDetails"]))
                 return (key != "") ? response["result"].get(key, "") : response["result"]
             } else {
                 throw error(A_ThisFunc)
@@ -576,7 +579,7 @@ class _CDP {
         }
 
         activate() => this.httpOpen(format("/activate/{1}",this.id))
-        WaitForLoad(DesiredState:="complete", Interval:=100) {
+        WaitForLoad(DesiredState:="complete", Interval:=500) {
             loop {
                 state := this.evaluate('document.readyState',"value")
                 OutputDebug(format("i#{1} {2}:{3} state={4}", A_LineFile,A_LineNumber,A_ThisFunc,state))

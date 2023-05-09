@@ -554,41 +554,48 @@ class _Mouse {
         }
     }
 
-}
-
-;和当前鼠标有关的坐标在 _Mouse
-;无关的才放这里
-;比如要点击窗口的 x,y,可以自动根据窗口或 aRect 转化为
-class xy {
-
-    ;从左/上，向外部偏移
-    ;返回 [xScreen, yScreen]
-    static offsetOut(xOffset, yOffset, aRect) {
-        if (aRect is integer || aRect is string) {
-            WinGetPos(&x, &y, &w, &h, aRect)
-            aRect := [x,y,w,h]
-        }
-        return [deal(xOffset,aRect[1],aRect[3]), deal(yOffset,aRect[2],aRect[4])]
-        ;v
-        ;   0 = 中点
-        ;   负数 = 左边界再往左偏移(支持小数点按百分比计算)
-        ;   正数 = 右边界再往右偏移(支持小数点按百分比计算)
+    ;从 UIA 里复制
+    offsetOut(aRect, xOffset, yOffset, isOut:=1) {
+        arrXY := []
+        if (isobject(xOffset)) ;NOTE 支持传入函数
+            arrXY.push(xOffset(aRect))
+        else
+            arrXY.push(deal(xOffset,aRect[1],aRect[3]))
+        if (isobject(yOffset))
+            arrXY.push(yOffset(aRect))
+        else
+            arrXY.push(deal(yOffset,aRect[2],aRect[4]))
+        ;OutputDebug(format("i#{1} {2}:{3} aRect={4} arrXY={5}", A_LineFile,A_LineNumber,A_ThisFunc,json.stringify(aRect),json.stringify(arrXY)))
+        return arrXY
         deal(v, x, w) {
+            ;TODO 去掉假浮点数
+            if (v is float && integer(v)==v)
+                v := integer(v)
             if (v == 0) {
-                v := x + w // 2
+                res := x + w // 2
             } else if (v < 0) {
-                if (v > -1)
-                    v := x - round(w*abs(v))
-                else
-                    v := x - abs(v)
+                if (v is float) {
+                    if isOut
+                        res := x - round(w*abs(v))
+                    else
+                        res := x + w - round(w*abs(v))
+                } else {
+                    res := x - abs(v*A_ScreenDPI//96)
+                }
             } else {
-                if (v < 1)
-                    v := x + w + round(w * v)
-                else if (v >= 1)
-                    v := x + w + v
+                if (v is float) {
+                    if isOut
+                        res := x + w + round(w*v)
+                    else
+                        res := x + round(w*v)
+                } else if (v >= 1) {
+                    res := x + w + v*A_ScreenDPI//96
+                }
             }
-            return v
+            ;OutputDebug(format("i#{1} {2}:{3} v={4},x={5},w={6} isOut={7}, res={8}", A_LineFile,A_LineNumber,A_ThisFunc,v,x,w,isOut,res))
+            return res
         }
     }
 
 }
+
