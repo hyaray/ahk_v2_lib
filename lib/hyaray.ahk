@@ -1088,6 +1088,11 @@ hyf_isInstalled(funRegname) {
 
 ;-----------------------------------Excel__-----------------------------------
 
+;http://www.autohotkey.com/forum/viewtopic.php?p=492448
+;idObject := -16
+;if dllcall("oleacc\AccessibleObjectFromWindow", "ptr", ctlID, "uint",idObject&=0xFFFFFFFF, "ptr",-VarSetCapacity(IID,16)+numput(idObject==0xFFFFFFF0?0x46000000000000C0:0x719B3800AA000C81,numput(idObject==0xFFFFFFF0?0x20400:0x11CF3C3D618736E0,IID,"int64"),"int64"), "ptr*",&pacc:=0) == 0
+;xl := ComObject("{00024500-0000-0000-C000-000000000046}")
+;xl := ComObject("Excel.Application.14")
 ox(winTitle:="ahk_class XLMAIN") {
     if (WinExist(winTitle))
         ctlID := ControlGetHwnd("EXCEL71")
@@ -1114,7 +1119,7 @@ ox(winTitle:="ahk_class XLMAIN") {
 hyf_delete0(sNum) {
     if (sNum is ComObject) ;单元格
         sNum := sNum.value
-    if !(sNum is string)
+    else if !(sNum is string)
         sNum := string(sNum)
     if (sNum ~= "^-?\d+\.\d+$") {
         if (sNum ~= "\.\d{8,}$") ;小数位太多的异常
@@ -1126,12 +1131,12 @@ hyf_delete0(sNum) {
 }
 
 ;NOTE 用funVal处理 rng 值
-;   1=hyf_delete0
+;   1(默认)=hyf_delete0
 ;   0=不处理
 ;   自定义函数
 ;判断了单个单元格的情况
 ;可直接修改原单元格值
-hyf_rng2arrayV(rng:=unset, funVal:=1, bWrite:=false) {
+hyf_rng2arrayV(rng:=unset, fillUp:=false, funVal:=1, bWrite:=false) {
     if (!isset(rng))
         rng := ox().selection
     if (!isobject(funVal)) {
