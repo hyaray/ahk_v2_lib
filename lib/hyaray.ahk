@@ -348,7 +348,7 @@ inputboxEX(tips, sDefaluet:="", sTitle:="", bEmpty:=false) {
     btnClick(ctl, param*) {
         res := ctl.gui[nameEdit].text
         sleep(100)
-        oGui.destroy()
+        ctl.gui.destroy()
     }
     doEscape(oGui, param*) {
         res := ""
@@ -374,6 +374,7 @@ msgbox(json.stringify(objOpt, 4))
 ;   ②2|则设置为多行Edit(添加选项 r2)
 ;3.默认值
 ;   数组，则为 AddComboBox
+;4.AddComboBox 的默认项序号
 ;bOne 表示限制单结果，则会在 Edit内容改变时，清空其他控件
 ;关闭则返回map()
 ;NOTE 自动过滤空值，数字返回的是字符串
@@ -452,21 +453,27 @@ hyf_inputOption(arr, sTips:="", bTrim:=false, bOne:=false) {
         ctl.gui.submit
         for a in arr {
             try ;有些控件并未生成
-                oGui[a[2]]
+                ctl.gui[a[2]]
             catch
                 continue
-            if (a.length >=4) {
-                if (a[4] == "b" || a.length <= 2)
-                    v := oGui[a[2]].value
+            ;根据控件提取结果
+            if (a[3] is array) {
+                v := a[3][ctl.gui[a[2]].value]
             } else {
-                v := oGui[a[2]].text
+                if (a.length >=4) {
+                    v := a[3][ctl.gui[a[2]].value]
+                } else {
+                    v := ctl.gui[a[2]].text
+                }
             }
+            ;结果二次加工
             if (bTrim && v is string)
                 v := trim(v) ;TODO 是否trim(比如每行前加"- "转成无序列表)
-            if (v != "")
+            ;记录
+            if (v != "") ;过滤空值
                 objRes[a[2]] :=  v
         }
-        oGui.destroy()
+        ctl.gui.destroy()
     }
     doEscape(oGui, p*) => oGui.destroy()
 }
@@ -835,6 +842,48 @@ hyf_getDocumentPath(winTitle:="") { ;获取当前窗口编辑文档的路径
     }
 }
 
+;同 exe 的其他窗口
+;返回格式如下(hwnd放末尾，用arr[-1]获取)
+;[
+;   [1, 标题, hwnd]
+;   [2, 标题, hwnd]
+;]
+hyf_exeOtherWindows(bSkipBlankTitle:=false) {
+    idA := WinActive("A")
+    if (!idA)
+        return
+    title := WinGetTitle()
+    cls := WinGetClass()
+    exeName := WinGetProcessName()
+    arrRes := []
+    for hwnd in WinGetList(format("ahk_class {1} ahk_exe {2}", cls,exeName)) {
+        if (hwnd == idA)
+            continue
+        tt := trim(WinGetTitle(hwnd))
+        if (bSkipBlankTitle && tt == "")
+            continue
+        arrRes.push([arrRes.length+1, tt, hwnd])
+    }
+    return arrRes
+}
+
+hyf_tabExeOtherWindows() {
+    arrRes := hyf_exeOtherWindows()
+    if (arrRes.length == 0)
+        return
+    if (arrRes.length == 1) {
+        hwnd := arrRes.pop()[-1]
+    } else {
+        arrRes := hyf_GuiListView(arrRes, ["序号","标题","窗口ID"], "请选择OBA窗口(可双击选择)", [80, 500, 100])
+        if (!arrRes.length)
+            return
+        hwnd := integer(arrRes[1][-1])
+    }
+    WinShow(hwnd)
+    WinActivate(hwnd)
+    return hwnd
+}
+
 ;funHwnd 处理 hwnd 为 true 则添加
 ;hyf_hwnds("ahk_exe a.exe", (p)=>substr(WinGetClass(p"),1,4) == "Afx:")[1]
 ;hyf_hwnds("ahk_class Chrome_WidgetWin_1 ahk_exe chrome.exe")
@@ -1108,34 +1157,33 @@ ox(winTitle:="ahk_class XLMAIN") {
     }
 }
 
-; arr := [
-;     0.01,
-;     1.0100,
-;     2.10010,
-;     3.19999999996,
-; ]
+;测试数据
+;    0.01,
+;    1.0100,
+;    2.10010,
+;    3.19999999996,
 ;arrV要用这个方法 整数可用 integer() 代替
 ;NOTE 日期表示为 3.20，会影响实际数据
-hyf_delete0(sNum) {
-    if (sNum is ComObject) ;单元格
-        sNum := sNum.value
-    else if !(sNum is string)
-        sNum := string(sNum)
-    if (sNum ~= "^-?\d+\.\d+$") {
-        if (sNum ~= "\.\d{8,}$") ;小数位太多的异常
-            sNum := round(sNum+0.00000001, 6)
-        return rtrim(RegExReplace(sNum, "\.\d*?\K0+$"), ".")
+hyf_delete0(var) {
+    if (var is ComObject) ;单元格
+        var := var.value
+    else if !(var is string)
+        var := string(var)
+    if (var ~= "^-?\d+\.\d+$") {
+        if (var ~= "\.\d{8,}$") ;小数位太多的异常
+            var := round(var+0.00000001, 6)
+        return rtrim(RegExReplace(var, "\.\d*?\K0+$"), ".")
     } else {
-        return sNum
+        return var
     }
 }
 
-;NOTE 用funVal处理 rng 值
+;判断了单个单元格的情况
+;funVal可直接修改原单元格值
 ;   1(默认)=hyf_delete0
 ;   0=不处理
 ;   自定义函数
-;判断了单个单元格的情况
-;可直接修改原单元格值
+;fillUp 如果为空则填充上单元格的值(主要用于有合并单元格的情况)
 hyf_rng2arrayV(rng:=unset, fillUp:=false, funVal:=1, bWrite:=false) {
     if (!isset(rng))
         rng := ox().selection
@@ -1147,11 +1195,11 @@ hyf_rng2arrayV(rng:=unset, fillUp:=false, funVal:=1, bWrite:=false) {
     }
     if (rng.cells.count == 1) {
         if (bWrite) {
-            rng.value := funVal(hyf_delete0(rng))
+            rng.value := funVal(rng)
             return
         } else {
             arrA := ComObjArray(12, 1, 1)
-            arrA[0,0] := funVal(hyf_delete0(rng))
+            arrA[0,0] := funVal(rng)
             return arrA
         }
     }
@@ -1159,14 +1207,18 @@ hyf_rng2arrayV(rng:=unset, fillUp:=false, funVal:=1, bWrite:=false) {
         xl := rng.application
         xl.ScreenUpdating := false
         for cell in rng
-            cell.value := funVal(hyf_delete0(cell))
+            cell.value := funVal(cell)
         xl.ScreenUpdating := true
     } else {
         arrV := rng.value
         loop(arrV.MaxIndex(1)) {
             r := A_Index
-            loop(arrV.MaxIndex(2))
-                arrV[r,A_Index] := funVal(hyf_delete0(arrV[r,A_Index]))
+            loop(arrV.MaxIndex(2)) {
+                if (fillUp && arrV[r,A_Index]=="") ;需要填充空白单元格
+                    arrV[r,A_Index] := arrV[r-1,A_Index]
+                else
+                    arrV[r,A_Index] := funVal(arrV[r,A_Index])
+            }
         }
         if (bWrite)
             rng.value := arrV
@@ -1185,21 +1237,23 @@ hyf_arr2arrayA(arr, toRows:=false) {
         ;获取列数 cs
         cs := 0
         if (toRows) {
-            if (toRows > 1) ;直接当列数
+            if (toRows > 1) { ;直接当列数
                 cs := toRows
-            else {
+            } else {
                 for v in arr {
                     if (v.length > cs)
                         cs := v.length
                 }
             }
-        } else
+        } else {
             cs := arr[1].length
+        }
+        OutputDebug(format("i#{1} {2}:{3} rs={4},cs={5}", A_LineFile,A_LineNumber,A_ThisFunc,rs,cs))
         arrA := ComObjArray(12, rs, cs)
         loop(rs) {
-            i := A_Index
+            r := A_Index
             loop(cs)
-                arrA[i-1,A_Index-1] := arr[i][A_Index]
+                arrA[r-1,A_Index-1] := arr[r][A_Index]
         }
     } else { ;单维
         if (toRows) {
@@ -1469,7 +1523,8 @@ hyf_selectSingle(arr, sTips:="") {
 
 ;defButton是默认按钮前面的text内容
 ;仅支持选择，不支持搜索，不支持输入
-hyf_GuiListView(arr2, arrCol:="") {
+;返回二维数组(因为支持多选)
+hyf_GuiListView(arr2, arrCol:="", title:="", arrWidth:=unset) {
     if (!isobject(arr2))
         return
     if (!arr2.length)
@@ -1484,7 +1539,7 @@ hyf_GuiListView(arr2, arrCol:="") {
     }
     oGui := gui("+AlwaysOnTop +Resize +ToolWindow")
     oGui.BackColor := "222222"
-    oGui.title := format("{1} items", arr2.length)
+    oGui.title := format("{1}", title)
     oGui.SetFont("s13")
     oGui.OnEvent("escape",doEscape)
     if (!isobject(arrCol)) {
@@ -1492,19 +1547,25 @@ hyf_GuiListView(arr2, arrCol:="") {
         for v in arr2[1]
             arrCol.push(A_Index)
     }
-    oLv := oGui.AddListView("VScroll count grid checked w1200 r40", arrCol)
+    rs := min(arr2.length, 40)
+    oLv := oGui.AddListView(format("VScroll count grid checked w1200 r{1}", rs), arrCol)
     oLv.OnEvent("ItemCheck", do)
     oLv.OnEvent("DoubleClick", do)
-    oLv.SetFont("s12")
     oLv.opt("-Redraw")
     for k, arr in arr2
         oLv.add(, arr*)
+    ;设置宽度
     cntCol := oLv.GetCount("column")
-    oLv.ModifyCol()
-    ;loop(cntCol)
-    ;    oLv.ModifyCol(A_Index, wCol . " +center")
+    loop(cntCol) {
+        if (isset(arrWidth))
+            oLv.ModifyCol(A_Index, arrWidth is integer ? arrWidth : arrWidth[A_Index])
+        else
+            oLv.ModifyCol(A_Index, 1000//cntCol)
+    }
     oLv.opt("+Redraw")
     arrRes := []
+    oGui.AddButton("default center", "确定").OnEvent("click", btnClick)
+    oGui.AddStatusBar(, format("共有{1}项结果", arr2.length))
     oGui.show("w1000 center")
     WinWaitClose(oGui)
     tooltip
@@ -1537,6 +1598,9 @@ hyf_GuiListView(arr2, arrCol:="") {
         ;做任何事
         ;设置返回值
         ;oGui.destroy()
+    }
+    btnClick(ctl, param*) {
+        ctl.gui.destroy()
     }
 }
 
@@ -1727,7 +1791,7 @@ hyf_GuiMsgbox(obj, title:="", defButton:="", fun:=unset, oGui:="", times:=0) {
     if (times == 0) {
         oGui := gui()
         oGui.title := title
-        oGui.SetFont("cBlue s13")
+        oGui.SetFont("cBlue s11")
         oGui.OnEvent("escape",doEscape)
     }
     funDo := isset(fun) ? fun : hyf_GuiMsgbox_1
