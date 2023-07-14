@@ -212,7 +212,7 @@ class _GDIP {
     ;   funcRect
     ;aRect 画框
     ;oGui := _GDIP.rectMark(el.GetBoundingRectangle())
-    ;oGui := _GDIP.rectMark(_Win.toRect(this.winInfo["winID"]))
+    ;oGui := _GDIP.rectMark(_Win.toRect(hwnd))
     ;标窗口
     ;WinGetPos(&x, &y, &w, &h, hwnd)
     ;_GDIP.rectMark([x,y,w,h])
@@ -1651,6 +1651,8 @@ class GDIP_HBitmap extends _GDIP {
     }
 
     ;贴图
+    ;GDIP_HBitmap(GDIP_PBitmap()).showByGui()
+    ;GDIP_HBitmap(aRect).showByGui(aRect)
     showByGui(aRect:=unset) {
         ;放入gui
         oGui := gui("-Caption +ToolWindow +AlwaysOnTop +LastFound -DPIScale") ;no border

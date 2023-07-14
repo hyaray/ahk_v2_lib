@@ -38,11 +38,14 @@ company := "My Company"
 #include lib\Class_Number.ahk
 #include lib\Class_Array.ahk
 #include lib\Class_Map.ahk
+#include lib\Class_Date.ahk
 #include lib\Yaml.ahk
 
 #include lib\Socket.ahk
 #include lib\Class_CDP.ahk
+#include lib\Class_Clipboard.ahk
 #include lib\CentBrowser.ahk
+#include lib\msedge.ahk
 #include lib\Class_Pinyin.ahk
 #include lib\hyaray.ahk
 #include lib\Class_Mouse.ahk
@@ -51,4 +54,3 @@ company := "My Company"
 #include lib\Class_Gdip.ahk
 
 #include lib\Explorer.ahk
-

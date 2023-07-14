@@ -25,7 +25,7 @@ class _String {
     static regText := "i)^(ah[k1]|js|sh|vim|bas|html?|wxml|css|wxss|lua|hh[cpk]|md|yaml|log|csv|json|txt|ini)$"
     static regAudeo := "i)^(wav|mp3|m4a|wma)$"
     static regVideo := "i)^(mp4|wmv|mkv|m4a|m4s|rm(vb)?|flv|mpeg|avi)$"
-    static regZip := "i)^(7z|zip|rar|iso|img|gz|cab|jar|arj|lzh|ace|tar|GZip|uue|bz2)$"
+    static regZip := "i)^(7z|zip|rar|iso|img|gz|cab|arj|lzh|ace|tar|GZip|uue|bz2)$"
 
     __item[i] {
         get => substr(this, i, 1)
@@ -50,7 +50,7 @@ class _String {
     }
 
     length => strlen(this)
-    repeat(n) => StrReplace(format(format("{:{1}}",n),""), " ", this)
+    repeat(n, char:="") => rtrim(StrReplace(format(format("{:{1}}",n),""), " ", this . char), char)
     repeatArr(n, index:=unset) {
         if (isset(index)) { ;当序号
             arr := [this]
@@ -67,18 +67,6 @@ class _String {
     left(n) => substr(this, 1, n)
     right(n) => substr(this, -n)
     split(p*) => StrSplit(this, p*)
-
-    fn2fp(dir:="") {
-        (dir == "") && dir := A_Desktop
-        return format("{1}\{2}",dir,this)
-    }
-    fnn2fp(ext:="", dir:="") {
-        (dir == "") && dir := A_Desktop
-        return (ext=="") ? format("{1}\{2}",dir,this) : format("{1}\{2}.{3}",dir,this,ext)
-    }
-    fnn2fn(ext:="") {
-        return (ext=="") ? this : format("{1}.{2}",this,ext)
-    }
 
     ;路径相关
     fn() {
@@ -140,17 +128,74 @@ class _String {
         return dirName
     }
     dirRep(dirOld, dirNew) => dirNew . substr(this, strlen(dirOld)+1)
-    extRep(extNew) => RegExReplace(this, "\.\K\w+$", extNew)
-    noExtRep(noExtNew) {
+    extRep(extNew:="") => (extNew=="") ? RegExReplace(this, "\.\w+$") : RegExReplace(this, "\.\K\w+$", extNew)
+    fnRep(fn) {
+        SplitPath(this,, &dir)
+        return format("{1}\{2}", dir,fn)
+    }
+    fnnRep(noExtNew) {
         SplitPath(this,, &dir, &ext)
         return format("{1}\{2}.{3}", dir,noExtNew,ext)
     }
-    ;noExt64名称再替换空格为_
-    noExt64(dealSpace:=false) { ;去除_x64.exe内容的名称(比如abc_x64.exe转成abc)
+    ;fnn64名称再替换空格为_
+    fnn64(dealSpace:=false) { ;去除_x64.exe内容的名称(比如abc_x64.exe转成abc)
         res := RegExReplace(this, "i)_?(x?(64))?(\.\w+)?$")
         if (dealSpace)
             res := StrReplace(res, A_Space, "_")
         return res
+    }
+
+    fn2fp(dir:="") {
+        (dir == "") && dir := A_Desktop
+        return format("{1}\{2}",dir,this)
+    }
+    fnn2fp(ext:="", dir:="") {
+        (dir == "") && dir := A_Desktop
+        return (ext=="") ? format("{1}\{2}",dir,this) : format("{1}\{2}.{3}",dir,this,ext)
+    }
+    fnn2fn(ext:="") {
+        return (ext=="") ? this : format("{1}.{2}",this,ext)
+    }
+    dir2files(sFile:="*", opt:="RF", hasExt:=false) {
+        dir := this
+        arr := []
+        l := strlen(dir)
+        loop files, format("{1}\{2}", dir,sFile), opt {
+            if (A_LoopFileAttrib ~= "[HS]")
+                continue
+            fpp := substr(A_LoopFileFullPath, l+2)
+            if (!hasExt)
+                fpp := RegExReplace(fpp, "\.\w+$")
+            arr.push(fpp)
+        }
+        return arr
+    }
+
+    ;会先删除文件/文件夹(p1)
+    ;this为实体所在路径
+    ;mklink /j "c:\Users\Administrator\AppData\local\Chromium\User Data\" "s\User Data"
+    ;判断文件是否是 mklink 用 _TC._info(fp, 2) == ".symlink"
+    ;NOTE mklink的文件和文件夹，打包的时候，zip 都会打包原始文件，7z则会忽略文件
+    mklink(p1) {
+        p0 := this
+        if (!FileExist(p0))
+            return
+        if (DirExist(p1)) { ;文件夹
+            try
+                DirDelete(p1, true)
+            catch
+                msgbox("删除文件夹出错`n" . p1)
+        } else if (FileExist(p1)) { ;文件
+            try
+                FileDelete(p1)
+            catch
+                msgbox("删除文件出错`n" . p1)
+            ;保证有文件夹
+            dir := p1.dir()
+            if (!DirExist(dir))
+                DirCreate(dir)
+        }
+        RunWait(format('{1} /c mklink{2} "{3}" "{4}"',A_ComSpec,DirExist(p0)?" /j":"",p1,p0),, "hide")
     }
 
     ;删除文件名前面的序号
@@ -304,13 +349,29 @@ class _String {
         return res
     }
 
-    ;Excel列转数字
+    toUse() {
+        switch this {
+            case "\t": return A_Tab
+            case "\n": return "`n"
+            default: return this
+        }
+    }
+
+    ;Excel列 或 ABCD 转数字
     ;"XAR.toNum() ;16268
-    toNum() {
-        res := 0
-        loop parse, StrUpper(this)
-            res := res * 26 + ord(A_LoopField)-64
-        return res
+    toNum(numA:=unset) {
+        key := this
+        if (!isset(numA)) {
+            res := 0
+            loop parse, StrUpper(key)
+                res := res * 26 + ord(A_LoopField)-64
+            return res
+        } else {
+            if (key ~= "\d")
+                return integer(key)
+            key := StrUpper(key)
+            return ord(key) - 65 + numA
+        }
     }
 
     toIframe() => format('<iframe src="{1}"></iframe>', this)
@@ -339,7 +400,7 @@ class _String {
         loop parse, rtrim(this,"`r`n"), "`n", "`r" {
             if (charLine != "") {
                 arrLine := StrSplit(A_LoopField, charLine)
-                if (funLineFilter.call(arrLine)) {
+                if (funLineFilter(arrLine)) {
                     if (isobject(arrIdx)) { ;arrLine进一步提取
                         arrTmp := []
                         for i in arrIdx
@@ -356,14 +417,52 @@ class _String {
         return arr
     }
 
-    ;按行转成obj，key为 A_LoopField，值为个数n
-    toMap(hasEmpty:=false) {
+    ;返回数字的列表
+    toArrNum() {
+        str := trim(this)
+        nums := str.grem("\d+(\.\d+)?")
+        arr := []
+        for v in nums {
+            if instr(v[0], ".")
+                arr.push(float(v[0]))
+            else
+                arr.push(integer(v[0]))
+        }
+        return arr
+    }
+
+    ;s := "(1+2)*3a`n(1-2.1)*3"
+    ;比如每行提取所有的数字，返回二维数组
+    toArrEx(reg:="\d+(?:\.\d+)?") {
+        arr2 := []
+        loop parse, this, "`n", "`r" {
+            arr2.push([])
+            for v in A_LoopField.grem(reg)
+                arr2[-1].push(v[0])
+        }
+        return arr2
+    }
+
+    ;按行转成obj
+    ;   charLine为空：key为 A_LoopField，值为个数n
+    ;   charLine非空：param为是否互为key
+    toMap(charLine:="", param:=true) {
         obj := map()
-        obj.default := 0
+        if (charLine == "")
+            obj.default := 0
         loop parse, rtrim(this,"`r`n"), "`n", "`r" {
-            if (A_LoopField=="" && !hasEmpty)
+            if (A_LoopField=="" && param)
                 continue
-            obj[A_LoopField] += 1
+            if (charLine != "") {
+                if (!instr(A_LoopField, charLine))
+                    continue
+                arrLine := StrSplit(A_LoopField, charLine)
+                obj[arrLine[1]] := arrLine[2]
+                if (param)
+                    obj[arrLine[2]] := arrLine[1]
+            } else {
+                obj[A_LoopField] += 1
+            }
         }
         return obj
     }
@@ -386,32 +485,12 @@ class _String {
         return buf
     }
 
-    ;返回数字的列表
-    toArrNum() {
-        str := trim(this)
-        nums := str.grem("\d+(\.\d+)?")
-        arr := []
-        for v in nums {
-            if instr(v[0], ".")
-                arr.push(float(v[0]))
-            else
-                arr.push(integer(v[0]))
-        }
-        return arr
-    }
-
     ;\转成/
     toSlash() => StrReplace(this, "\", "/")
     ;/转成\
     toBackslash() => StrReplace(this, "/", "\")
     ;\或/转成\\
     toBackslash2() => RegExReplace(this, "\/|\\", "\\")
-
-    toUrlLnk(fn, dir:="") {
-        if (dir == "")
-            dir := A_Desktop
-        run(format("nircmd urlshortcut {1} {2} {3}",this,dir,fn)) ;参数分别是网址，目录和文件名
-    }
 
     ;删除不符合文件名的字符
     toFn() {
@@ -748,6 +827,7 @@ class _String {
     }
 
     ;批量普通替换
+    ;obj为 array|map
     ;obj := [
     ;   ["狐狸","懒狗"],
     ;   ["AAA","BBB"],
@@ -865,60 +945,62 @@ class _String {
         str := this
         if (str == "")
             return ""
-        if (tp = "ahk") {
-            obj := map(
-                "A_Desktop", A_Desktop,
-                "A_MyDocuments", A_MyDocuments,
-                "A_LocalAppdata", "c:\Users\Administrator\AppData\local", ;自定义
-                "A_Temp", A_Temp,
-                "A_AppData", A_AppData,
-                "A_StartMenu", A_StartMenu,
-                "A_Programs", A_Programs,
-                "A_Startup", A_Startup,
-                "A_DesktopCommon", A_DesktopCommon,
-                "A_ProgramFiles", A_ProgramFiles,
-                "A_AppDataCommon", A_AppDataCommon,
-                "A_StartMenuCommon", A_StartMenuCommon,
-                "A_StartupCommon", A_StartupCommon,
-                "A_WinDir", A_WinDir,
-                ;"%TCDir%", _TC.dir,
-            )
-        } else if (tp = "windows") {
-            obj := map(
-                ;"SystemDrive","c,",
-                "%ProgramFiles%","c:\Program Files",
-                "%ProgramFiles%(x86)","c:\Program Files (x86)",
-                "%CommonProgramFiles%","c:\Program Files\Common Files",
-                "%ProgramData%","c:\ProgramData",
-                "%TEMP%","c:\Users\Administrator\AppData\local\Temp",
-                "%USERPROFILE%","c:\Users\Administrator",
-                "%VIMCONFIG%","c:\Users\Administrator/vimfiles",
-                "%LOCALAPPDATA%","c:\Users\Administrator\AppData\local",
-                "%APPDATA%","c:\Users\Administrator\AppData\Roaming",
-                "%PUBLIC%","c:\Users\Public",
-                "%SystemRoot%","c:\Windows",
-                "%windir%","c:\Windows",
-                "%ComSpec%","c:\Windows\system32\cmd.exe",
-            )
-        } else if (tp = "tc") {
-            obj := map(
-                "%USERPROFILE%", "c:\Users\Administrator",
-                "%$DESKTOP%", A_Desktop,
-                "%$PERSONAL%", A_MyDocuments,
-                "%$LOCAL_APPDATA%", "c:\Users\Administrator\AppData\local",
-                "%TEMP%", A_Temp,
-                "%$APPDATA%", A_AppData,
-                "%$STARTMENU%", A_StartMenu,
-                "%$PROGRAMS%", A_Programs,
-                "%$STARTUP%", A_Startup,
-                "%$COMMON_DESKTOPDIRECTORY%", A_DesktopCommon,
-                "%ProgramW6432%", "c:\Program files",
-                "%$COMMON_APPDATA%", A_AppDataCommon,
-                "%$COMMON_STARTMENU%", A_StartMenuCommon,
-                "%$COMMON_STARTUP%", A_StartupCommon,
-                "%windir%", A_WinDir,
-                "%COMMANDER_PATH%", "d:\TC",
-            )
+        switch tp {
+            case "ahk":
+                obj := map(
+                    "A_ScriptDir", A_ScriptDir,
+                    "A_Desktop", A_Desktop,
+                    "A_MyDocuments", A_MyDocuments,
+                    "A_LocalAppdata", "c:\Users\Administrator\AppData\local", ;自定义
+                    "A_Temp", A_Temp,
+                    "A_AppData", A_AppData,
+                    "A_StartMenu", A_StartMenu,
+                    "A_Programs", A_Programs,
+                    "A_Startup", A_Startup,
+                    "A_DesktopCommon", A_DesktopCommon,
+                    "A_ProgramFiles", A_ProgramFiles,
+                    "A_AppDataCommon", A_AppDataCommon,
+                    "A_StartMenuCommon", A_StartMenuCommon,
+                    "A_StartupCommon", A_StartupCommon,
+                    "A_WinDir", A_WinDir,
+                    ;"%TCDir%", _TC.dir,
+                )
+            case "windows":
+                obj := map(
+                    ;"SystemDrive","c,",
+                    "%ProgramFiles%","c:\Program Files",
+                    "%ProgramFiles%(x86)","c:\Program Files (x86)",
+                    "%CommonProgramFiles%","c:\Program Files\Common Files",
+                    "%ProgramData%","c:\ProgramData",
+                    "%TEMP%","c:\Users\Administrator\AppData\local\Temp",
+                    "%USERPROFILE%","c:\Users\Administrator",
+                    "%VIMCONFIG%","c:\Users\Administrator/vimfiles",
+                    "%LOCALAPPDATA%","c:\Users\Administrator\AppData\local",
+                    "%APPDATA%","c:\Users\Administrator\AppData\Roaming",
+                    "%PUBLIC%","c:\Users\Public",
+                    "%SystemRoot%","c:\Windows",
+                    "%windir%","c:\Windows",
+                    "%ComSpec%","c:\Windows\system32\cmd.exe",
+                )
+            case "tc":
+                obj := map(
+                    "%USERPROFILE%", "c:\Users\Administrator",
+                    "%$DESKTOP%", A_Desktop,
+                    "%$PERSONAL%", A_MyDocuments,
+                    "%$LOCAL_APPDATA%", "c:\Users\Administrator\AppData\local",
+                    "%TEMP%", A_Temp,
+                    "%$APPDATA%", A_AppData,
+                    "%$STARTMENU%", A_StartMenu,
+                    "%$PROGRAMS%", A_Programs,
+                    "%$STARTUP%", A_Startup,
+                    "%$COMMON_DESKTOPDIRECTORY%", A_DesktopCommon,
+                    "%ProgramW6432%", "c:\Program files",
+                    "%$COMMON_APPDATA%", A_AppDataCommon,
+                    "%$COMMON_STARTMENU%", A_StartMenuCommon,
+                    "%$COMMON_STARTUP%", A_StartupCommon,
+                    "%windir%", A_WinDir,
+                    "%COMMANDER_PATH%", "d:\TC",
+                )
         }
         len := 0
         var := ""
@@ -1026,43 +1108,30 @@ class _String {
     }
 
     ;同Python
-    ;   'xx'.join('abc') 结果为axxbxxc
-    ;   'xx'.join(["a","b","c"]) 结果为axxbxxc
-    ;   'xx'.join([["a","b"],["c","d"]], "-") 结果为a-bxxc-dxx
+    ;   'xx'.join('abc') ;结果为axxbxxc
+    ;   'xx'.join(["a","b","c"]) ;结果为axxbxxc
+    ;   'xx'.join([["a","b"],["c","d"]], "-") ;结果为a-bxxc-d
     ;data[1]为数组，funcObj则为子数组连接符
     join(data, funcObj:="") {
         if (data is array) {
-            res := ""
             if (!data.length)
-                return res
+                return ""
             if (isobject(data[1])) { ;funcObj视作小数组连接符
-                for v in data {
-                    str := ""
-                    for v1 in v {
-                        if (A_Index == 1)
-                            str := v1
-                        else
-                            str .= funcObj . v1
-                    }
-                    if (A_Index == 1)
-                        res := str
-                    else
-                        res .= this . str
-                }
+                res := funcObj.join(data[1])
+                loop(data.length-1)
+                    res .= this . funcObj.join(data[A_Index+1])
                 return res
             } else {
                 if (isobject(funcObj)) { ;有处理函数
-                    for v in data {
-                        if (A_Index == 1)
-                            res := funcObj(v)
-                        else
-                            res .= this . funcObj(v)
-                    }
+                    res := funcObj(data[1])
+                    loop(data.length-1)
+                        res .= this . funcObj(data[A_Index+1])
                     return res
                 } else {
-                    for v in data
-                        res .= v . this
-                    return substr(res, 1, strlen(res)-strlen(this))
+                    res := data[1]
+                    loop(data.length-1)
+                        res .= this . data[A_Index+1]
+                    return res
                 }
             }
         } else if (data != "") {
@@ -1074,18 +1143,6 @@ class _String {
     }
 
     ;连接obj
-    joinK(obj) {
-        res := ""
-        for k, v in obj
-            res .= k . this
-        return substr(res, 1, strlen(res)-strlen(this))
-    }
-    joinV(obj) {
-        res := ""
-        for k, v in obj
-            res .= v . this
-        return substr(res, 1, strlen(res)-strlen(this))
-    }
     joinO(obj, char:=":") {
         res := ""
         for k, v in obj

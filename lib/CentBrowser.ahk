@@ -1,10 +1,9 @@
-﻿_CB.getInstance()
-class _CB extends _CDP {
+﻿class _CB extends _CDP {
 
     ;只是为了方便打开网页
     __new(url:="", funAfterDo:=false) {
         if (url != "")
-            _CB.getInstance().tabOpenLink(url, funAfterDo)
+            _CDP.smartGet("chrome").tabOpenLink(url, funAfterDo)
     }
 
     ;网页内容的元素
@@ -22,16 +21,15 @@ class _CB extends _CDP {
         return el
     }
 
-    static getInstance(key:="") {
-        return _CDP.getInstance("chrome", key)
-    }
+    ;ctrl-f查找
+    static search(str)=>sendEx("{escape}{ctrl down}f{ctrl up}", 100, str)
 
     static onekey() {
         if (WinActive("ahk_class Chrome_WidgetWin_1 ahk_exe chrome.exe")) {
             WinMinimize ;防止左下角的网址残留
             WinHide
         } else {
-            this.getInstance().tabOpenLink()
+            _CDP.smartGet("chrome").tabOpenLink()
         }
     }
 

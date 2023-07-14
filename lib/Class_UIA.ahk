@@ -450,13 +450,13 @@ class UIA {
 
     ;FindElement 去除了hwnd，和 elWin.FindControl 一致
     ;参数可用数组解包使用，名称暂定 UIEP(UIE的Param)
-    static FindControl(ControlType:="", value:="", field:="Name", flag:=0, ms:=0) {
+    static FindControl(ControlType:="", value:="", field:="Name", flag:=0, ms:=0, checkBound:=false) {
         hwnd := WinGetID("A") ;不影响 LastFoundWindow
         bIsWindow := true
         if (ControlType is array)
             return this.ElementFromHandle(hwnd, bIsWindow).FindControls(ControlType)
         else
-            return this.ElementFromHandle(hwnd, bIsWindow).FindControl(ControlType, value, field, flag, ms)
+            return this.ElementFromHandle(hwnd, bIsWindow).FindControl(ControlType, value, field, flag, ms, checkBound:=false)
     }
 
     ;简易场景：由 hwnd 获取的 elWin 仅查找一次
@@ -1036,22 +1036,25 @@ class IUIAutomationElement extends IUIABase {
     * @param waittime Waiting time for control element to appear.
     this 生成后出现的元素，用此方法也能获取，说明 this 是动态的
     flag == 2 则为包含value，而不是精确匹配
+    参数可用数组解包 UIEP
     */
-    FindControl(ControlType, value, field:="Name", flag:=0, ms:=0) {
+    FindControl(ControlType, value, field:="Name", flag:=0, ms:=0, checkBound:=false) {
         if (ControlType is string) {
             if (ControlType == "") { ;NOTE 非 Control 比如obsidian的【警报】
                 cond := UIA.CreatePropertyCondition(UIA.property.%field%, value)
             } else {
                 ControlType := UIA.ControlType.%ControlType%
-                if (flag)
-                    cond := UIA.CreateAndCondition(UIA.CreatePropertyCondition(30003,ControlType), UIA.CreatePropertyConditionEx(UIA.property.%field%, value, flag))
-                else
-                    cond := UIA.CreateAndCondition(UIA.CreatePropertyCondition(30003,ControlType), UIA.CreatePropertyCondition(UIA.property.%field%, value))
             }
+        }
+        if (!isset(cond)) {
+            if (flag)
+                cond := UIA.CreateAndCondition(UIA.CreatePropertyCondition(30003,ControlType), UIA.CreatePropertyConditionEx(UIA.property.%field%, value, flag))
+            else
+                cond := UIA.CreateAndCondition(UIA.CreatePropertyCondition(30003,ControlType), UIA.CreatePropertyCondition(UIA.property.%field%, value))
         }
         endtime := A_TickCount + ms
         loop {
-            el := this.FindFirst(cond)
+            el := this.FindFirst(cond,, checkBound)
             if (el)
                 return el
             if (A_TickCount > endtime)
@@ -1094,7 +1097,7 @@ class IUIAutomationElement extends IUIABase {
         WinGetClientPos(&xClient, &yClient) ;见 UIA.FindElement()
         arrXY[1] -= xClient
         arrXY[2] -= yClient
-        ;OutputDebug(format("i#{1} {2}:{3} arrControl={4}", A_LineFile,A_LineNumber,A_ThisFunc,json.stringify(arrXY)))
+        OutputDebug(format("i#{1} {2}:{3} arrControl={4}", A_LineFile,A_LineNumber,A_ThisFunc,json.stringify(arrXY)))
         ControlClick(format("X{1} Y{2}", arrXY*))
         return arrXY
     }
@@ -1135,7 +1138,7 @@ class IUIAutomationElement extends IUIABase {
             arrXY.push(yOffset(aRect))
         else
             arrXY.push(deal(yOffset,aRect[2],aRect[4]))
-        OutputDebug(format("i#{1} {2}:{3} aRect={4} arrXY={5}", A_LineFile,A_LineNumber,A_ThisFunc,json.stringify(aRect),json.stringify(arrXY)))
+        ;OutputDebug(format("i#{1} {2}:{3} aRect={4} arrXY={5}", A_LineFile,A_LineNumber,A_ThisFunc,json.stringify(aRect),json.stringify(arrXY)))
         return arrXY
         deal(v, x, w) {
             ;TODO 去掉假浮点数
@@ -1162,7 +1165,7 @@ class IUIAutomationElement extends IUIABase {
                     res := x + w + v*A_ScreenDPI//96
                 }
             }
-            ;OutputDebug(format("i#{1} {2}:{3} v={4},x={5},w={6} isOut={7}, res={8}", A_LineFile,A_LineNumber,A_ThisFunc,v,x,w,isOut,res))
+            OutputDebug(format("i#{1} {2}:{3} v={4},x={5},w={6} isOut={7}, res={8}", A_LineFile,A_LineNumber,A_ThisFunc,v,x,w,isOut,res))
             return res
         }
     }
@@ -1200,12 +1203,14 @@ class IUIAutomationElement extends IUIABase {
             res .= format("{:X}", v) . ","
         return rtrim(res, ",")
     }
-    ;SendText更稳妥
-    SetValueEx(val, yOffset:=0) {
+    ;Edit SetValue 无效才使用，并支持点击(比如输入后，下拉框需要再次点击确认)
+    ;u9c 新建工作日历时用
+    SetValueEx(val, yOffset:=0, ms:=500) {
         this.SetFocus()
+        send("{end}{shift down}{home}{shift up}")
         SendText(val)
         if (yOffset) { ;需要点击确认，如u9网页上
-            sleep(500)
+            sleep(ms)
             this.ClickByMouse(true,, yOffset)
         }
     }
@@ -1231,7 +1236,7 @@ class IUIAutomationElement extends IUIABase {
         return elFocus
     }
     ;鼠标要移到能滚动的位置，一开始要滚到右上方，再慢慢往下滚
-    FindByScroll(arrFind, cntTop, cntDown, cntLoop:=5) {
+    FindByScroll(arrFind, cntTop:=0, cntDown:=0, cntLoop:=5) {
         loop { ;没找到，需要往下滚动
             el := this.FindControl(arrFind*)
             if (el is IUIAutomationElement) {
@@ -1240,7 +1245,10 @@ class IUIAutomationElement extends IUIABase {
                 OutputDebug(format("i#{1} {2}:{3} A_Index={4} rect={5}", A_LineFile,A_LineNumber,A_ThisFunc,A_Index,json.stringify(el.GetBoundingRectangle())))
             }
             if (A_Index == 1) { ;先回到最上方
-                send(format("{WheelUp {1}}", cntTop))
+                if (cntTop is integer)
+                    send(format("{WheelUp {1}}", cntTop))
+                else
+                    send(cntTop)
             } else if (A_Index > cntLoop) {
                 return
             } else {
@@ -1261,9 +1269,9 @@ class IUIAutomationElement extends IUIABase {
         elListItem.GetCurrentPattern("SelectionItem").select()
         send("{enter}") ;TODO 如何优化
     }
-    ;arrFind 为 FindControl的所有参数
-    FindAndSetChecked(arrFind, bChecked, method:="") {
-        if (el := this.FindControl(arrFind*)) {
+    ;UIEP 为 FindControl的所有参数
+    FindAndSetChecked(UIEP, bChecked, method:="") {
+        if (el := this.FindControl(UIEP*)) {
             el.SetChecked(bChecked, method)
             return el
         }
@@ -1279,28 +1287,33 @@ class IUIAutomationElement extends IUIABase {
     }
     ;NOTE NOTE NOTE method 一般用 ClickByControl ClickByMouse 备用
     SetChecked(bChecked, method:="") {
-        if (this.GetControlType() ~= "i)^(Button|RadioButton|CheckBox|ComboBox)$") {
-            oTG := this.GetCurrentPattern("toggle")
-            if (this.GetCurrentPropertyValue("ToggleToggleState") != bChecked) { ;(oTG.CurrentToggleState != bChecked)
-                switch method {
-                    case "": oTG.Toggle()
-                    case "ClickByMouse": this.ClickByMouse(1)
-                    default: this.%method%() ;作为补充
+        switch this.CurrentControlType {
+            case UIA.ControlType.Button, UIA.ControlType.RadioButton, UIA.ControlType.CheckBox, UIA.ControlType.ComboBox:
+                oTG := this.GetCurrentPattern("toggle")
+                if (this.GetCurrentPropertyValue("ToggleToggleState") != bChecked) { ;(oTG.CurrentToggleState != bChecked)
+                    switch method {
+                        case "": oTG.Toggle()
+                        case "ClickByMouse": this.ClickByMouse(1)
+                        default: this.%method%() ;作为补充
+                    }
+                } else {
+                    OutputDebug(format("i#{1} {2}:{3} already checked", A_LineFile,A_LineNumber,A_ThisFunc))
                 }
-            } else {
-                OutputDebug(format("i#{1} {2}:{3} already checked", A_LineFile,A_LineNumber,A_ThisFunc))
-            }
-        } else if (this.GetControlType() ~= "i)^(ListItem|TabItem)$") {
-            if (this.GetCurrentPropertyValue("SelectionItemIsSelected") != bChecked) {
-                OutputDebug(format("i#{1} {2}:{3} method={4}", A_LineFile,A_LineNumber,A_ThisFunc,method))
-                switch method {
-                    case "": this.GetCurrentPattern("SelectionItem").select()
-                    case "ClickByMouse": this.ClickByMouse(1)
-                    default: this.%method%() ;作为补充
+                return true
+            case UIA.ControlType.ListItem, UIA.ControlType.TabItem, UIA.ControlType.TreeItem:
+                if (this.GetCurrentPropertyValue("SelectionItemIsSelected") != bChecked) {
+                    OutputDebug(format("i#{1} {2}:{3} method={4}", A_LineFile,A_LineNumber,A_ThisFunc,method))
+                    switch method {
+                        case "": this.GetCurrentPattern("SelectionItem").select()
+                        case "ClickByMouse": this.ClickByMouse(1)
+                        default: this.%method%() ;作为补充
+                    }
+                } else {
+                    OutputDebug(format("i#{1} {2}:{3} already checked", A_LineFile,A_LineNumber,A_ThisFunc))
                 }
-            } else {
-                OutputDebug(format("i#{1} {2}:{3} already checked", A_LineFile,A_LineNumber,A_ThisFunc))
-            }
+                return true
+            default:
+                return false
         }
     }
     ;包含坐标，以下对 CheckBox 作了特殊处理 by 火冷 <2022-11-10 21:28:47>
@@ -1639,6 +1652,49 @@ class IUIAutomationElement extends IUIABase {
         }
     }
 
+    ;仅限 TreeItem
+    getPath() {
+        oRV := UIA.RawViewWalker()
+        el := this
+        arr := []
+        while (el.CurrentControlType == UIA.ControlType.TreeItem) {
+            arr.push(el.CurrentName)
+            el := oRV.GetParentElement(el)
+        }
+        ;UIA.el := el ;NOTE 临时记录当前 Tree 节点
+        return arr.reverse()
+    }
+
+    ;用于 Tree
+    selectByPath(arr, method:="") {
+        oRV := UIA.RawViewWalker()
+        el := this
+        el.SetChecked(true, method)
+        for val in arr {
+            OutputDebug(format("i#{1} {2}:{3} val={4}", A_LineFile,A_LineNumber,A_ThisFunc,val))
+            cond := UIA.CreateAndCondition(UIA.CreatePropertyCondition("ControlType","TreeItem"), UIA.CreatePropertyCondition("Name", val))
+            if (1) {
+                el := el.FindFirst(cond, 2)
+            } else {
+                el := el.FindFirst(cond, 2, true)
+                if (!el)
+                    el := oRV.GetFirstChildElement(el).selectSiblingItems(val)
+            }
+            ;选中
+            if (!el.GetCurrentPropertyValue("SelectionItemIsSelected")) {
+                el.GetCurrentPattern("SelectionItem").select()
+                sleep(200)
+            }
+            ;扩展
+            if (el.GetCurrentPropertyValue("IsExpandCollapsePatternAvailable")) {
+                OutputDebug(format("i#{1} {2}:{3} Expand", A_LineFile,A_LineNumber,A_ThisFunc))
+                el.GetCurrentPattern("ExpandCollapse").Expand()
+            }
+            sleep(100)
+        }
+        return el
+    }
+
     ;以当前元素获取兄弟元素
     ;DataItem 不规范的不用此方法
     getSiblingItems() {
@@ -1658,9 +1714,6 @@ class IUIAutomationElement extends IUIABase {
             elParent := this.GetParent()
             tpSon := "TreeItem"
             scope := 2
-            OutputDebug(format("i#{1} {2}:elParent=GetParent tpSon={3} scope={4}", A_LineFile,A_LineNumber,tpSon,scope))
-            OutputDebug(format("i#{1} {2}:this={3}", A_LineFile,A_LineNumber,json.stringify(elParent.allProperty(),4)))
-            return
         } else {
             elParent := this.getFather()
             tpSon := tpThis
@@ -1696,6 +1749,31 @@ class IUIAutomationElement extends IUIABase {
             }
         }
         return arr
+    }
+
+    ;NOTE 只能往后找
+    selectSiblingItems(text) {
+        oRV := UIA.RawViewWalker()
+        tpThis := this.CurrentControlType
+        switch tpThis {
+            case UIA.ControlType.TreeItem:
+                elParent := this.GetParent()
+                ;msgbox(this.CurrentName . "`n" . elParent.CurrentName . "`n" . text)
+                el := elParent.FindControl(tpThis, text)
+                if (el) {
+                    el.SetChecked(true)
+                } else {
+                    el := this
+                    loop {
+                        if (el.CurrentName == text) {
+                            el.SetChecked(true)
+                            return true
+                        } else {
+                            el := oRV.GetNextSiblingElement(el)
+                        }
+                    }
+                }
+        }
     }
 
     getTabItems(bName:=true) {
@@ -1769,7 +1847,7 @@ class IUIAutomationElement extends IUIABase {
         arrField := []
         for el in elHeader.FindAll(UIA.CreateTrueCondition(), 2)
             arrField.push(el.CurrentName)
-        OutputDebug(json.stringify(arrField))
+        OutputDebug(format("i#{1} {2}:{3} arrField={4}", A_LineFile,A_LineNumber,A_ThisFunc,json.stringify(arrField)))
         ;获取数据
         elBody := oRV.GetLastChildElement(elTable)
         ;_UIADo.seeUIE(elBody)
@@ -1811,6 +1889,7 @@ class IUIAutomationElement extends IUIABase {
             if (!isobject(elLine ))
                 break
         }
+        OutputDebug(format("i#{1} {2}:{3} arr2.toTable()={4}", A_LineFile,A_LineNumber,A_ThisFunc,arr2.toTable()))
         return toStr ? arr2.toTable() : arr2
     }
 
@@ -1832,13 +1911,14 @@ class IUIAutomationElement extends IUIABase {
     ; When searching for top-level windows on the desktop, be sure to specify TreeScope_Children in the scope parameter, not TreeScope_Descendants. A search through the entire subtree of the desktop could iterate through thousands of items and lead to a stack overflow.
     ; If your client application might try to find elements in its own user interface, you must make all UI Automation calls on a separate thread.
 
-    ;TODO 在 HR 人事界面 elText.GetParent().GetNext() 后面 .FindFirst(condEdit) 无效，只能用 .GetFirst()
     ; Retrieves the first child or descendant element that matches the specified condition.
-    FindFirst(condition, scope:=4) {
+    ;TODO 在 HR 人事界面 elText.GetParent().GetNext() 后面 .FindFirst(condEdit) 无效，只能用 .GetFirst()
+    ;NOTE 如不在屏幕内的 TreeItem 会找不到，可用 GetNextSiblingElement 代替
+    FindFirst(condition, scope:=4, checkBound:=false) {
         comcall(5, this, "int",scope, "ptr",condition, "ptr*",&found:=0)
         if (found) {
             el := IUIAutomationElement(found)
-            if (el.GetBoundingRectangle()[3]) ;过滤没有宽度的异常元素
+            if (!checkBound || el.GetBoundingRectangle()[3]) ;过滤没有宽度的元素(有些 TreeItem 看不到)
                 return el
             else
                 OutputDebug(format("i#{1} {2}:{3} continue of el.width=0", A_LineFile,A_LineNumber,A_ThisFunc))
@@ -3125,6 +3205,7 @@ class IUIAutomationTreeWalker extends IUIABase {
 class IUIAutomationValuePattern extends IUIABase {
     ; Sets the value of the element.
     ; The CurrentIsEnabled property must be TRUE, and the IUIAutomationValuePattern,,CurrentIsReadOnly property must be FALSE.
+    ;无效的用 SetValueEx 补充
     SetValue(val) => comcall(3, this, "wstr",val)
 
     ; Retrieves the value of the element.

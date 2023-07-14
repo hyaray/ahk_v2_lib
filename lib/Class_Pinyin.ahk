@@ -5,6 +5,12 @@
 ;msgbox(A_TickCount - timeSave)
 
 class _Pinyin {
+
+    static closure(tp) {
+        oPinyin := _Pinyin(tp) ;NOTE oPinyin初始化比较费时，所以打包进来利用
+        return (x)=>oPinyin.main(x)
+    }
+
     ;static regAlpha := "[āáǎàōóǒòēéěèīíǐìūúǔùǖǘǚǜ]"
 
     ;obj["为"] = ["wei2", wei1]

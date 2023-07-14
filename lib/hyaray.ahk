@@ -71,10 +71,47 @@ hyf_checkNewPlugin(includeFile, arrDirs, strBefore:="", arrDefault:=unset) {
     }
 }
 
+;如果可直接键盘输出，一般用 SendText
+;用剪切板发送字符串
+hyf_paste(str, k:="", ms:=500) {
+    c := A_Clipboard
+    A_Clipboard := str
+    while(A_Clipboard != str)
+        sleep(10)
+    exeName := WinGetProcessName("A").fnn64(1)
+    switch exeName {
+        ;case value1:
+        ;   send("{shift down}{ins}{shift up}")
+        default:
+            OutputDebug(format("i#{1} {2}:{3} ctrl-v", A_LineFile,A_LineNumber,A_ThisFunc))
+            send("{ctrl down}v{ctrl up}")
+    }
+    sleep(20)
+    if (k != "")
+        send(k)
+    sleep(ms) ;有些应用反应比较慢
+    A_Clipboard := c
+}
+
 ;数字则sleep，{xxx}开头则 SendText
 ;NOTE send("{1000}") 相当于 sleep(1000)，但有未知BUG，不要用
-; sendEx("string1`n", 1000, "{tab}", "string2", 1000)
+;sendEx("string1`n", 1000, "{tab}", "string2", 1000)
+;NOTE 第1个参数为数组，则是有规律地批量录入，第2个参数最好也是数组，表示中间的按键
+;sendEx(["a","b","c"], [500, "{down}"]) ;录入Excel多行分别为a b c
 sendEx(arr*) {
+    if (arr[1] is array) {
+        if (!arr[1].length)
+            return
+        SendText(arr[1][1])
+        loop(arr[1].length-1) {
+            if (arr[2] is array)
+                sendEx(arr[2]*)
+            else
+                sendEx(arr[2])
+            SendText(arr[1][A_Index+1])
+        }
+        return true
+    }
     for v in arr {
         if (v is integer) {
             sleep(v)
@@ -177,9 +214,8 @@ hyf_getSelect(bVimNormal:=false, bInput:=false) {
         A_Clipboard := clipSave
         if (bInput) {
             res := inputbox("获取和复制失败，请手工输入内容")
-            if (res.result=="Cancel" || (res.value == ""))
-                return
-            return res.value
+            if (res.result!="Cancel" && (res.value != ""))
+                return res.value
         } else {
             return ""
         }
@@ -326,7 +362,7 @@ hyf_input(toLow:=false) {
 ;替换换行符用 StrReplace(sList, "`r`n", ",")
 inputboxEX(tips, sDefaluet:="", sTitle:="", bEmpty:=false) {
     nameEdit := "vvv"
-    oGui := gui()
+    oGui := gui("+resize +AlwaysOnTop +Border +LastFound +ToolWindow")
     oGui.title := sTitle
     oGui.OnEvent("escape", doEscape)
     oGui.OnEvent("close", doEscape)
@@ -374,23 +410,26 @@ msgbox(json.stringify(objOpt, 4))
 ;   ②2|则设置为多行Edit(添加选项 r2)
 ;3.默认值
 ;   数组，则为 AddComboBox
-;4.AddComboBox 的默认项序号
+;4.opt
+;   n 数字
+;   b 是否
+;   1-9 AddComboBox的默认项序号
 ;bOne 表示限制单结果，则会在 Edit内容改变时，清空其他控件
 ;关闭则返回map()
 ;NOTE 自动过滤空值，数字返回的是字符串
 */
-hyf_inputOption(arr, sTips:="", bTrim:=false, bOne:=false) {
+hyf_inputOption(arr, title:="", bTrim:=false, bOne:=false) {
     if (arr is map) {
         arr1 := arr.clone()
         for k, v in arr1
             arr.push([k,k,v])
     }
-    oGui := gui("+AlwaysOnTop +Border +LastFound +ToolWindow")
+    oGui := gui("+resize +AlwaysOnTop +Border +LastFound +ToolWindow")
+    if (title != "")
+        oGui.title := title
     oGui.OnEvent("escape", doEscape)
     oGui.OnEvent("close", doEscape)
     oGui.SetFont("cRed s22")
-    if (sTips != "")
-        oGui.AddText("x10", sTips . "`n")
     oGui.SetFont("cDefault s11")
     funOpt := (x,w:=600)=>format("ys v{1} w{2}", x,w) ;默认宽
     focusCtl := ""
@@ -399,6 +438,7 @@ hyf_inputOption(arr, sTips:="", bTrim:=false, bOne:=false) {
         if (a.length > 4)
             continue
         varName := a[2]
+        ;设置 opt
         if (a[3] is array) { ;下拉框，根据内容设置长度
             lMax := max(a[3].map(x=>strlen(x))*)
             opt := funOpt(varName, max(lMax*30, 50))
@@ -408,20 +448,22 @@ hyf_inputOption(arr, sTips:="", bTrim:=false, bOne:=false) {
             opt := funOpt(varName)
         }
         if (a.length == 4) { ;有选项
-            optMark := a[4]
-            if (optMark == "n") { ;限制为数字
-                oGui.AddEdit(funOpt(varName,100) . " number", a[3]).OnEvent("change", editChange)
-            } else if (optMark == "b") { ;boolean
-                oGui.SetFont("cRed")
-                if (a[3])
-                    opt .= " checked"
-                oGui.AddCheckbox(opt)
-                oGui.SetFont("cDefault")
-            } else if (optMark is integer) {
-                if (a[3] is array) ;默认选择项
-                    oGui.AddComboBox(format("{1} choose{2}", opt,optMark), a[3])
-                else ;指定行数
-                    oGui.AddEdit(format("{1} r{2}", funOpt(varName),optMark), a[3]).OnEvent("change", editChange)
+            switch a[4] {
+                case "n": ;限制为数字
+                    oGui.AddEdit(funOpt(varName,100) . " number", a[3]).OnEvent("change", editChange)
+                case "b": ;boolean
+                    oGui.SetFont("cRed")
+                    if (a[3])
+                        opt .= " checked"
+                    oGui.AddCheckbox(opt)
+                    oGui.SetFont("cDefault")
+                default:
+                    if (a[4] is integer) {
+                        if (a[3] is array) ;默认选择项
+                            oGui.AddComboBox(format("{1} choose{2}", opt,a[4]), a[3])
+                        else ;指定行数
+                            oGui.AddEdit(format("{1} r{2}", funOpt(varName),a[4]), a[3]).OnEvent("change", editChange)
+                    }
             }
         } else if (a[3] is array) { ;下拉框，根据内容设置长度
             oGui.AddComboBox(opt, a[3])
@@ -460,8 +502,9 @@ hyf_inputOption(arr, sTips:="", bTrim:=false, bOne:=false) {
             if (a[3] is array) {
                 v := a[3][ctl.gui[a[2]].value]
             } else {
+                ;值在控件的value还是text
                 if (a.length >=4) {
-                    v := a[3][ctl.gui[a[2]].value]
+                    v := ctl.gui[a[2]].value
                 } else {
                     v := ctl.gui[a[2]].text
                 }
@@ -481,6 +524,7 @@ hyf_inputOption(arr, sTips:="", bTrim:=false, bOne:=false) {
 ;line
 ;   _TC.getLineInFile(fp, funLine)
 ;   reg
+;NOTE 为了兼容性，转到 _c.e by 火冷 <2023-06-30 01:36:49>
 hyf_runByVim(fp, line:=0, params:="--remote-tab-silent") { ;用文本编辑器打开
     if (line is integer) {
         if (line)
@@ -563,6 +607,21 @@ hyf_findFile(dirIn, arrNoExt, ext:="") {
         if (FileExist(format("{1}\{2}.{3}", dir,noExt,ext)))
             return format("{1}\{2}.{3}", dir,noExt,ext)
     }
+}
+
+hyf_searchFile(dir, sFile:="*", opt:="RF") {
+    ;arr2 := []
+    ;l := strlen(dir)
+    ;loop files, format("{1}\{2}", dir,sFile), opt {
+    ;    if (A_LoopFileAttrib ~= "[HS]")
+    ;        continue
+    ;    arr2.push([substr(A_LoopFileFullPath, l+1)])
+    ;}
+    arr2 := dir.dir2files(sFile,, true)
+    arrRes := hyf_selectByArr(arr2, 1, sPyAndIndex:="20")
+    if (!arrRes.length)
+        exit
+    return format("{1}\{2}", dir,arrRes[1])
 }
 
 ;hyf_findCtrl(funCtlTrue, winTitle:="") {
@@ -840,6 +899,16 @@ hyf_getDocumentPath(winTitle:="") { ;获取当前窗口编辑文档的路径
             return GUID
         }
     }
+}
+
+hyf_winMove(xOffset:=0, yOffset:=0, w:=1, h:=1, hwnd:=unset) {
+    if (!isset(hwnd))
+        hwnd := WinExist("A")
+    WinGetPos(&xWin, &yWin, &wWin, &hWin, hwnd)
+    wWin := (w is float) ?  wWin * w : w
+    hWin := (h is float) ?  hWin * h : h
+    WinRestore(hwnd) ;先还原，否则会失败
+    WinMove(xWin+xOffset, yWin+yOffset, wWin, hWin, hwnd)
 }
 
 ;同 exe 的其他窗口
@@ -1178,6 +1247,26 @@ hyf_delete0(var) {
     }
 }
 
+;单元格所在行的【记录】转成 obj[标题] := v
+;表格要求：超级表或标准表
+hyf_cell2objRecord(cell:="", skip:=false) {
+    if (!isobject(cell))
+        cell := ox().ActiveCell
+    try
+        rngTable := cell.ListObject.range
+    catch
+        rngTable := cell.CurrentRegion
+    r := cell.row-rngTable.row+1
+    arrV := hyf_rng2arrayV(rngTable)
+    obj := map()
+    loop(rngTable.columns.count) {
+        v := arrV[r,A_Index]
+        if (!skip || v != "")
+            obj[arrV[1,A_Index]] := v
+    }
+    return obj
+}
+
 ;判断了单个单元格的情况
 ;funVal可直接修改原单元格值
 ;   1(默认)=hyf_delete0
@@ -1195,19 +1284,29 @@ hyf_rng2arrayV(rng:=unset, fillUp:=false, funVal:=1, bWrite:=false) {
     }
     if (rng.cells.count == 1) {
         if (bWrite) {
-            rng.value := funVal(rng)
+            if (funVal is map)
+                rng.value := funVal.get(rng.value, rng.value)
+            else
+                rng.value := funVal(rng)
             return
         } else {
             arrA := ComObjArray(12, 1, 1)
-            arrA[0,0] := funVal(rng)
+            if (funVal is map)
+                arrA[0,0] := funVal.get(arrA[0,0], arrA[0,0])
+            else
+                arrA[0,0] := funVal(rng)
             return arrA
         }
     }
     if (rng.areas.count > 1) { ;TODO 多区域则直接修改值
         xl := rng.application
         xl.ScreenUpdating := false
-        for cell in rng
-            cell.value := funVal(cell)
+        for cell in rng {
+            if (funVal is map)
+                cell.value := funVal.get(cell.value, cell.value)
+            else
+                cell.value := funVal(cell)
+        }
         xl.ScreenUpdating := true
     } else {
         arrV := rng.value
@@ -1216,6 +1315,8 @@ hyf_rng2arrayV(rng:=unset, fillUp:=false, funVal:=1, bWrite:=false) {
             loop(arrV.MaxIndex(2)) {
                 if (fillUp && arrV[r,A_Index]=="") ;需要填充空白单元格
                     arrV[r,A_Index] := arrV[r-1,A_Index]
+                else if (funVal is map)
+                    arrV[r,A_Index] := funVal.get(arrV[r,A_Index], arrV[r,A_Index])
                 else
                     arrV[r,A_Index] := funVal(arrV[r,A_Index])
             }
@@ -1227,44 +1328,54 @@ hyf_rng2arrayV(rng:=unset, fillUp:=false, funVal:=1, bWrite:=false) {
 }
 
 ;普通数组转VBA标准数组
-;一维时，如果 toRows 则转成多行
-;二维时，如果 toRows 则列数要通过arr[1]遍历获得
-hyf_arr2arrayA(arr, toRows:=false) {
-    if (!arr.length)
+;一维时，如果 tp 则转成多行
+;二维时，如果 tp 0=arr2[1]当列数 1=遍历获取最大列数 >1=直接当列数 
+hyf_arr2arrayA(arr2, tp:=false, cellWrite:=false) {
+    if (!arr2.length)
         return
-    rs := arr.length
-    if (isobject(arr[1])) {
+    rs := arr2.length
+    if (isobject(arr2[1])) {
         ;获取列数 cs
         cs := 0
-        if (toRows) {
-            if (toRows > 1) { ;直接当列数
-                cs := toRows
+        if (tp) {
+            if (tp > 1) { ;直接当列数
+                cs := tp
             } else {
-                for v in arr {
+                for v in arr2 {
                     if (v.length > cs)
                         cs := v.length
                 }
             }
         } else {
-            cs := arr[1].length
+            cs := arr2[1].length
         }
-        OutputDebug(format("i#{1} {2}:{3} rs={4},cs={5}", A_LineFile,A_LineNumber,A_ThisFunc,rs,cs))
         arrA := ComObjArray(12, rs, cs)
         loop(rs) {
-            r := A_Index
-            loop(cs)
-                arrA[r-1,A_Index-1] := arr[r][A_Index]
+            i := A_Index
+            loop(cs) {
+                try
+                    arrA[i-1,A_Index-1] := arr2[i][A_Index]
+                catch
+                    msgbox(i . "`n" . A_Index . "`n" . arr2[i][A_Index])
+            }
         }
     } else { ;单维
-        if (toRows) {
+        if (tp) {
             arrA := ComObjArray(12, rs, 1)
             loop(rs)
-                arrA[A_Index-1,0] := arr[A_Index]
+                arrA[A_Index-1,0] := arr2[A_Index]
         } else {
             arrA := ComObjArray(12, rs)
             loop(rs)
-                arrA[A_Index-1] := arr[A_Index]
+                arrA[A_Index-1] := arr2[A_Index]
         }
+    }
+    if (cellWrite) {
+        if !ProcessExist("excel.exe")
+            return arrA
+        if (type(cellWrite) != "ComObject")
+            cellWrite := ox().ActiveCell
+        hyf_arrayA2cell(hyf_arr2arrayA(arr2, tp), cellWrite)
     }
     return arrA
 }
@@ -1485,13 +1596,15 @@ hyf_pipeRun(code, fn:="", callback:=0) {
 
 ;直接选择其中一项，NOTE 支持输入(优先)
 ;适合选择项较少的场景
-hyf_selectSingle(arr, sTips:="") {
-    oGui := gui()
+hyf_selectSingle(arr, title:="") {
+    oGui := gui("+resize +AlwaysOnTop +Border +LastFound +ToolWindow")
+    if (title != "")
+        oGui.title := title
     oGui.OnEvent("escape", doEscape)
     oGui.OnEvent("close", doEscape)
     oGui.SetFont("s16")
-    if (sTips != "")
-        oGui.AddText("x10", sTips . "`n")
+    ;if (sTitle != "")
+    ;    oGui.AddText("x10", sTitle . "`n")
     for v in arr {
         if (A_Index == 1)
             oGui.AddRadio("checked", v)
@@ -1530,14 +1643,14 @@ hyf_GuiListView(arr2, arrCol:="", title:="", arrWidth:=unset) {
     if (!arr2.length)
         return
     if (arr2.length == 1) {
-        hyf_msgbox(arr2[1])
+        hyf_msgbox(arr2[1], title)
         return
     }
     if !(arr2[1] is array) {
         for v in arr2
             arr2[A_Index] := [v]
     }
-    oGui := gui("+AlwaysOnTop +Resize +ToolWindow")
+    oGui := gui("+resize +AlwaysOnTop +Border +LastFound +ToolWindow")
     oGui.BackColor := "222222"
     oGui.title := format("{1}", title)
     oGui.SetFont("s13")
@@ -1548,8 +1661,9 @@ hyf_GuiListView(arr2, arrCol:="", title:="", arrWidth:=unset) {
             arrCol.push(A_Index)
     }
     rs := min(arr2.length, 40)
-    oLv := oGui.AddListView(format("VScroll count grid checked w1200 r{1}", rs), arrCol)
-    oLv.OnEvent("ItemCheck", do)
+    oLv := oGui.AddListView(format("count grid checked w1000 r{1}", rs), arrCol)
+    oLv.name := "lv"
+    ;oLv.OnEvent("ItemCheck", do)
     oLv.OnEvent("DoubleClick", do)
     oLv.opt("-Redraw")
     for k, arr in arr2
@@ -1564,42 +1678,60 @@ hyf_GuiListView(arr2, arrCol:="", title:="", arrWidth:=unset) {
     }
     oLv.opt("+Redraw")
     arrRes := []
-    oGui.AddButton("default center", "确定").OnEvent("click", btnClick)
+    oGui.AddButton("default center section", "确定").OnEvent("click", btnClick)
+    oGui.AddButton("center ys", "全选").OnEvent("click", btnSelectAll)
+    oGui.AddButton("center ys", "全不选").OnEvent("click", btnSelectNone)
     oGui.AddStatusBar(, format("共有{1}项结果", arr2.length))
-    oGui.show("w1000 center")
+    oGui.show("w1200 center")
     WinWaitClose(oGui)
-    tooltip
     return arrRes
     doEscape(oGui) => oGui.destroy()
     do(oLV, r, status:=unset) { ;NOTE 要做的事
-        if (isset(status)) {
-            ;获取当前行整行内容
-            ;GuiControlGet
-            if (status) {
-                arrRes.push([])
-                loop(oLv.GetCount("column")) {
-                    arrRes[-1].push(oLv.GetText(r, A_Index))
-                }
-            } else {
-                v := oLv.GetText(r,1)
-                for arr in arrRes {
-                    if (v = arr[1]) ;可能数字和字符串比较
-                        arrRes.RemoveAt(A_Index)
-                }
-            }
-            tooltip(arrRes.toTable())
-        } else { ;比如双击
-            arrRes := [[]] ;返回格式相同
-            loop(oLv.GetCount("column")) {
-                arrRes[1].push(oLv.GetText(r, A_Index))
-            }
-            oLV.gui.destroy()
-        }
+        ;if (isset(status)) {
+        ;    ;获取当前行整行内容
+        ;    ;GuiControlGet
+        ;    if (status) {
+        ;        arrRes.push([])
+        ;        loop(oLv.GetCount("column"))
+        ;            arrRes[-1].push(oLv.GetText(r, A_Index))
+        ;    } else {
+        ;        v := oLv.GetText(r,1)
+        ;        for arr in arrRes {
+        ;            if (v = arr[1]) ;可能数字和字符串比较
+        ;                arrRes.RemoveAt(A_Index)
+        ;        }
+        ;    }
+        ;} else { ;比如双击
+        arrRes := [[]] ;返回格式相同
+        loop(oLv.GetCount("column"))
+            arrRes[-1].push(oLv.GetText(r, A_Index))
+        oLV.gui.destroy()
+        ;}
         ;做任何事
         ;设置返回值
         ;oGui.destroy()
     }
+    btnSelectAll(ctl, p*) {
+        oLV := ctl.gui["lv"]
+        loop(oLV.GetCount())
+            oLV.modify(A_Index, "+check")
+    }
+    btnSelectNone(ctl, p*) {
+        oLV := ctl.gui["lv"]
+        loop(oLV.GetCount())
+            oLV.modify(A_Index, "-check")
+    }
     btnClick(ctl, param*) {
+        oLV := ctl.gui["lv"]
+        loop(oLV.GetCount()) {
+            if (SendMessage(0x102C, A_Index-1, 0x2000, oLV.hwnd)) {
+                r := A_Index
+                arrRes.push([])
+                loop(oLv.GetCount("column"))
+                    arrRes[-1].push(oLv.GetText(r, A_Index))
+            }
+        }
+        msgbox(json.stringify(arrRes, 4))
         ctl.gui.destroy()
     }
 }
@@ -1643,7 +1775,7 @@ hyf_selectByArr(arr2, indexKey:=1, sPyAndIndex:="21", bDistinct:=false) {
     }
     ;OutputDebug(format("i#{1} {2}:arrNew={3}", A_LineFile,A_LineNumber,arrNew.toTable(",")))
     ;添加到 Gui
-    oGui := gui("+resize")
+    oGui := gui("+resize +AlwaysOnTop +Border +LastFound +ToolWindow")
     oGui.OnEvent("escape",doEscape)
     oGui.OnEvent("close",doEscape)
     oGui.SetFont("s13")
@@ -1755,14 +1887,14 @@ hyf_selectByArr(arr2, indexKey:=1, sPyAndIndex:="21", bDistinct:=false) {
     }
     do(oLv, r, p*) { ;NOTE 要做的事
         ;获取当前行整行内容
-        ;arrRes := []
         ;loop(arrNew[1].length)
-        ;    arrRes.push(oLv.GetText(r, A_Index+1))
+        ;    resGui.push(oLv.GetText(r, A_Index+1))
+        ;OutputDebug(format("d#{1} {2}:{3} resGui={4}", A_LineFile,A_LineNumber,A_ThisFunc,json.stringify(resGui,4)))
         ;做任何事
         ;设置返回值
         key := oLv.GetText(r, indexKey+1)
         OutputDebug(format("w#{1} {2}:r={3} indexKey={4} key={5}", A_LineFile,A_LineNumber,r,indexKey,key))
-        resGui := objRaw[key] ;TODO 增加了序号
+        resGui := objRaw[key] ;NOTE 有些是对象不是文本，要求key不能有重复值
         doEscape(oLv.gui)
     }
     pinyin(str){
@@ -1779,6 +1911,81 @@ hyf_selectByArr(arr2, indexKey:=1, sPyAndIndex:="21", bDistinct:=false) {
     }
 }
 
+;showAll 没输入时是否显示
+hyf_selectByTooltip(arr2, showAll:=false) {
+    arrKey := []
+    loop {
+        if (!arrKey.length) {
+            if (showAll)
+                tipForSelect()
+            else
+                tipForSelect("等待按键中")
+            arrRes := arr2
+        } else {
+            arrRes := tipForSelect()
+        }
+        if (arrRes.length == 1) { ;单结果返回
+            tooltip
+            return arrRes[1]
+        }
+        ;更新 arrKey
+        key := hyf_input()
+        switch key, false {
+            case "escape":
+                tooltip
+                exit
+            case "BackSpace":
+                arrKey.pop()
+            default:
+                if (strlen(key) == 1) {
+                    arrKey.push(key)
+                } else if (key ~= "^F\d+$") {
+                    tooltip
+                    return arrRes[integer(substr(key,2,1))]
+                }
+        }
+    }
+    ;自动根据 arrKey 转成 arr
+    tipForSelect(res:="") {
+        if (res != "") {
+            tooltip(res, 8, 8)
+            return
+        }
+        sKeys := "".join(arrKey)
+        ;msgbox(sKeys . "`n" . json.stringify(arrKey, 4))
+        ;获取 arr
+        arr := []
+        for a in arr2 {
+            if (instr(a[2],sKeys)) {
+                if (a[2] = sKeys) ;相同的优先前第1个
+                    arr.insertat(1, a[1])
+                else
+                    arr.push(a[1])
+            }
+        }
+        if (arrRes.length == 0) { ;NOTE 没结果，则回滚
+            arrKey.pop()
+            sKeys := "".join(arrKey)
+            arr := []
+            for a in arr2 {
+                if (instr(a[2],sKeys)) {
+                    if (a[2] = sKeys) ;相同的优先前第1个
+                        arr.insertat(1, a[1])
+                    else
+                        arr.push(a[1])
+                }
+            }
+        }
+        for s in arr {
+            i := (A_Index <= 12) ? "F" . string(A_Index) : A_Index.toABCD(13)
+            res .= format("{1}`t{2}`n", i,s)
+        }
+        ;msgbox(json.stringify(arr, 4))
+        tooltip(res, 8, 8)
+        return arr
+    }
+}
+
 ;defButton是默认按钮前面的text内容
 ;hyf_GuiMsgbox(map("a",132,"b",22), "aaa")
 hyf_GuiMsgbox(obj, title:="", defButton:="", fun:=unset, oGui:="", times:=0) {
@@ -1789,7 +1996,7 @@ hyf_GuiMsgbox(obj, title:="", defButton:="", fun:=unset, oGui:="", times:=0) {
     if (obj is map && !obj.count)
         return
     if (times == 0) {
-        oGui := gui()
+        oGui := gui("+resize +AlwaysOnTop +Border +LastFound +ToolWindow")
         oGui.title := title
         oGui.SetFont("cBlue s11")
         oGui.OnEvent("escape",doEscape)
@@ -1873,13 +2080,16 @@ hyf_objToolTip(obj, str:="", t:=0) {
 }
 
 ;tooltip 后等待任意按键结束
-hyf_tooltipWait(str) {
-    tooltip(str)
+hyf_tooltipWait(str, x:=unset, y:=unset) {
+    if (isset(x))
+        tooltip(str, x, y)
+    else
+        tooltip(str)
     hyf_input()
     tooltip
 }
 
-;arrIn 如果是一维，会自动转成二维(以1-9当key)
+;arrIn 如果是一维，会自动转成二维(以F1-F12当key)
 ;arrIn := [
 ;   ["J","jpg"],
 ;   ["P","png"],
@@ -1894,7 +2104,7 @@ hyf_tooltipAsMenu(arrIn, strTip:="", x:=8, y:=8) {
         return []
     if !isobject(arrIn[1]) { ;一维转成[hot, item]
         for k, v in arrIn
-            arrIn[k] := [k, v]
+            arrIn[k] := [k.toABCD(), v]
     }
     if (arrIn.length == 1)
         return arrIn[1]
@@ -1949,6 +2159,16 @@ hyf_tooltipAsMenu(arrIn, strTip:="", x:=8, y:=8) {
     }
 }
 
+;NOTE 最通用的闭包
+;目的是让所有 fun 延迟执行，并把结果当作 funmain 的参数
+;hyf_closure_funs((p*)=>msgbox(json.stringify(p,4)), strlen.bind("aa"), strlen.bind("aaa"))()
+;hyf_closure_funs(ObjBindMethod(cls,"method"), strlen.bind("aa"), strlen.bind("aaa"))()
+;hyf_closure_funs(SendText, strlen.bind("aa"), strlen.bind("aaa"))()
+hyf_closure_funs(funmain, fun*) => (p*)=>funmain(fun.map(f=>(f is func)?f():f)*)
+
+;hyf_closure_strs((p*)=>msgbox(json.stringify(p,4)), "aa", "aaa")()
+hyf_closure_strs(funmain, str*) => (p*)=>funmain(str*)
+
 ;*************以下为函数配套的子程序*****************
 
 ;LabelForMenu_FontInWord: ;Word中设置字体
@@ -1992,3 +2212,9 @@ reduce(fun, arr, v0:="") {
 ;    return res
 ;}
 
+;不考虑DPI，_Mouse.clickR 会考虑DPI
+clickR(x, y, cnt:=1, speed:=0) {
+    MouseMove(x, y, speed, "R")
+    sleep(20)
+    click(cnt)
+}

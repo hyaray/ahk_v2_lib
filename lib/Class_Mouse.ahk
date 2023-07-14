@@ -1,7 +1,7 @@
-﻿;NOTE 光标用 CaretGetPos 获取
+﻿;moveR 坐标进行 .toDPI 来兼容
+;NOTE 光标用 CaretGetPos 获取
 ;修改光标见 _IME.curModify()
 ;鼠标点击和移动类
-;TODO 坐标进行 *A_ScreenDPI/100 来兼容
 
 class _Mouse {
     static bMoving := false
@@ -391,6 +391,8 @@ class _Mouse {
         this.downBase("client", x, y)
     }
 
+    static moveR(x:=0, y:=0, n:=1) => MouseMove(x.toDPI(), y.toDPI(), 0, "R")
+
     ;如果x是数组，则y直接当n用(调用时不需要中间空一个参数) NOTE
     ;NOTE 鼠标会停留
     static clickR(x:=0, y:=0, n:=1) {
@@ -398,8 +400,6 @@ class _Mouse {
         sleep(20)
         click(n)
     }
-
-    static moveR(x:=0, y:=0, n:=1) => MouseMove(x.toDPI(), y.toDPI(), 0, "R")
 
     ;鼠标会回到原坐标
     static clickBackR(x, y:=1, n:=1) {
@@ -555,7 +555,7 @@ class _Mouse {
     }
 
     ;从 UIA 里复制
-    offsetOut(aRect, xOffset, yOffset, isOut:=1) {
+    static offsetOut(aRect, xOffset, yOffset, isOut:=1) {
         arrXY := []
         if (isobject(xOffset)) ;NOTE 支持传入函数
             arrXY.push(xOffset(aRect))

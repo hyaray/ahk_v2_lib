@@ -68,11 +68,13 @@ class _Array extends Array {
     slice(start:=1, end:=0, step:=1) {
         len := this.length
         i := start < 1 ? len + start : start
+        if (i < 1 || i > len)
+            return []
         j := end < 1 ? len + end : end
+        if (j < i || j > len)
+            return []
         arrRes := []
         reverse := false
-        if (i < 1 || j > len)
-            throw IndexError("Slice: start or end value out of bounds", -1)
         if step = 0 {
             throw error("Slice: step cannot be 0",-1)
         } else if step < 0 {

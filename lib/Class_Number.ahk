@@ -11,6 +11,18 @@ for k in proto.OwnProps() {
 
 class _Number {
 
+    highParam() => this >> 16
+    lowParam() => this & 0xffff
+
+    ;超过numA用 A-Z
+    ;逆向见 _String.toNum(10)
+    toABCD(numA:=10) {
+        if (this < numA)
+            return string(this)
+        else
+            return chr(65-numA+this)
+    }
+
     ;获取
     next {
         get => this+1

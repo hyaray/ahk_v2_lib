@@ -20,7 +20,7 @@ class YAML {
 		keepbooltype ? (_true := YAML.true, _false := YAML.false, _null := YAML.null) : (_true := true, _false := false, _null := "")
 		if (text = "")
 			return []
-        text := RegExReplace(text, "m)(\s|^)\#.*") ;NOTE 添加 by 火冷 <2023-03-05 11:02:21>
+        text := RegExReplace(RegExReplace(text, "m)(\s+|^)\#.*"), ",\s*,", ',"",') ;NOTE 添加 by 火冷 <2023-03-05 11:02:21>
 		if InStr("[{", SubStr(text := LTrim(text, " `t`n`r"), 1, 1))
 			return PJ(&text, mergedarray)
 		return CY(&text, mergedarray)

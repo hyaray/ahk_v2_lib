@@ -2,27 +2,51 @@
 class _CDP {
 
     static objInstance := map()
+    static objSingleHost := map() ;指定单页面的host(在_AutoCmd里被修改)
+    static data := map(
+        "chrome", ["C:\Users\administrator\AppData\Local\Google\Chrome\Chrome.exe", 9222],
+        "msedge", ["c:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe", 9223],
+        "obsidian", [EnvGet("LOCALAPPDATA") . "\Obsidian\Obsidian.exe", 9221],
+    )
 
+    ;NOTE 统计管理各应用的端口，顺便管理路径
     static getInfo(name) {
-        return map(
-            "chrome", ["s:\CentBrowser\chrome.exe", 9222],
-            "msedge", ["c:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe", 9223],
-            "obsidian", [A_LocalAppdata . "\Obsidian\Obsidian.exe", 9221],
-        )[name]
+        name := StrReplace(StrLower(name), ".exe")
+        return _CDP.data[name]
     }
 
     ;统一管理各 Chrome 系浏览器的实例
-    static getInstance(name, key:="") {
-        if (!_CDP.objInstance.has(name)) {
-            ;OutputDebug(format("w#{1} {2}:A_ThisFunc={3} create instanceCDP of {4} key={5}", A_LineFile,A_LineNumber,A_ThisFunc,name,key))
-            _CDP.objInstance[name] := _CDP(_CDP.getInfo(name)*)
-        } else {
-            ;OutputDebug(format("w#{1} {2}:A_ThisFunc={3} exist {4} instanceCDP, key={5}", A_LineFile,A_LineNumber,A_ThisFunc,name,key))
+    ;可以只传入 key, 会智能判断
+    static smartGet(name:="", key:="") {
+        ;只传入key
+        if (name != "" && !(name ~= "^(chrome|msedge|obsidian)$")) {
+            key := name
+            name := ""
         }
+        ;获取 name
+        if (name == "") {
+            exeName := WinGetProcessName("A")
+            switch exeName, false {
+                case "chrome.exe": name := "chrome"
+                case "msedge.exe": name := "msedge"
+                ;case "obsidian.exe": name := "obsidian" ;NOTE obsidian 只支持传入
+                default:
+                    if (ProcessExist("chrome.exe"))
+                        name := "chrome" 
+                    else if (ProcessExist("msedge.exe"))
+                        name := "msedge"
+                    else
+                        throw TargetError("no chrome opened")
+            }
+        }
+        ;获取 oCDP
+        if (!_CDP.objInstance.has(name))
+            _CDP.objInstance[name] := _CDP(_CDP.getInfo(name)*)
         oCDP := _CDP.objInstance[name]
+        ;处理 key
         switch key {
-            case "": return oCDP
             case "page": return oCDP.getPage()
+            case "": return oCDP
             default: return oCDP.getCurrentPage(key)
         }
     }
@@ -32,6 +56,42 @@ class _CDP {
             ;OutputDebug(format("w#{1} {2}:A_ThisFunc={3} create instanceCDP of {4} key={5}", A_LineFile,A_LineNumber,A_ThisFunc,name,key))
             _CDP.objInstance[name] := ""
         }
+    }
+
+    static createShortcut(name:="", bUrl:=false) {
+        ;只传入第2参数
+        if (name is integer) {
+            bUrl := name
+            name := ""
+        }
+        ;获取 name
+        if (name == "") {
+            exeName := WinGetProcessName("A")
+            switch exeName, false {
+                case "chrome.exe": name := "chrome"
+                case "msedge.exe": name := "msedge"
+                case "obsidian.exe":
+                    name := "obsidian"
+                    bUrl := false
+                default:
+                    if (ProcessExist("chrome.exe"))
+                        name := "chrome" 
+                    else if (ProcessExist("msedge.exe"))
+                        name := "msedge"
+                    else
+                        throw TargetError("no chrome opened")
+            }
+        }
+        if (name ~= "^\w:") {
+            fp := name
+            SplitPath(name,,,, &name)
+            arr := _CDP.getInfo(name)
+            arr[1] := fp
+        } else {
+            arr := _CDP.getInfo(name)
+        }
+        url := bUrl ?  _CDP.smartGet("chrome","url") . " " : ""
+        FileCreateShortcut(arr[1], name.fnn2fp("lnk"),, format("{1}--remote-debugging-port={2}", url,arr[2]))
     }
 
     __new(fp, DebugPort) {
@@ -50,12 +110,6 @@ class _CDP {
         ;    this.sParam .= ' --user-data-dir=' . this.CliEscape(this.userdata)
         ;}
         this.http := ComObject('WinHttp.WinHttpRequest.5.1')
-        this.objSingleHost := map( ;指定单页面的host
-            "oa.hf-zj.com:9898", 1,
-            "192.168.16.6", 1,
-            "192.168.16.217", 1,
-            "192.168.16.228", 1,
-        )
         ;this.sParam .= ' ' . flags
     }
 
@@ -100,7 +154,7 @@ class _CDP {
     tabOpenLink(arrUrl:="", funAfterDo:="", bActive:=true) { ;about:blank chrome://newtab
         ;OutputDebug(format("i#{1} {2}:A_ThisFunc={3}", A_LineFile,A_LineNumber,A_ThisFunc))
         if (arrUrl is string)
-            arrUrl := (arrUrl == "") ? [] : [arrUrl]
+            arrUrl := StrSplit(arrUrl , "`n", "`r")
         if (arrUrl.length > 1)
             bActive := false
         ;bActive := (A_Index==arrUrl.length) ? bActive : false ;只激活最后一个标签
@@ -117,7 +171,7 @@ class _CDP {
                     objOpen := urlOpen.jsonUrl()
                     hostThis := objOpen["host"]
                     ;激活匹配的标签
-                    if (this.objSingleHost.has(hostThis) && objPage.has(hostThis)) {
+                    if (_CDP.objSingleHost.has(hostThis) && objPage.has(hostThis)) {
                         activeTab(objPage[hostThis][1]["id"])
                         continue
                     } else if (objPage.has(urlOpen)) { ;已有完全一样的网址
@@ -176,8 +230,12 @@ class _CDP {
     ;	2 关闭并正确打开浏览器
     detect(tp:=0) {
         if (this.hwnd && ProcessExist(this.pid)) {
-            OutputDebug(format("i#{1} {2}:{3} existed hwnd={4} this.pid={5}", A_LineFile,A_LineNumber,A_ThisFunc,this.hwnd,this.pid))
-            return this.hwnd
+            if (WinExist(this.hwnd)) {
+                OutputDebug(format("i#{1} {2}:{3} existed hwnd={4} this.pid={5}", A_LineFile,A_LineNumber,A_ThisFunc,this.hwnd,this.pid))
+                return this.hwnd
+            } else {
+                OutputDebug(format("i#{1} {2}:{3} not existed hwnd={4}", A_LineFile,A_LineNumber,A_ThisFunc,this.hwnd,this.pid))
+            }
         }
         if (ProcessExist(this.exeName)) { ;可能脚本重启等原因丢失了数据
             this.pid := this.FindInstance("pid")
@@ -260,8 +318,9 @@ class _CDP {
                 ;OutputDebug(format("i#{1} {2}:{3} key={4}", A_LineFile,A_LineNumber,A_ThisFunc,key))
                 switch key {
                     case "title": return objHttp["title"]
-                    case "json": return objHttp["url"].jsonUrl()
+                    case "url": return objHttp["url"]
                     case "arr": return [objHttp["title"], objHttp["url"]] ;标题+url
+                    case "json": return objHttp["url"].jsonUrl()
                     case "": return objHttp
                     default:
                         jsonPage := objHttp["url"].jsonUrl()
@@ -579,11 +638,12 @@ class _CDP {
         }
 
         activate() => this.httpOpen(format("/activate/{1}",this.id))
+        ;不见得靠谱
         WaitForLoad(DesiredState:="complete", Interval:=500) {
             loop {
                 state := this.evaluate('document.readyState',"value")
                 OutputDebug(format("i#{1} {2}:{3} state={4}", A_LineFile,A_LineNumber,A_ThisFunc,state))
-                if (this.evaluate('document.readyState',"value") != DesiredState)
+                if (state != DesiredState)
                     sleep(Interval)
                 else
                     return 1
