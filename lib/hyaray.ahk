@@ -104,10 +104,7 @@ sendEx(arr*) {
             return
         SendText(arr[1][1])
         loop(arr[1].length-1) {
-            if (arr[2] is array)
-                sendEx(arr[2]*)
-            else
-                sendEx(arr[2])
+            (arr[2] is array) ? sendEx(arr[2]*) : sendEx(arr[2])
             SendText(arr[1][A_Index+1])
         }
         return true
