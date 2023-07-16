@@ -1203,17 +1203,6 @@ class IUIAutomationElement extends IUIABase {
             res .= format("{:X}", v) . ","
         return rtrim(res, ",")
     }
-    ;Edit SetValue 无效才使用，并支持点击(比如输入后，下拉框需要再次点击确认)
-    ;u9c 新建工作日历时用
-    SetValueEx(val, yOffset:=0, ms:=500) {
-        this.SetFocus()
-        send("{end}{shift down}{home}{shift up}")
-        SendText(val)
-        if (yOffset) { ;需要点击确认，如u9网页上
-            sleep(ms)
-            this.ClickByMouse(true,, yOffset)
-        }
-    }
     ;点击Text右侧以激活 Edit控件，并设置值
     ;arrFind 用于 FindControl 的所有参数
     ;elWin.FindByBeside(["Text", "名称"], [30,0])
@@ -1285,6 +1274,41 @@ class IUIAutomationElement extends IUIABase {
             el.ClickByMouse(true, xOffset)
         return arrEl
     }
+    ;包含坐标，以下对 CheckBox 作了特殊处理 by 火冷 <2022-11-10 21:28:47>
+    ContainXY(xScreen:=unset, yScreen:=unset, cm:=0) { ;cm 0=windows 1=screen
+        if (!isset(xScreen)) {
+            cmMouse := A_CoordModeMouse
+            CoordMode("mouse", "screen")
+            MouseGetPos(&xScreen, &yScreen)
+            CoordMode("mouse", cmMouse)
+        } else if (cm == 0) {
+            WinGetPos(&x, &y,,, "A")
+            xScreen += x
+            yScreen += y
+        }
+        aRect := this.GetBoundingRectangle()
+        if (yScreen >= aRect[2] && yScreen <= aRect[2]+aRect[4]) { ;y 已经匹配
+            ;NOTE CheckBox 有可能只获取到✅
+            if (this.CurrentControlType == UIA.ControlType.CheckBox && abs(aRect[3]-aRect[4])<=2)
+                res := xScreen >= aRect[1] && xScreen - aRect[1]+aRect[3] <= 100 ;放宽至100的范围
+            else
+                res := xScreen >= aRect[1] && xScreen <= aRect[1]+aRect[3]
+            return res
+        } else {
+            return false
+        }
+    }
+    ;Edit SetValue 无效才使用，并支持点击(比如输入后，下拉框需要再次点击确认)
+    ;u9c 新建工作日历时用
+    SetValueEx(val, yOffset:=0, ms:=500) {
+        this.SetFocus()
+        send("{end}{shift down}{home}{shift up}")
+        SendText(val)
+        if (yOffset) { ;需要点击确认，如u9网页上
+            sleep(ms)
+            this.ClickByMouse(true,, yOffset)
+        }
+    }
     ;NOTE NOTE NOTE method 一般用 ClickByControl ClickByMouse 备用
     SetChecked(bChecked, method:="") {
         switch this.CurrentControlType {
@@ -1316,29 +1340,54 @@ class IUIAutomationElement extends IUIABase {
                 return false
         }
     }
-    ;包含坐标，以下对 CheckBox 作了特殊处理 by 火冷 <2022-11-10 21:28:47>
-    ContainXY(xScreen:=unset, yScreen:=unset, cm:=0) { ;cm 0=windows 1=screen
-        if (!isset(xScreen)) {
-            cmMouse := A_CoordModeMouse
-            CoordMode("mouse", "screen")
-            MouseGetPos(&xScreen, &yScreen)
-            CoordMode("mouse", cmMouse)
-        } else if (cm == 0) {
-            WinGetPos(&x, &y,,, "A")
-            xScreen += x
-            yScreen += y
+    ;简化默认的获取
+    ;一般是获取 value(name 用原生方式 CurrentName 获取)
+    get() {
+        switch this.CurrentControlType {
+            case UIA.ControlType.Edit: return this.GetCurrentPropertyValue("Value") ;TODO 是否放 default 下
+            case UIA.ControlType.RadioButton, UIA.ControlType.CheckBox, UIA.ControlType.ComboBox:
+                return this.GetCurrentPropertyValue("ToggleToggleState")
+            case UIA.ControlType.ListItem, UIA.ControlType.TabItem, UIA.ControlType.TreeItem:
+                return this.GetCurrentPropertyValue("SelectionItemIsSelected")
+            default: return ""
         }
-        aRect := this.GetBoundingRectangle()
-        if (yScreen >= aRect[2] && yScreen <= aRect[2]+aRect[4]) { ;y 已经匹配
-            ;NOTE CheckBox 有可能只获取到✅
-            if (this.CurrentControlType == UIA.ControlType.CheckBox && abs(aRect[3]-aRect[4])<=2)
-                res := xScreen >= aRect[1] && xScreen - aRect[1]+aRect[3] <= 100 ;放宽至100的范围
-            else
-                res := xScreen >= aRect[1] && xScreen <= aRect[1]+aRect[3]
-            return res
-        } else {
-            return false
+    }
+    ;简化执行【默认】的动作，其他动作该怎么调用就怎么调用
+    ;Button	el.GetCurrentPattern("Invoke").Invoke()
+    ;Edit	el.GetCurrentPattern("Value").SetValue(val)
+    ;TabItem等	el.GetCurrentPattern("SelectionItem").select()
+    do(p*) {
+        switch this.CurrentControlType {
+            case UIA.ControlType.Button: this.GetCurrentPattern("Invoke").Invoke()
+            case UIA.ControlType.Edit: this.GetCurrentPattern("Value").SetValue(p[1])
+            case UIA.ControlType.RadioButton, UIA.ControlType.CheckBox, UIA.ControlType.ComboBox:
+                oTG := this.GetCurrentPattern("toggle")
+                if (this.GetCurrentPropertyValue("ToggleToggleState") != p[1]) { ;oTG.CurrentToggleState 不稳定
+                    method := p.length>=2 ? p[2] : ""
+                    switch method {
+                        case "": oTG.Toggle()
+                        case "ClickByMouse": this.ClickByMouse(1)
+                        default: this.%method%() ;作为补充
+                    }
+                } else {
+                    OutputDebug(format("i#{1} {2}:{3} already checked", A_LineFile,A_LineNumber,A_ThisFunc))
+                }
+            case UIA.ControlType.ListItem, UIA.ControlType.TabItem, UIA.ControlType.TreeItem:
+                if (this.GetCurrentPropertyValue("SelectionItemIsSelected") != p[1]) {
+                    OutputDebug(format("i#{1} {2}:{3} method={4}", A_LineFile,A_LineNumber,A_ThisFunc,method))
+                    method := p.length>=2 ? p[2] : ""
+                    switch method {
+                        case "": this.GetCurrentPattern("SelectionItem").select()
+                        case "ClickByMouse": this.ClickByMouse(1)
+                        default: this.%method%() ;作为补充
+                    }
+                } else {
+                    OutputDebug(format("i#{1} {2}:{3} already checked", A_LineFile,A_LineNumber,A_ThisFunc))
+                }
+            default:
+                return false
         }
+        return true
     }
 
     ;等待 funTrue(el) = true
@@ -1444,8 +1493,8 @@ class IUIAutomationElement extends IUIABase {
         ;if (obj["ControlType"] == "ListItem")
         ;    obj["ZZ"] := this.getSiblingItems()
         obj["LocalizedControlType"] := this.CurrentLocalizedControlType
-        obj["BoundingRectangle"] := format("xm:{1} ym:{2} l:{3} t:{4} w:{5} h:{6}", aRect[1]+aRect[3]//2, aRect[2]+aRect[4]//2,aRect*)
-        obj["CurrentBoundingRectangle"] := format("l:{1} t:{2} r:{3} b:{4}", aRect[1], aRect[2], aRect[1]+aRect[3], aRect[2]+aRect[4])
+        obj["BoundingRectangle"] := format("xm:{1} ym:{2} r:{3} b:{4} [{5},{6},{7},{8}]", aRect[1]+aRect[3]//2, aRect[2]+aRect[4]//2, aRect[1]+aRect[3], aRect[2]+aRect[4], aRect*)
+        ;obj["CurrentBoundingRectangle"] := format("l:{1} t:{2} r:{3} b:{4}", aRect[1], aRect[2], aRect[1]+aRect[3], aRect[2]+aRect[4])
         obj["IsEnabled"] := this.CurrentIsEnabled
         obj["IsOffscreen"] := this.CurrentIsOffscreen
         obj["IsKeyboardFocusable"] := this.CurrentIsKeyboardFocusable
@@ -1548,8 +1597,8 @@ class IUIAutomationElement extends IUIABase {
         }
         obj["IsTransformPattern2Available"] := this.GetCurrentPropertyValue("IsTransformPattern2Available")
         if (obj["IsValuePatternAvailable"] := this.GetCurrentPropertyValue("IsValuePatternAvailable")) {
-            obj["ValueValue"] :=  this.GetCurrentPropertyValue("ValueValue")
-            obj["ValueIsReadOnly"] :=  this.GetCurrentPropertyValue("ValueIsReadOnly")
+            obj["ValueValue"] := this.GetCurrentPropertyValue("ValueValue")
+            obj["ValueIsReadOnly"] := this.GetCurrentPropertyValue("ValueIsReadOnly")
         }
         obj["IsVirtualizedItemPatternAvailable"] := this.GetCurrentPropertyValue("IsVirtualizedItemPatternAvailable")
         if (obj["IsWindowPatternAvailable"] := this.GetCurrentPropertyValue("IsWindowPatternAvailable")) {
@@ -3205,7 +3254,8 @@ class IUIAutomationTreeWalker extends IUIABase {
 class IUIAutomationValuePattern extends IUIABase {
     ; Sets the value of the element.
     ; The CurrentIsEnabled property must be TRUE, and the IUIAutomationValuePattern,,CurrentIsReadOnly property must be FALSE.
-    ;无效的用 SetValueEx 补充
+    ;NOTE 无效的用 SetValueEx 补充
+    ;TODO 补充实例
     SetValue(val) => comcall(3, this, "wstr",val)
 
     ; Retrieves the value of the element.

@@ -156,7 +156,7 @@ class _String {
     fnn2fn(ext:="") {
         return (ext=="") ? this : format("{1}.{2}",this,ext)
     }
-    dir2files(sFile:="*", opt:="RF", hasExt:=false) {
+    dir2files(sFile:="*", opt:="RF", withExt:=false) {
         dir := this
         arr := []
         l := strlen(dir)
@@ -164,7 +164,7 @@ class _String {
             if (A_LoopFileAttrib ~= "[HS]")
                 continue
             fpp := substr(A_LoopFileFullPath, l+2)
-            if (!hasExt)
+            if (!withExt)
                 fpp := RegExReplace(fpp, "\.\w+$")
             arr.push(fpp)
         }

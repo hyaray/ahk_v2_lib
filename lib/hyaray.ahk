@@ -1945,7 +1945,7 @@ hyf_selectByTooltip(arr2, showAll:=false) {
     ;自动根据 arrKey 转成 arr
     tipForSelect(res:="") {
         if (res != "") {
-            tooltip(res, 8, 8)
+            tooltip(res, 20, 20)
             return
         }
         sKeys := "".join(arrKey)
@@ -1978,7 +1978,7 @@ hyf_selectByTooltip(arr2, showAll:=false) {
             res .= format("{1}`t{2}`n", i,s)
         }
         ;msgbox(json.stringify(arr, 4))
-        tooltip(res, 8, 8)
+        tooltip(res, 20, 20)
         return arr
     }
 }
