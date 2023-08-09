@@ -94,6 +94,24 @@ class _CDP {
         FileCreateShortcut(arr[1], name.fnn2fp("lnk"),, format("{1}--remote-debugging-port={2}", url,arr[2]))
     }
 
+    ;pathname前面要带 /
+    static httpOpen(http, pathname:="", port:="") {
+        url := format("http://127.0.0.1:{1}/json{2}", port,pathname)
+        res := http.open('GET', url)
+        ;OutputDebug(format("i#{1} {2}:{3} open res={4}", A_LineFile,A_LineNumber,A_ThisFunc,res))
+        try {
+            resSend := http.send()
+        } catch {
+            OutputDebug(format("w#{1} {2}:{3} rebuild http", A_LineFile,A_LineNumber,A_ThisFunc))
+            tooltip("rebuild http",,, 9)
+            SetTimer(tooltip.bind(,,, 9), -1000)
+            http := ComObject('WinHttp.WinHttpRequest.5.1')
+            res := http.open('GET', url)
+            resSend := http.send()
+        }
+        return pathname=="" ? JSON.parse(http.responseText) : resSend
+    }
+
     __new(fp, DebugPort) {
         this.ChromePath := fp
         SplitPath(this.ChromePath, &fn)
@@ -154,9 +172,12 @@ class _CDP {
     tabOpenLink(arrUrl:="", funAfterDo:="", bActive:=true) { ;about:blank chrome://newtab
         ;OutputDebug(format("i#{1} {2}:A_ThisFunc={3}", A_LineFile,A_LineNumber,A_ThisFunc))
         if (arrUrl is string)
-            arrUrl := StrSplit(arrUrl , "`n", "`r")
-        if (arrUrl.length > 1)
+            arrUrl := StrSplit(trim(arrUrl,"`r`n"), "`n", "`r")
+        if (arrUrl.length > 1) {
+            if !(arrUrl[1] ~= "^http") ;NOTE 多行网址则必需为http开头
+                return
             bActive := false
+        }
         ;bActive := (A_Index==arrUrl.length) ? bActive : false ;只激活最后一个标签
         if (this.detect(1)) {
             if (arrUrl.length) {
@@ -165,6 +186,8 @@ class _CDP {
                 arrRes := []
                 for urlOpen in arrUrl { ;NOTE 判断页面是否已打开
                     urlOpen := rtrim(urlOpen, "/")
+                    if (urlOpen == "")
+                        continue
                     if (!instr(urlOpen, "://") && !(urlOpen ~= "^\w:\\"))
                         urlOpen := "http://" . urlOpen
                     arrRes.push(A_Index . urlOpen)
@@ -181,7 +204,7 @@ class _CDP {
                     OutputDebug(format("i#{1} {2}:this.arrEmpty={3}", A_LineFile,A_LineNumber,json.stringify(this.arrEmpty,4)))
                     ;打开标签
                     if (this.arrEmpty.length) ;优先在空白页打开
-                        this.getPage().navigate(urlOpen, bActive) ;CDPP(this, this.arrEmpty.pop()["webSocketDebuggerUrl"])
+                        this.getPage().navigate(urlOpen, bActive)
                     else ;新标签打开
                         this.httpOpen("/new?" . urlOpen) ;TODO 哪里有问题
                 }
@@ -337,8 +360,8 @@ class _CDP {
         ="" 则返回数组
         否则应设置为 jsonUrl 包含的 key，返回以 keyJson | "href" 为索引的 map(用来判断xx页面是否存在)
     */
-    getPageList(funTrue:="", keyJson:="") {
-        if (funTrue == "")
+    getPageList(funTrue:=unset, keyJson:="") {
+        if (!isset(funTrue))
             funTrue := (obj)=>obj["type"] == "page"
         arr := this.httpOpen()
         ;OutputDebug(format("i#{1} {2}:arr={3}", A_LineFile,A_LineNumber,json.stringify(arr,4)))
@@ -380,19 +403,7 @@ class _CDP {
     CliEscape(Param) => format('"{1}"', RegExReplace(Param, '(\\*)"', '$1$1\"'))
 
     ;pathname前面要带 /
-    httpOpen(pathname:="") {
-        res := this.http.open('GET', format("http://127.0.0.1:{1}/json{2}", this.DebugPort,pathname))
-        ;OutputDebug(format("i#{1} {2}:{3} open res={4}", A_LineFile,A_LineNumber,A_ThisFunc,res))
-        try {
-            resSend := this.http.send()
-        } catch {
-            OutputDebug(format("i#{1} {2}:{3} rebuild http", A_LineFile,A_LineNumber,A_ThisFunc))
-            this.http := ComObject('WinHttp.WinHttpRequest.5.1')
-            res := this.http.open('GET', format("http://127.0.0.1:{1}/json{2}", this.DebugPort,pathname))
-            resSend := this.http.send()
-        }
-        return pathname=="" ? JSON.parse(this.http.responseText) : resSend
-    }
+    httpOpen(pathname:="") => _CDP.httpOpen(this.http, pathname, this.DebugPort)
 
     ;closeNewtab(id:="") {
     ;    if (id == "") {
@@ -681,19 +692,7 @@ class _CDP {
         }
 
         ;pathname前面要带 /
-        httpOpen(pathname:="") {
-            res := this.http.open('GET', format("http://127.0.0.1:{1}/json{2}", this.DebugPort,pathname))
-            ;OutputDebug(format("i#{1} {2}:{3} open res={4}", A_LineFile,A_LineNumber,A_ThisFunc,res))
-            try {
-                resSend := this.http.send()
-            } catch {
-                OutputDebug(format("i#{1} {2}:{3} rebuild http", A_LineFile,A_LineNumber,A_ThisFunc))
-                this.http := ComObject('WinHttp.WinHttpRequest.5.1')
-                res := this.http.open('GET', format("http://127.0.0.1:{1}/json{2}", this.DebugPort,pathname))
-                resSend := this.http.send()
-            }
-            return pathname=="" ? JSON.parse(this.http.responseText) : resSend
-        }
+        httpOpen(pathname:="") => _CDP.httpOpen(this.http, pathname, this.DebugPort)
 
         saveIco() {
             if !this.HasProp("faviconUrl")

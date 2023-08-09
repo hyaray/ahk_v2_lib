@@ -66,6 +66,14 @@ class _Map extends map {
         return arr
     }
 
+    ;遍历 arr，看是否包含
+    hasEx(arr) {
+        for v in arr {
+            if this.has(v)
+                return v
+        }
+        return ""
+    }
     ;obj的值覆盖this
     coverByMap(obj) {
         for k, v in obj

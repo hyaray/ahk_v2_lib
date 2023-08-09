@@ -50,7 +50,7 @@ NOTE NOTE NOTE 思路：
                    el := elTab.FindControl("ListItem", ComValue(0xB,-1), "SelectionItemIsSelected")
             ②多次搜索控件：
                 1.先获取 elWin := UIA.ElementFromHandle(hwnd)
-                2.指定匹配条件 condition (NOTE CreatePropertyConditionEx 可以搭配 PropertyConditionFlags 实现部分匹配)
+                2.指定匹配条件 condition，NOTE 一般用 smartCondition 即可
                     单条件
                         控件类型
                             cond := UIA.CreatePropertyCondition("ControlType", "Button")
@@ -62,8 +62,7 @@ NOTE NOTE NOTE 思路：
                             cond := UIA.CreatePropertyCondition("AutomationId", "value")
                         boolean判断
                             cond := UIA.CreatePropertyCondition("SelectionItemIsSelected", ComValue(0xB,-1))) ;boolean(判断属性是否为boolean可用 ~= "Is[A-Z]") 需要转成 ComValue
-                     组合条件(And|Or)
-                     两个条件可用 And 组合
+                     两个条件可用 And|Or 组合
                          cond := UIA.CreateAndCondition(UIA.CreatePropertyCondition("ControlType", "Button"), UIA.CreatePropertyCondition("Name", "确定"))
                          cond := UIA.CreateOrCondition(UIA.CreatePropertyConditionEx("Name", "树"), UIA.CreatePropertyCondition("ValueValue", "树"))
                      更多条件
@@ -85,28 +84,12 @@ NOTE NOTE NOTE 思路：
             某元素的第N个儿子 GetFirst() 再 GetNext，可否优化 TODO
             某元素的所有子孙 FindAll(cond, 4=子孙|2=儿子)
     4.获取控件的属性(查看控件所有属性见 IUIAutomation_p，获取方法，见 IUIAutomationElement_vt)
-        常用属性 见 allProperty
-        获取 Tab 下所有 TabItem 名称
-            elTab.getTabItems()
-        获取 Table 下所有 数据 名称
-            elTable.getTableData()
-        获取 Tree 下所有 ListItem 名称
-            elListItem.getTreeDataByDataItem()
-        TODO 后期尽量用下面的通用方法代替
-            elItem.getSiblingItems()
+        获取所有属性 见 allProperty
+        控件的【默认获取】统一见 get() <2023-07-16 11:13:50>
+        TODO 后期完善 elItem.getSiblingItems()
     5.操作控件，见类 IUIAutomationPattern 上方相关说明，可操作列表见 IUIAutomationPattern_vt
-        激活控件
-            el.SetFocus()
-        Button/RadioButton/CheckBox/ComboBox/TabItem/ListItem/MenuItem
-            点击
-                el.GetCurrentPattern("Invoke").Invoke() TODO 经常会失败，用下面两个方式处理。MenuItem在_UBF.login()会卡死。
-                el.ClickByControl()
-                el.ClickByMouse()
-            切换选择(增加了先判断) 每个选择项都是个控件，需要先找到选项项的控件(比如 ComboBox 要先点击，才会出现 ListItem)
-                elCombobox.ComboboxSelectListItem(name) ; https://stackoverflow.com/questions/5814779/selecting-combobox-item-using-ui-automation
-                el.SetChecked(true)
-        修改文字
-            el.GetCurrentPattern("Value").SetValue("hello")
+        激活控件 el.SetFocus()
+        控件的【默认动作】统一见 do() <2023-07-16 11:13:50>
     6.遍历
         见 GetNext 上下文(一般用 FindAll)
     7.事件监听 TODO
@@ -440,23 +423,19 @@ class UIA {
         } until (A_TickCount >= endTime)
     }
 
-    ;arrFind 为 FindElement 所有参数
-    static FindAndSetChecked(hwnd, arrFind, bChecked, method:="") {
-        if (el := this.FindElement(hwnd, arrFind*)) {
-            el.SetChecked(bChecked, method)
-            return el
-        }
-    }
-
     ;FindElement 去除了hwnd，和 elWin.FindControl 一致
     ;参数可用数组解包使用，名称暂定 UIEP(UIE的Param)
-    static FindControl(ControlType:="", value:="", field:="Name", flag:=0, ms:=0, checkBound:=false) {
+    static FindControl(ControlType:="", value:=unset, field:="Name", flag:=0, ms:=0, scope:=4, checkBound:=false) {
         hwnd := WinGetID("A") ;不影响 LastFoundWindow
         bIsWindow := true
         if (ControlType is array)
             return this.ElementFromHandle(hwnd, bIsWindow).FindControls(ControlType)
         else
-            return this.ElementFromHandle(hwnd, bIsWindow).FindControl(ControlType, value, field, flag, ms, checkBound:=false)
+            return this.ElementFromHandle(hwnd, bIsWindow).FindControl(ControlType, value?, field, flag, ms, scope, checkBound)
+    }
+
+    static FindByBeside(arrFind, arrOffset:=30, value:=unset) {
+        return UIA.ElementFromHandle(WinActive("A"), true).FindByBeside(arrFind, arrOffset, value?)
     }
 
     ;简易场景：由 hwnd 获取的 elWin 仅查找一次
@@ -738,6 +717,25 @@ class UIA {
     ; Creates a cache request.
     ; After obtaining the IUIAutomationCacheRequest interface, use its methods to specify properties and control patterns to be cached when a UI Automation element is obtained.
     static CreateCacheRequest() => (comcall(20, this, "ptr*",&cacheRequest:=0), IUIAutomationCacheRequest(cacheRequest))
+
+    ;NOTE 一般用这个
+    static smartCondition(ControlType, value:=unset, field:="Name", flag:=0) {
+        if (ControlType is string) {
+            if (ControlType == "") { ;NOTE 非 Control(较少)
+                if (flag)
+                    return UIA.CreatePropertyConditionEx(UIA.property.%field%, value, flag)
+                else
+                    return UIA.CreatePropertyCondition(UIA.property.%field%, value)
+            }
+            ControlType := UIA.ControlType.%ControlType% ;转成数值
+        }
+        if (!isset(value))
+            return UIA.CreatePropertyCondition(30003, ControlType)
+        else if (flag)
+            return UIA.CreateAndCondition(UIA.CreatePropertyCondition(30003,ControlType), UIA.CreatePropertyConditionEx(UIA.property.%field%, value, flag))
+        else
+            return UIA.CreateAndCondition(UIA.CreatePropertyCondition(30003,ControlType), UIA.CreatePropertyCondition(UIA.property.%field%, value))
+    }
 
     ; Retrieves a predefined condition that selects all elements.
     static CreateTrueCondition() => (comcall(21, this, "ptr*",&newCondition:=0), IUIAutomationBoolCondition(newCondition))
@@ -1038,23 +1036,11 @@ class IUIAutomationElement extends IUIABase {
     flag == 2 则为包含value，而不是精确匹配
     参数可用数组解包 UIEP
     */
-    FindControl(ControlType, value, field:="Name", flag:=0, ms:=0, checkBound:=false) {
-        if (ControlType is string) {
-            if (ControlType == "") { ;NOTE 非 Control 比如obsidian的【警报】
-                cond := UIA.CreatePropertyCondition(UIA.property.%field%, value)
-            } else {
-                ControlType := UIA.ControlType.%ControlType%
-            }
-        }
-        if (!isset(cond)) {
-            if (flag)
-                cond := UIA.CreateAndCondition(UIA.CreatePropertyCondition(30003,ControlType), UIA.CreatePropertyConditionEx(UIA.property.%field%, value, flag))
-            else
-                cond := UIA.CreateAndCondition(UIA.CreatePropertyCondition(30003,ControlType), UIA.CreatePropertyCondition(UIA.property.%field%, value))
-        }
+    FindControl(ControlType, value:=unset, field:="Name", flag:=0, ms:=0, scope:=4, checkBound:=false) {
+        cond := UIA.smartCondition(ControlType, value?, field, flag)
         endtime := A_TickCount + ms
         loop {
-            el := this.FindFirst(cond,, checkBound)
+            el := this.FindFirst(cond, scope, checkBound)
             if (el)
                 return el
             if (A_TickCount > endtime)
@@ -1207,7 +1193,7 @@ class IUIAutomationElement extends IUIABase {
     ;arrFind 用于 FindControl 的所有参数
     ;elWin.FindByBeside(["Text", "名称"], [30,0])
     FindByBeside(arrFind, arrOffset:=30, value:=unset) {
-        if (type(arrFind) == "String")
+        if (arrFind is string)
             arrFind := ["Text", arrFind]
         if (!isobject(arrOffset))
             arrOffset := [arrOffset]
@@ -1217,10 +1203,11 @@ class IUIAutomationElement extends IUIABase {
         if (!elFocus)
             return
         if (isset(value)) {
+            OutputDebug(format("i#{1} {2}:{3} ControlType={4} val={5}", A_LineFile,A_LineNumber,A_ThisFunc,elFocus.GetControlType(),elFocus.GetCurrentPropertyValue("ValueValue")))
             if (isobject(value)) ;函数
-                elFocus.GetCurrentPattern("Value").SetValue(value(elFocus))
+                elFocus.do(value(elFocus))
             else
-                elFocus.GetCurrentPattern("Value").SetValue(value)
+                elFocus.do(value)
         }
         return elFocus
     }
@@ -1248,32 +1235,6 @@ class IUIAutomationElement extends IUIABase {
         }
         return el
     }
-    ;这个方法专门用在下拉框选择上：前面需要点击，后面需要确定选择
-    ComboboxSelectListItem(name) {
-        this.ClickByControl() ;NOTE 有时需要先点击才会出现列表(比如Excel的数据验证窗口)
-        sleep(100)
-        elListItem := this.FindControl("ListItem", name)
-        if (!elListItem)
-            throw ValueError(format('failed to find ListItem of "{1}"', name))
-        elListItem.GetCurrentPattern("SelectionItem").select()
-        send("{enter}") ;TODO 如何优化
-    }
-    ;UIEP 为 FindControl的所有参数
-    FindAndSetChecked(UIEP, bChecked, method:="") {
-        if (el := this.FindControl(UIEP*)) {
-            el.SetChecked(bChecked, method)
-            return el
-        }
-    }
-    ;FindsAndClick(["DataItem", arrName], -20)
-    FindsAndClick(arrParams, xOffset) {
-        if (!arrParams.length)
-            return []
-        arrEl := this.FindControls(arrParams)
-        for el in arrEl
-            el.ClickByMouse(true, xOffset)
-        return arrEl
-    }
     ;包含坐标，以下对 CheckBox 作了特殊处理 by 火冷 <2022-11-10 21:28:47>
     ContainXY(xScreen:=unset, yScreen:=unset, cm:=0) { ;cm 0=windows 1=screen
         if (!isset(xScreen)) {
@@ -1298,71 +1259,304 @@ class IUIAutomationElement extends IUIABase {
             return false
         }
     }
-    ;Edit SetValue 无效才使用，并支持点击(比如输入后，下拉框需要再次点击确认)
-    ;u9c 新建工作日历时用
-    SetValueEx(val, yOffset:=0, ms:=500) {
-        this.SetFocus()
-        send("{end}{shift down}{home}{shift up}")
-        SendText(val)
-        if (yOffset) { ;需要点击确认，如u9网页上
-            sleep(ms)
-            this.ClickByMouse(true,, yOffset)
-        }
-    }
-    ;NOTE NOTE NOTE method 一般用 ClickByControl ClickByMouse 备用
-    SetChecked(bChecked, method:="") {
-        switch this.CurrentControlType {
-            case UIA.ControlType.Button, UIA.ControlType.RadioButton, UIA.ControlType.CheckBox, UIA.ControlType.ComboBox:
-                oTG := this.GetCurrentPattern("toggle")
-                if (this.GetCurrentPropertyValue("ToggleToggleState") != bChecked) { ;(oTG.CurrentToggleState != bChecked)
-                    switch method {
-                        case "": oTG.Toggle()
-                        case "ClickByMouse": this.ClickByMouse(1)
-                        default: this.%method%() ;作为补充
-                    }
-                } else {
-                    OutputDebug(format("i#{1} {2}:{3} already checked", A_LineFile,A_LineNumber,A_ThisFunc))
-                }
-                return true
-            case UIA.ControlType.ListItem, UIA.ControlType.TabItem, UIA.ControlType.TreeItem:
-                if (this.GetCurrentPropertyValue("SelectionItemIsSelected") != bChecked) {
-                    OutputDebug(format("i#{1} {2}:{3} method={4}", A_LineFile,A_LineNumber,A_ThisFunc,method))
-                    switch method {
-                        case "": this.GetCurrentPattern("SelectionItem").select()
-                        case "ClickByMouse": this.ClickByMouse(1)
-                        default: this.%method%() ;作为补充
-                    }
-                } else {
-                    OutputDebug(format("i#{1} {2}:{3} already checked", A_LineFile,A_LineNumber,A_ThisFunc))
-                }
-                return true
-            default:
-                return false
-        }
-    }
+
     ;简化默认的获取
     ;一般是获取 value(name 用原生方式 CurrentName 获取)
-    get() {
+    get(p*) {
         switch this.CurrentControlType {
-            case UIA.ControlType.Edit: return this.GetCurrentPropertyValue("Value") ;TODO 是否放 default 下
+            case UIA.ControlType.Edit:
+                return this.GetCurrentPropertyValue("ValueValue") ;TODO 是否放 default 下
             case UIA.ControlType.RadioButton, UIA.ControlType.CheckBox, UIA.ControlType.ComboBox:
                 return this.GetCurrentPropertyValue("ToggleToggleState")
             case UIA.ControlType.ListItem, UIA.ControlType.TabItem, UIA.ControlType.TreeItem:
                 return this.GetCurrentPropertyValue("SelectionItemIsSelected")
+            case UIA.ControlType.Tab:
+                bName := p.length>=2 ? p[2] : true
+                switch p[1] {
+                    case ".": ;激活项
+                        cond := UIA.smartCondition("TabItem", ComValue(0xB,-1), "SelectionItemIsSelected")
+                        el := this.FindFirst(cond, 2)
+                        return bName ? el.CurrentName : el
+                    case 0: ;所有
+                        arr := []
+                        for el in this.FindAll(UIA.CreateTrueCondition(), 2)
+                            arr.push(bName ? el.CurrentName : el)
+                        return arr
+                    default: ;第n个
+                        for el in this.FindAll(UIA.CreateTrueCondition(), 2) {
+                            if (A_Index == p[1])
+                                return bName ? el.CurrentName : el
+                        }
+                }
+            case UIA.ControlType.TabItem:
+                if (p.length) ;获取所有兄弟
+                    return this.GetParent().get(p.length>=2?p[2]:true)
+                else
+                    return this.GetCurrentPropertyValue("SelectionItemIsSelected")
+            case UIA.ControlType.Tree: ;使用的场景不规范，不好转到 getSiblingItems
+                oRV := UIA.RawViewWalker()
+                elParent := this.GetParentEx()
+                if (this.GetCurrentPropertyValue("ValueValue")) {
+                    OutputDebug(format("i#{1} {2}:fun=value", A_LineFile,A_LineNumber))
+                    funGetValue := (el)=>el.GetCurrentPropertyValue("ValueValue")
+                } else {
+                    OutputDebug(format("i#{1} {2}:fun=GetFirst.value", A_LineFile,A_LineNumber))
+                    funGetValue := (el)=>el.GetFirst().GetCurrentPropertyValue("ValueValue")
+                }
+                elItem := oRV.GetFirstChildElement(oRV.GetLastChildElement(elParent))
+                arr := []
+                loop {
+                    arr.push(funGetValue(elItem))
+                    elItem := oRV.GetNextSiblingElement(elItem)
+                    if (!isobject(elItem))
+                        break
+                }
+                return arr
+            case UIA.ControlType.TreeItem: ;获取路径
+                oRV := UIA.RawViewWalker()
+                el := this
+                arr := []
+                while (el.CurrentControlType == UIA.ControlType.TreeItem) {
+                    arr.insertat(1, el.CurrentName)
+                    el := oRV.GetParentElement(el)
+                }
+                return arr
+            case UIA.ControlType.DataItem:
+                mode := p[1]
+                p.removeat(1)
+                switch mode, false {
+                    case "table":
+                        ;获取 elTable
+                        elTable := oRV.GetParentElement(this)
+                        tp := p.length>=(1) ? p[1] : 1
+                        loop(3) {
+                            if (elTable.CurrentControlType != UIA.ControlType.Table) {
+                                elTable := oRV.GetParentElement(elTable)
+                            } else {
+                                OutputDebug(format("i#{1} {2}:{3} found elTable", A_LineFile,A_LineNumber,A_ThisFunc))
+                                return elTable.get(p*)
+                            }
+                        }
+                    default:
+                }
+            case UIA.ControlType.Table:
+                return this.getTableData(p*) ;通过 elField 获取表格内容
             default: return ""
         }
+        getTableData(p*) {
+            tp := p.length>=1 ? p[1] : false ;0=obj 1=arrData 2=arrTable
+            toStr := p.length>=2 ? p[2] : false
+            oRV := UIA.RawViewWalker()
+            if (this.CurrentControlType != UIA.ControlType.Table) {
+                elTable := oRV.GetParentElement(this)
+                loop(3) {
+                    if (elTable.CurrentControlType != UIA.ControlType.Table) {
+                        elTable := oRV.GetParentElement(elTable)
+                    } else {
+                        OutputDebug(format("i#{1} {2}:{3} not found elTable", A_LineFile,A_LineNumber,A_ThisFunc))
+                        res := tp ? [] : map()
+                        return toStr ? res.toTable() : res
+                    }
+                }
+            } else {
+                elTable := this
+            }
+            ;获取标题(可能没有)
+            elHeader := oRV.GetFirstChildElement(elTable)
+            arrField := []
+            for el in elHeader.FindAll(UIA.CreateTrueCondition(), 2)
+                arrField.push(el.CurrentName)
+            OutputDebug(format("i#{1} {2}:{3} arrField={4}", A_LineFile,A_LineNumber,A_ThisFunc,json.stringify(arrField)))
+            ;获取数据
+            elBody := oRV.GetLastChildElement(elTable)
+            ;_UIADo.seeUIE(elBody)
+            elLine := oRV.GetFirstChildElement(elBody)
+            ;_UIADo.seeUIE(elLine)
+            ;NOTE 获取值的方法
+            elItem := oRV.GetFirstChildElement(elLine)
+            if (elItem.CurrentName ~= " row \d+$")
+                funGetValue := (el)=>el.GetCurrentPropertyValue("ValueValue")
+            else
+                funGetValue := (el)=>el.CurrentName
+            switch tp {
+                case 1:
+                    arr2 := []
+                case 2:
+                    arr2 := [arrField]
+            }
+            loop {
+                if (tp == 0) {
+                    obj := map()
+                    elItem := oRV.GetFirstChildElement(elLine)
+                    obj[arrField[1]] := arr.push(funGetValue(elItem))
+                    loop(arrField.length-1) {
+                        elItem := oRV.GetNextSiblingElement(elItem)
+                        obj[arrField[A_Index+1]] := funGetValue(elItem)
+                    }
+                    arr2.push(obj)
+                } else {
+                    arr := [] ;记录每行数据
+                    elItem := oRV.GetFirstChildElement(elLine)
+                    arr.push(funGetValue(elItem))
+                    loop(arrField.length-1) {
+                        elItem := oRV.GetNextSiblingElement(elItem)
+                        arr.push(funGetValue(elItem))
+                    }
+                    arr2.push(arr)
+                }
+                elLine := oRV.GetNextSiblingElement(elLine)
+                if (!isobject(elLine ))
+                    break
+            }
+            OutputDebug(format("i#{1} {2}:{3} arr2.toTable()={4}", A_LineFile,A_LineNumber,A_ThisFunc,arr2.toTable()))
+            return toStr ? arr2.toTable() : arr2
+        }
     }
+
+    ;从上2级获取特定元素的父级 TODO 待验证
+    ;TabItem→Tab
+    ;ListItem→List
+    ;*→Table
+    GetParentEx(bString:=false) {
+        oRV := UIA.RawViewWalker()
+        aRectThis := this.GetBoundingRectangle()
+        OutputDebug(format("i#{1} {2}:obj={3}", A_LineFile,A_LineNumber,json.stringify(aRectThis)))
+        elParent := oRV.GetParentElement(this)
+        loop(2) {
+            aRect := elParent.GetBoundingRectangle()
+            if (aRect[4] > aRectThis[4] * 2) { ;找到父元素
+                OutputDebug(format("d#{1} {2}: father={3} aRect={4}", A_LineFile,A_LineNumber,elParent.GetControlType(),json.stringify(aRect)))
+                return elParent
+            } else {
+                elParent := oRV.GetParentElement(elParent)
+            }
+        }
+    }
+
+    ;以当前元素获取兄弟元素
+    ;DataItem 不规范的不用此方法
+    getSiblingItems() {
+        oRV := UIA.RawViewWalker()
+        OutputDebug(format("i#{1} {2}:this={3}", A_LineFile,A_LineNumber,json.stringify(this.allProperty(),4)))
+        tpThis := this.GetControlType()
+        scope := 4
+        if (tpThis ~= "^(List|Tab)$") {
+            elParent := this
+            obj := map(
+                "List", "ListItem",
+                "Tab", "TabItem",
+            )
+            tpSon := obj[tpThis]
+            OutputDebug(format("i#{1} {2}:elParent=this tpSon={3} scope={4}", A_LineFile,A_LineNumber,tpSon,scope))
+        } else if (tpThis == "TreeItem") {
+            elParent := this.GetParent()
+            tpSon := "TreeItem"
+            scope := 2
+        } else {
+            elParent := this.GetParentEx()
+            tpSon := tpThis
+            scope := 2
+            OutputDebug(format("i#{1} {2}:elParent=GetParentEx tpSon={3} scope={4}", A_LineFile,A_LineNumber,tpSon,scope))
+        }
+        if (!isobject(elParent))
+            return
+        ;确定 funGetValue
+        if (this.GetCurrentPropertyValue("ValueValue") != "") {
+            OutputDebug(format("i#{1} {2}:funGetValue = value", A_LineFile,A_LineNumber))
+            funGetValue := (el)=>el.GetCurrentPropertyValue("ValueValue")
+        } else if (this.CurrentName != "") {
+            OutputDebug(format("i#{1} {2}:funGetValue = name", A_LineFile,A_LineNumber))
+            funGetValue := (el)=>el.CurrentName
+        } else {
+            OutputDebug(format("i#{1} {2}:funGetValue = find & value", A_LineFile,A_LineNumber))
+            funGetValue := (el)=>el.FindFirst(UIA.CreatePropertyCondition("ControlType", tpSon)).GetCurrentPropertyValue("ValueValue")
+        }
+        arr := []
+        if (1) {
+            for el in elParent.FindAll(UIA.CreatePropertyCondition("ControlType", tpSon), scope)
+                arr.push(funGetValue(el))
+        } else {
+            elItem := oRV.GetFirstChildElement(elParent) ;用这个还是 this
+            loop {
+                if (elItem.CurrentControlType == UIA.ControlType.ListItem)
+                    arr.push(funGetValue(elItem))
+                try
+                    elItem := oRV.GetNextSiblingElement(elItem)
+                catch
+                    break
+            }
+        }
+        return arr
+    }
+
     ;简化执行【默认】的动作，其他动作该怎么调用就怎么调用
     ;Button	el.GetCurrentPattern("Invoke").Invoke()
     ;Edit	el.GetCurrentPattern("Value").SetValue(val)
     ;TabItem等	el.GetCurrentPattern("SelectionItem").select()
     do(p*) {
         switch this.CurrentControlType {
-            case UIA.ControlType.Button: this.GetCurrentPattern("Invoke").Invoke()
-            case UIA.ControlType.Edit: this.GetCurrentPattern("Value").SetValue(p[1])
-            case UIA.ControlType.RadioButton, UIA.ControlType.CheckBox, UIA.ControlType.ComboBox:
-                oTG := this.GetCurrentPattern("toggle")
-                if (this.GetCurrentPropertyValue("ToggleToggleState") != p[1]) { ;oTG.CurrentToggleState 不稳定
+            case UIA.ControlType.Text:
+                elParent := this.GetParent()
+                switch elParent.CurrentControlType {
+                    case UIA.ControlType.ComboBox: ;下拉选项，比如NxCells的(填报模板|查询模板)选项
+                        elParent.do(p*)
+                    default:
+                }
+            case UIA.ControlType.Button:
+                this.GetCurrentPattern("Invoke").Invoke() ;TODO 经常会失败，或卡死，最好用 ClickByMouse|ClickByControl 补充。
+            case UIA.ControlType.Edit:
+                val := p[1]
+                if (p.length>=2) { ;TODO 待完善
+                    yOffset := (p.length>=2) ? p[2] : 0
+                    ms := (p.length>=3) ? p[3] : 500
+                    ;Edit SetValue 无效才使用，并支持点击(比如输入后，会出现下拉框，需要再次点击确认)
+                    ;u9c 新建工作日历时用
+                    this.SetFocus()
+                    send("{end}{shift down}{home}{shift up}")
+                    SendText(val)
+                    if (yOffset) { ;需要点击确认，如u9网页上
+                        sleep(ms)
+                        this.ClickByMouse(true,, yOffset)
+                    }
+                } else { ;普通方式
+                    this.GetCurrentPattern("Value").SetValue(val)
+                }
+            case UIA.ControlType.Tab: ;根据名称激活 TabItem
+                name := p[1]
+                for el in this.FindAll(UIA.CreateTrueCondition(), 2) {
+                    if (el.CurrentName == name) {
+                        el.do()
+                        return el
+                    }
+                }
+            case UIA.ControlType.ComboBox: ;TODO 可能和 RadioButton 同样的操作
+                ;这个方法专门用在下拉框选择上：前面需要点击，后面需要确定选择
+                ;3个参数分别是前 选择 后
+                ; https://stackoverflow.com/questions/5814779/selecting-combobox-item-using-ui-automation          
+                this.ClickByControl() ;NOTE 有时需要先点击才会出现列表(比如Excel的数据验证窗口)
+                sleep(100)
+                name := p[1]
+                elListItem := this.FindControl("ListItem", name)
+                if (!elListItem)
+                    throw ValueError(format('failed to find ListItem of "{1}"', name))
+                elListItem.do(1)
+                send("{enter}") ;TODO 如何优化
+            case UIA.ControlType.RadioButton, UIA.ControlType.CheckBox:
+                if (!this.GetCurrentPropertyValue("IsTogglePatternAvailable")) { ;部分 RadioButton 比如FreeFileSync安装包不支持
+                    if (this.GetCurrentPropertyValue("SelectionItemIsSelected") != p[1]) {
+                        method := p.length>=2 ? p[2] : ""
+                        switch method {
+                            case "": this.GetCurrentPattern("SelectionItem").select()
+                            case "ClickByMouse": this.ClickByMouse(1)
+                            default: this.%method%() ;作为补充
+                        }
+                    }
+                    return
+                }
+                oTG := this.GetCurrentPattern("Toggle")
+                ;先判断
+                ;oTG.CurrentToggleState 不稳定
+                if (this.GetCurrentPropertyValue("ToggleToggleState") != p[1]) {
                     method := p.length>=2 ? p[2] : ""
                     switch method {
                         case "": oTG.Toggle()
@@ -1370,11 +1564,12 @@ class IUIAutomationElement extends IUIABase {
                         default: this.%method%() ;作为补充
                     }
                 } else {
-                    OutputDebug(format("i#{1} {2}:{3} already checked", A_LineFile,A_LineNumber,A_ThisFunc))
+                    OutputDebug(format("i#{1} {2}:{3} {4} already checked", A_LineFile,A_LineNumber,A_ThisFunc,this.CurrentName))
                 }
+            case UIA.ControlType.Tree:
+                this.selectByPath(p*)
             case UIA.ControlType.ListItem, UIA.ControlType.TabItem, UIA.ControlType.TreeItem:
                 if (this.GetCurrentPropertyValue("SelectionItemIsSelected") != p[1]) {
-                    OutputDebug(format("i#{1} {2}:{3} method={4}", A_LineFile,A_LineNumber,A_ThisFunc,method))
                     method := p.length>=2 ? p[2] : ""
                     switch method {
                         case "": this.GetCurrentPattern("SelectionItem").select()
@@ -1382,12 +1577,40 @@ class IUIAutomationElement extends IUIABase {
                         default: this.%method%() ;作为补充
                     }
                 } else {
-                    OutputDebug(format("i#{1} {2}:{3} already checked", A_LineFile,A_LineNumber,A_ThisFunc))
+                    OutputDebug(format("i#{1} {2}:{3} {4} already checked", A_LineFile,A_LineNumber,A_ThisFunc,this.CurrentName))
+                }
+                ;扩展(仅限TreeItem)
+                if (p.length >=3 && this.GetCurrentPropertyValue("IsExpandCollapsePatternAvailable")) {
+                    sleep(200)
+                    OutputDebug(format("i#{1} {2}:{3} {4} Expand", A_LineFile,A_LineNumber,A_ThisFunc,this.CurrentName))
+                    this.GetCurrentPattern("ExpandCollapse").Expand()
                 }
             default:
                 return false
         }
         return true
+    }
+
+    ;Edit 的方法已集成到 do，其他类型的才用此方法
+    ;SetValueEx(val, yOffset:=0, ms:=500) {
+    ;    this.SetFocus()
+    ;    send("{end}{shift down}{home}{shift up}")
+    ;    SendText(val)
+    ;    if (yOffset) { ;需要点击确认，如u9网页上
+    ;        sleep(ms)
+    ;        this.ClickByMouse(true,, yOffset)
+    ;    }
+    ;}
+
+    ;批量搜索元素并点击，比如批量根据文本✅
+    ;FindsAndClick(["DataItem", arrName], -20)
+    FindsAndClick(arrParams, xOffset) {
+        if (!arrParams.length)
+            return []
+        arrEl := this.FindControls(arrParams)
+        for el in arrEl
+            el.ClickByMouse(true, xOffset)
+        return arrEl
     }
 
     ;等待 funTrue(el) = true
@@ -1681,123 +1904,30 @@ class IUIAutomationElement extends IUIABase {
         }
     }
 
-    ;从上2级获取特定元素的父级 TODO 待验证
-    ;TabItem→Tab
-    ;ListItem→List
-    ;*→Table
-    getFather(bString:=false) {
-        oRV := UIA.RawViewWalker()
-        aRectThis := this.GetBoundingRectangle()
-        OutputDebug(format("i#{1} {2}:obj={3}", A_LineFile,A_LineNumber,json.stringify(aRectThis)))
-        elParent := oRV.GetParentElement(this)
-        loop(2) {
-            aRect := elParent.GetBoundingRectangle()
-            if (aRect[4] > aRectThis[4] * 2) { ;找到父元素
-                OutputDebug(format("d#{1} {2}: father={3} aRect={4}", A_LineFile,A_LineNumber,elParent.GetControlType(),json.stringify(aRect)))
-                return elParent
-            } else {
-                elParent := oRV.GetParentElement(elParent)
-            }
-        }
-    }
-
-    ;仅限 TreeItem
-    getPath() {
-        oRV := UIA.RawViewWalker()
-        el := this
-        arr := []
-        while (el.CurrentControlType == UIA.ControlType.TreeItem) {
-            arr.push(el.CurrentName)
-            el := oRV.GetParentElement(el)
-        }
-        ;UIA.el := el ;NOTE 临时记录当前 Tree 节点
-        return arr.reverse()
-    }
-
     ;用于 Tree
     selectByPath(arr, method:="") {
         oRV := UIA.RawViewWalker()
         el := this
-        el.SetChecked(true, method)
         for val in arr {
             OutputDebug(format("i#{1} {2}:{3} val={4}", A_LineFile,A_LineNumber,A_ThisFunc,val))
             cond := UIA.CreateAndCondition(UIA.CreatePropertyCondition("ControlType","TreeItem"), UIA.CreatePropertyCondition("Name", val))
-            if (1) {
+            if (A_Index == 1 && val == "*") { ;第1项名称可能是计算机名等，可用*代替
+                el := el.FindControl("TreeItem")
+            } else if (method == "") {
                 el := el.FindFirst(cond, 2)
             } else {
                 el := el.FindFirst(cond, 2, true)
                 if (!el)
                     el := oRV.GetFirstChildElement(el).selectSiblingItems(val)
             }
-            ;选中
-            if (!el.GetCurrentPropertyValue("SelectionItemIsSelected")) {
-                el.GetCurrentPattern("SelectionItem").select()
-                sleep(200)
+            if (!isobject(el)) {
+                msgbox("没找到 TreeItem`n" . val)
+                exit
             }
-            ;扩展
-            if (el.GetCurrentPropertyValue("IsExpandCollapsePatternAvailable")) {
-                OutputDebug(format("i#{1} {2}:{3} Expand", A_LineFile,A_LineNumber,A_ThisFunc))
-                el.GetCurrentPattern("ExpandCollapse").Expand()
-            }
+            el.do(true, "", true)
             sleep(100)
         }
         return el
-    }
-
-    ;以当前元素获取兄弟元素
-    ;DataItem 不规范的不用此方法
-    getSiblingItems() {
-        oRV := UIA.RawViewWalker()
-        OutputDebug(format("i#{1} {2}:this={3}", A_LineFile,A_LineNumber,json.stringify(this.allProperty(),4)))
-        tpThis := this.GetControlType()
-        scope := 4
-        if (tpThis ~= "^(List|Tab)$") {
-            elParent := this
-            obj := map(
-                "List", "ListItem",
-                "Tab", "TabItem",
-            )
-            tpSon := obj[tpThis]
-            OutputDebug(format("i#{1} {2}:elParent=this tpSon={3} scope={4}", A_LineFile,A_LineNumber,tpSon,scope))
-        } else if (tpThis == "TreeItem") {
-            elParent := this.GetParent()
-            tpSon := "TreeItem"
-            scope := 2
-        } else {
-            elParent := this.getFather()
-            tpSon := tpThis
-            scope := 2
-            OutputDebug(format("i#{1} {2}:elParent=getFather tpSon={3} scope={4}", A_LineFile,A_LineNumber,tpSon,scope))
-        }
-        if (!isobject(elParent))
-            return
-        ;确定 funGetValue
-        if (this.GetCurrentPropertyValue("ValueValue") != "") {
-            OutputDebug(format("i#{1} {2}:funGetValue = value", A_LineFile,A_LineNumber))
-            funGetValue := (el)=>el.GetCurrentPropertyValue("ValueValue")
-        } else if (this.CurrentName != "") {
-            OutputDebug(format("i#{1} {2}:funGetValue = name", A_LineFile,A_LineNumber))
-            funGetValue := (el)=>el.CurrentName
-        } else {
-            OutputDebug(format("i#{1} {2}:funGetValue = find & value", A_LineFile,A_LineNumber))
-            funGetValue := (el)=>el.FindFirst(UIA.CreatePropertyCondition("ControlType", tpSon)).GetCurrentPropertyValue("ValueValue")
-        }
-        arr := []
-        if (1) {
-            for el in elParent.FindAll(UIA.CreatePropertyCondition("ControlType", tpSon), scope)
-                arr.push(funGetValue(el))
-        } else {
-            elItem := oRV.GetFirstChildElement(elParent) ;用这个还是 this
-            loop {
-                if (elItem.CurrentControlType == UIA.ControlType.ListItem)
-                    arr.push(funGetValue(elItem))
-                try
-                    elItem := oRV.GetNextSiblingElement(elItem)
-                catch
-                    break
-            }
-        }
-        return arr
     }
 
     ;NOTE 只能往后找
@@ -1810,12 +1940,12 @@ class IUIAutomationElement extends IUIABase {
                 ;msgbox(this.CurrentName . "`n" . elParent.CurrentName . "`n" . text)
                 el := elParent.FindControl(tpThis, text)
                 if (el) {
-                    el.SetChecked(true)
+                    el.do(true)
                 } else {
                     el := this
                     loop {
                         if (el.CurrentName == text) {
-                            el.SetChecked(true)
+                            el.do(true)
                             return true
                         } else {
                             el := oRV.GetNextSiblingElement(el)
@@ -1823,123 +1953,6 @@ class IUIAutomationElement extends IUIABase {
                     }
                 }
         }
-    }
-
-    getTabItems(bName:=true) {
-        ;获取 elTab
-        if (this.CurrentControlType == UIA.ControlType.Tab)
-            elTab := this
-        else if (this.CurrentControlType == UIA.ControlType.TabItem)
-            elTab := this.GetParent()
-        arr := []
-        for el in elTab.FindAll(UIA.CreateTrueCondition(), 2)
-            arr.push(bName ? el.CurrentName : el)
-        return arr
-    }
-
-    focusTabItem(name) {
-        ;获取 elTab
-        if (this.CurrentControlType == UIA.ControlType.Tab)
-            elTab := this
-        else if (this.CurrentControlType == UIA.ControlType.TabItem)
-            elTab := this.GetParent()
-        for el in elTab.FindAll(UIA.CreateTrueCondition(), 2) {
-            if (el.CurrentName == name) {
-                el.GetCurrentPattern("SelectionItem").select()
-                return el
-            }
-        }
-    }
-
-    ;使用的场景不规范，不好转到 getSiblingItems
-    getTreeDataByDataItem() {
-        oRV := UIA.RawViewWalker()
-        elParent := this.getFather()
-        if (this.GetCurrentPropertyValue("ValueValue")) {
-            OutputDebug(format("i#{1} {2}:fun=value", A_LineFile,A_LineNumber))
-            funGetValue := (el)=>el.GetCurrentPropertyValue("ValueValue")
-        } else {
-            OutputDebug(format("i#{1} {2}:fun=GetFirst.value", A_LineFile,A_LineNumber))
-            funGetValue := (el)=>el.GetFirst().GetCurrentPropertyValue("ValueValue")
-        }
-        elItem := oRV.GetFirstChildElement(oRV.GetLastChildElement(elParent))
-        arr := []
-        loop {
-            arr.push(funGetValue(elItem))
-            elItem := oRV.GetNextSiblingElement(elItem)
-            if (!isobject(elItem))
-                break
-        }
-        return arr
-    }
-
-    ;通过 elField 获取表格内容
-    ;tp 0=obj 1=arrData 2=arrTable
-    getTableData(tp:=false, toStr:=false) {
-        oRV := UIA.RawViewWalker()
-        if (this.CurrentControlType != UIA.ControlType.Table) {
-            elTable := oRV.GetParentElement(this)
-            loop(3) {
-                if (elTable.CurrentControlType != UIA.ControlType.Table) {
-                    elTable := oRV.GetParentElement(elTable)
-                } else {
-                    OutputDebug(format("i#{1} {2}:{3} not found elTable", A_LineFile,A_LineNumber,A_ThisFunc))
-                    res := tp ? [] : map()
-                    return toStr ? res.toTable() : res
-                }
-            }
-        } else {
-            elTable := this
-        }
-        ;获取标题(可能没有)
-        elHeader := oRV.GetFirstChildElement(elTable)
-        arrField := []
-        for el in elHeader.FindAll(UIA.CreateTrueCondition(), 2)
-            arrField.push(el.CurrentName)
-        OutputDebug(format("i#{1} {2}:{3} arrField={4}", A_LineFile,A_LineNumber,A_ThisFunc,json.stringify(arrField)))
-        ;获取数据
-        elBody := oRV.GetLastChildElement(elTable)
-        ;_UIADo.seeUIE(elBody)
-        elLine := oRV.GetFirstChildElement(elBody)
-        ;_UIADo.seeUIE(elLine)
-        ;NOTE 获取值的方法
-        elItem := oRV.GetFirstChildElement(elLine)
-        if (elItem.CurrentName ~= " row \d+$")
-            funGetValue := (el)=>el.GetCurrentPropertyValue("ValueValue")
-        else
-            funGetValue := (el)=>el.CurrentName
-        switch tp {
-            case 1:
-                arr2 := []
-            case 2:
-                arr2 := [arrField]
-        }
-        loop {
-            if (tp == 0) {
-                obj := map()
-                elItem := oRV.GetFirstChildElement(elLine)
-                obj[arrField[1]] := arr.push(funGetValue(elItem))
-                loop(arrField.length-1) {
-                    elItem := oRV.GetNextSiblingElement(elItem)
-                    obj[arrField[A_Index+1]] := funGetValue(elItem)
-                }
-                arr2.push(obj)
-            } else {
-                arr := [] ;记录每行数据
-                elItem := oRV.GetFirstChildElement(elLine)
-                arr.push(funGetValue(elItem))
-                loop(arrField.length-1) {
-                    elItem := oRV.GetNextSiblingElement(elItem)
-                    arr.push(funGetValue(elItem))
-                }
-                arr2.push(arr)
-            }
-            elLine := oRV.GetNextSiblingElement(elLine)
-            if (!isobject(elLine ))
-                break
-        }
-        OutputDebug(format("i#{1} {2}:{3} arr2.toTable()={4}", A_LineFile,A_LineNumber,A_ThisFunc,arr2.toTable()))
-        return toStr ? arr2.toTable() : arr2
     }
 
     ;TODO 待完善
@@ -1973,6 +1986,19 @@ class IUIAutomationElement extends IUIABase {
                 OutputDebug(format("i#{1} {2}:{3} continue of el.width=0", A_LineFile,A_LineNumber,A_ThisFunc))
         }
         ;throw TargetError("Target element not found.")
+    }
+
+    FindWait(condition, ms:=0, scope:=4, checkBound:=false) {
+        comcall(5, this, "int",scope, "ptr",condition, "ptr*",&found:=0)
+        endTime := A_TickCount + ms
+        loop {
+            if (found) {
+                el := IUIAutomationElement(found)
+                if (!checkBound || el.GetBoundingRectangle()[3]) ;过滤没有宽度的元素(有些 TreeItem 看不到)
+                    return el
+            }
+            sleep(200)
+        } until (A_TickCount >= endTime)
     }
 
     ; Returns all UI Automation elements that satisfy the specified condition.
@@ -3254,7 +3280,7 @@ class IUIAutomationTreeWalker extends IUIABase {
 class IUIAutomationValuePattern extends IUIABase {
     ; Sets the value of the element.
     ; The CurrentIsEnabled property must be TRUE, and the IUIAutomationValuePattern,,CurrentIsReadOnly property must be FALSE.
-    ;NOTE 无效的用 SetValueEx 补充
+    ;NOTE 无效的见 do 补充
     ;TODO 补充实例
     SetValue(val) => comcall(3, this, "wstr",val)
 

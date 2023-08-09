@@ -14,6 +14,9 @@ class _Number {
     highParam() => this >> 16
     lowParam() => this & 0xffff
 
+    ;hwnd 对应窗口是否弹框
+    isDialog() => this & 0x80000000 && this & 0x10000000
+
     ;超过numA用 A-Z
     ;逆向见 _String.toNum(10)
     toABCD(numA:=10) {

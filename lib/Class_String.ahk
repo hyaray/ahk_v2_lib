@@ -1430,7 +1430,7 @@ class _String {
         return char0.join(arrMain)
     }
 
-    isFunc() => this ~= "^(ObjBindMethod|Closure|BoundFunc|Func)$" ;专门用于 type
+    ;isFunc() => this ~= "^(ObjBindMethod|Closure|BoundFunc|Func)$" ;和 type搭配，用 is func 代替
     isZh() => (this ~= "^[\x{4E00}-\x{9FA5}]") ;是否中文
     isabs() => (this ~= "i)^[a-z]:[\\/]") ;判断字符串是否为路径格式
 

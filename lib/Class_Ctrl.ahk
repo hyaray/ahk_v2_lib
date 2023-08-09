@@ -213,7 +213,7 @@ class _ListBox extends _Ctrl {
         ; msgbox(this.ctl . "`n" . this.hwnd)
     }
 
-    GetCount() => SendMessage(0x18B,,,, this.hCtl) + 1 ;LB_GETCOUNT
+    GetCount() => SendMessage(0x18B,,,, this.hCtl) ;LB_GETCOUNT
 
     ;第1项为 1
     getSelectedIndex() => SendMessage(0x188,,,, this.hCtl)+1 ;LB_GETCURSEL
@@ -265,7 +265,6 @@ class _ListBox extends _Ctrl {
             ControlChooseIndex(idx, this.ctl, this.hwnd) ;选中项可能显示在末行
     }
 
-    ;elCombobox.ComboboxSelectListItem(ComValue(0xB,-1))
     selectByText(fun) {
         ;if (fun is string)
         ;    fun := (p)=>(p==fun)

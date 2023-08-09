@@ -249,12 +249,15 @@ class _Mouse {
         }
     }
 
-    static waitCursor(tp:="wait") {
-        while(A_Cursor = tp) {
-            sleep(100)
-            tooltip("等待鼠标形状`n" . tp)
+    static waitCursorByFun(fun, ms:=10000) {
+        endtime := A_TickCount + ms
+        loop {
+            CaretGetPos(&x, &y)
+            if (fun(x,y))
+                return true
+            if (A_TickCount > endtime)
+                return 0
         }
-        tooltip()
     }
 
     ;window坐标转screen坐标

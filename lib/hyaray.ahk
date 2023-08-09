@@ -218,23 +218,23 @@ hyf_getSelect(bVimNormal:=false, bInput:=false) {
         }
     }
     ;暂时应用是选中多个标题名
-    rng2str(rng, charCol:="`t", funcObj:="") {
+    rng2str(rng, charCol:="`t") {
         if (rng.cells.count == 1)
             return rng.text
         res := ""
-        if (!isobject(funcObj))
-            funcObj := x=>x
         arrV := rng.value
-        loop(rng.rows.count) {
+        rs := arrV.MaxIndex(1)
+        cs := arrV.MaxIndex(2)
+        loop(rs) {
             r := A_Index
-            loop(rng.columns.count) {
-                try
-                    res .= funcObj(delete0(arrV[r,A_Index])) . charCol
-                catch
-                    msgbox(r . "`n" . A_Index)
-            }
-            res := rtrim(res,charCol) . "`r`n"
+            ;if (mod(r,1000)==0)
+            ;    tooltip(r)
+            res .= delete0(arrV[r,1]) . charCol
+            loop(cs-1)
+                res .= delete0(arrV[r,A_Index+1])
+            res .= "`r`n"
         }
+        ;tooltip
         return rtrim(res, "`r`n")
         delete0(num) {
             if (num ~= "^-?\d+\.\d+$") {
@@ -402,15 +402,12 @@ msgbox(json.stringify(objOpt, 4))
 ;arr的子数组
 ;1.提示文字
 ;2.变量名
-;   ①n|则强制为数字
-;   ②b|则为是否的 Checkbox
-;   ②2|则设置为多行Edit(添加选项 r2)
 ;3.默认值
 ;   数组，则为 AddComboBox
 ;4.opt
-;   n 数字
-;   b 是否
-;   1-9 AddComboBox的默认项序号
+;   "n" 数字(输入时限制，返回为数字)
+;   "b" 是否的 Checkbox
+;   2 多行Edit|ComboBox的默认项
 ;bOne 表示限制单结果，则会在 Edit内容改变时，清空其他控件
 ;关闭则返回map()
 ;NOTE 自动过滤空值，数字返回的是字符串
@@ -510,8 +507,12 @@ hyf_inputOption(arr, title:="", bTrim:=false, bOne:=false) {
             if (bTrim && v is string)
                 v := trim(v) ;TODO 是否trim(比如每行前加"- "转成无序列表)
             ;记录
-            if (v != "") ;过滤空值
-                objRes[a[2]] :=  v
+            if (v != "") { ;过滤空值
+                if (a.length >=4 && a[4]=="n")
+                    objRes[a[2]] := number(v)
+                else
+                    objRes[a[2]] :=  v
+            }
         }
         ctl.gui.destroy()
     }
@@ -562,9 +563,11 @@ hyf_runByIE(url:="") { ;关闭当前窗口
     WinWaitActive("ahk_class IEFrame")
 }
 
-;arrNoExt 从后向前找第一个匹配的文件路径
-;如果是文件夹，找不到就返回空，如果是文件，找不到就返回文件路径
-hyf_findFile(dirIn, arrNoExt, ext:="") {
+;arrFnn 从后向前找第一个匹配的文件路径
+;dirIn
+;   是文件夹，找不到就返回""
+;   是文件，找不到就返回 dirIn
+hyf_findFile(dirIn, arrFnn, ext:="*") {
     if (DirExist(dirIn)) {
         dir := dirIn
         ;OutputDebug(format("i#{1} {2}:dir={3}", A_LineFile,A_LineNumber,dir))
@@ -573,36 +576,33 @@ hyf_findFile(dirIn, arrNoExt, ext:="") {
         SplitPath(dirIn,, &dir)
         res := dirIn
     }
-    ;msgbox(FileExist(dirIn) . "`n" . dir . "`n" . dirIn)
-    if (ext == "") ;FIXME
-        return res
-    if (!isobject(arrNoExt))
-        arrNoExt := [arrNoExt]
-    loop(arrNoExt.length) {
-        fp := findPath(arrNoExt[-A_Index]) ;NOTE 从后向前遍历
+    if (arrFnn is string)
+        arrFnn := [arrFnn]
+    loop(arrFnn.length) {
+        fp := findPath(arrFnn[-A_Index]) ;NOTE 从后向前遍历
         if (fp != "") {
             ;OutputDebug(format("i#{1} {2}:found 【{3}】", A_LineFile,A_LineNumber,fp))
             return fp
         } else {
-            ;OutputDebug(format("i#{1} {2}:not found 【{4}】in dir={3}", A_LineFile,A_LineNumber,dir, arrNoExt[-A_Index]))
+            ;OutputDebug(format("i#{1} {2}:not found 【{4}】in dir={3}", A_LineFile,A_LineNumber,dir, arrFnn[-A_Index]))
         }
     }
     return res
-    findPath(noExt) {
-        ;先在子文件夹中找？
+    findPath(fnn) {
+        ;先在子文件夹中找
         loop files, format("{1}\*", dir), "DR" { ;明确的文件名，则只遍历文件夹，NOTE 不能有多文件
-            if (ext == "*") {
-                loop files, format("{1}\{2}.{3}", A_LoopFileFullPath,noExt,ext) ;明确的文件名，则只遍历文件夹，NOTE 不能有多文件
+            if (ext == "*") { ;较少
+                loop files, format("{1}\{2}.{3}", A_LoopFileFullPath,fnn,ext)
                     return A_LoopFileFullPath
             } else {
-                fp := format("{1}\{2}.{3}", A_LoopFileFullPath,noExt,ext)
+                fp := format("{1}\{2}.{3}", A_LoopFileFullPath,fnn,ext)
                 if (FileExist(fp))
                     return fp
             }
         }
         ;在主目录中找
-        if (FileExist(format("{1}\{2}.{3}", dir,noExt,ext)))
-            return format("{1}\{2}.{3}", dir,noExt,ext)
+        if (FileExist(format("{1}\{2}.{3}", dir,fnn,ext)))
+            return format("{1}\{2}.{3}", dir,fnn,ext)
     }
 }
 
@@ -976,14 +976,30 @@ hyf_hwnds(winTitle, funHwnd:=unset) {
     return arr
 }
 
-hyf_showWin(winTitle) {
-    hwnd := WinExist(winTitle)
-    obj := map(
-        "title", WinGetTitle(),
-        "class", WinGetClass(),
-        "hwnd", hwnd,
-    )
-    return obj
+hyf_showExe(exeName, funHwnd:=unset) {
+    if (exeName is integer) { ;pid
+        winTitle := "ahk_pid " . string(exeName)
+        exeName := WinGetProcessName(winTitle)
+    } else {
+        winTitle := "ahk_exe " . exeName
+    }
+    arr2 := []
+    arrId := hyf_hwnds(winTitle, funHwnd?)
+    for v in arrId
+        arr2.push([v,WinGetTitle(v),WinGetClass(v),format("0x{:08X}", format("0x{:08X}", WinGetStyle(v)))])
+    ;return arr2
+    hyf_GuiListView(arr2, ["hwnd","title","class","style"], exeName)
+}
+
+;遍历控件
+hyf_ctls(hwnd) {
+    arr2 := []
+    WinExist(hwnd)
+    exeName := WinGetProcessName()
+    for ctlName in WinGetControls() ;名称
+        arr2.push([ctlName, ControlGetHwnd(ctlName), ControlGetText(ctlName)])
+    ;return arr2
+    hyf_GuiListView(arr2, ["name","id","text"], exeName)
 }
 
 ;获取单个窗口的pid用 WinGetPID 或 ProcessExist
@@ -1091,16 +1107,49 @@ hyf_removeUSB(bUPan:=true) { ;移除U盘
 
 ;run帮助增加了数组的支持(TODO 哪里不完善？)
 ;批量执行cmd并一次性返回结果
-hyf_run(sCmd) {
-    if (sCmd is array)
-        sCmd := "`n".join(sCmd)
-    shell := ComObject("WScript.Shell")
-    ; 打开 cmd.exe 禁用命令回显
-    exec := shell.Exec(A_ComSpec " /Q /K echo off")
-    ; 发送并执行命令, 使用新行分隔
-    exec.StdIn.WriteLine(sCmd "`nexit")  ; 总是在最后退出!
-    ; 读取并返回所有命令的输出
-    return exec.StdOut.ReadAll()
+;hyf_run(sCmd) {
+;    if (sCmd is array)
+;        sCmd := "`n".join(sCmd)
+;    shell := ComObject("WScript.Shell")
+;    ; 打开 cmd.exe 禁用命令回显
+;    exec := shell.Exec(A_ComSpec " /Q /K echo off")
+;    ; 发送并执行命令, 使用新行分隔
+;    exec.StdIn.WriteLine(sCmd "`nexit")  ; 总是在最后退出!
+;    ; 读取并返回所有命令的输出
+;    return exec.StdOut.ReadAll()
+;}
+
+;不是路径，不用 ProcessExist 判断
+;已打开则激活
+runEx(var, winTitle) {
+    if (hwnd := WinExist(winTitle)) {
+        WinActivate
+    } else {
+        (var is string) ? run(var) : var()
+        hwnd := WinWaitActive(winTitle)
+    }
+    return hwnd
+}
+
+;smartWin 简易版
+hyf_win(fp, winTitle) {
+    SplitPath(fp, &fn)
+    if (!ProcessExist(fn)) {
+        try
+            run(fp)
+        catch
+            return
+        else
+            hwnd := WinWait(winTitle)
+        WinActivate
+    } else if (hwnd := WinActive(winTitle)) {
+        WinHide
+    } else {
+        WinShow(winTitle)
+        WinActivate(winTitle)
+        hwnd := WinActive("A")
+    }
+    return hwnd
 }
 
 ;NOTE 实现从其他脚本比如 python 获取结果
@@ -1403,8 +1452,8 @@ hyf_getWorkbook(fp, bActive:=false) {
         xl := ox(hwnd)
         try { ;可能是进程残留
             for wb in xl.workbooks {
-                SplitPath(wb.name,,,, &noExt)
-                if (wb.name = fn || noExt = fn) { ;为什么要 noExt？
+                SplitPath(wb.name,,,, &fnn)
+                if (wb.name = fn || fnn = fn) { ;为什么要 fnn？
                     if (bActive)
                         WinActivate(hwnd)
                     return wb
@@ -1634,12 +1683,16 @@ hyf_selectSingle(arr, title:="") {
 ;defButton是默认按钮前面的text内容
 ;仅支持选择，不支持搜索，不支持输入
 ;返回二维数组(因为支持多选)
-hyf_GuiListView(arr2, arrCol:="", title:="", arrWidth:=unset) {
+;arrCol
+;   1 从arr2第1项获取
+;   0 从arr2第1项生成1-n作为标题
+;   arr 直接用
+hyf_GuiListView(arr2, arrCol:=0, title:="", arrWidth:=unset) {
     if (!isobject(arr2))
         return
     if (!arr2.length)
         return
-    if (arr2.length == 1) {
+    if (arr2.length == 1) { ;NOTE 仅一项则直接弹框
         hyf_msgbox(arr2[1], title)
         return
     }
@@ -1652,13 +1705,17 @@ hyf_GuiListView(arr2, arrCol:="", title:="", arrWidth:=unset) {
     oGui.title := format("{1}", title)
     oGui.SetFont("s13")
     oGui.OnEvent("escape",doEscape)
-    if (!isobject(arrCol)) {
-        arrCol := []
-        for v in arr2[1]
-            arrCol.push(A_Index)
+    if (arrCol is integer) {
+        switch arrCol {
+            case 1: arrCol := arr2.RemoveAt(1)
+            case 0: ;自动生成
+                arrCol := []
+                for v in arr2[1]
+                    arrCol.push(A_Index)
+        }
     }
     rs := min(arr2.length, 40)
-    oLv := oGui.AddListView(format("count grid checked w1000 r{1}", rs), arrCol)
+    oLv := oGui.AddListView(format("count grid checked w1000 r{1}", rs+2), arrCol)
     oLv.name := "lv"
     ;oLv.OnEvent("ItemCheck", do)
     oLv.OnEvent("DoubleClick", do)
@@ -1985,7 +2042,7 @@ hyf_selectByTooltip(arr2, showAll:=false) {
 
 ;defButton是默认按钮前面的text内容
 ;hyf_GuiMsgbox(map("a",132,"b",22), "aaa")
-hyf_GuiMsgbox(obj, title:="", defButton:="", fun:=unset, oGui:="", times:=0) {
+hyf_GuiMsgbox(obj, title:="By hyaray", defButton:="", fun:=unset, oGui:="", times:=0) {
     if (!isobject(obj))
         return
     if (obj is array && !obj.length)
@@ -2005,6 +2062,17 @@ hyf_GuiMsgbox(obj, title:="", defButton:="", fun:=unset, oGui:="", times:=0) {
         if (isobject(v)) {
             if (v is ComValue) {
                 oGui.AddButton("ys yp-5", "ComValue").OnEvent("click", funDo)
+            } else if (v is array) {
+                switch v.length {
+                    case 1:
+                        oGui.AddText("ys yp", v[1])
+                        oGui.AddButton("ys yp-5", v[1]).OnEvent("click", funDo)
+                    case 2:
+                        oGui.AddText("ys yp", v[1])
+                        oGui.AddButton("ys yp-5", v[2]).OnEvent("click", funDo)
+                    default:
+                        %A_ThisFunc%(v, title, defButton, funDo, oGui, times+1)
+                }
             } else {
                 %A_ThisFunc%(v, title, defButton, funDo, oGui, times+1)
             }
@@ -2110,18 +2178,19 @@ hyf_tooltipAsMenu(arrIn, strTip:="", x:=8, y:=8) {
     arrKeys := [] ;按键列表
     loop {
         key := hyf_input(true)
-        if (key == "escape") {
-            tooltip(,,, level)
-            return []
-        } else if (key = "space") { ;TODO 接受空格
-            arrKeys.push(A_Space)
-        } else if (strlen(key) > 1) {
-            arrKeys.push(key)
-        } else if (strlen(key) == 1) {
-            arrKeys.push(StrUpper(key))
-        } else { ;用不到
-            tooltip(,,, level)
-            return []
+        switch key, false {
+            case "escape":
+                tooltip(,,, level)
+                return []
+            case "space": ;TODO 接受空格
+                arrKeys.push(A_Space)
+            default:
+                switch strlen(key) {
+                    case 1:
+                        arrKeys.push(StrUpper(key))
+                    default:
+                        arrKeys.push(format("{{1}}", key))
+                }
         }
         ;通过 arrKeys 获取筛选后的内容 arrThis
         arrThis := arrIn
@@ -2133,8 +2202,9 @@ hyf_tooltipAsMenu(arrIn, strTip:="", x:=8, y:=8) {
         } else if (arrThis.length == 1) {
             tooltip(,,, level)
             return arrThis[1]
-        } else
+        } else {
             tooltip(strTip . arr2str(arrThis), x, y, level)
+        }
     }
     getArrByKey(arr, key:="") { ;根据 key 获取子arr
         if (key == "")
@@ -2210,8 +2280,64 @@ reduce(fun, arr, v0:="") {
 ;}
 
 ;不考虑DPI，_Mouse.clickR 会考虑DPI
-clickR(x, y, cnt:=1, speed:=0) {
-    MouseMove(x, y, speed, "R")
+clickR(x, y, cnt:=1, checkCursor:=unset, waitDisappear:=false, ms:=5000) {
+    MouseMove(x, y, 0, "R")
     sleep(20)
     click(cnt)
+    if (isset(checkCursor)) {
+        if (checkCursor is string) {
+            MouseWait(checkCursor, true)
+        } else if (isobject(checkCursor)) {
+            endtime := A_TickCount + ms
+            loop {
+                CaretGetPos(&x, &y)
+                if (checkCursor(x,y))
+                    return true
+                sleep(200)
+                if (A_TickCount > endtime)
+                    return false
+            }
+        }
+    }
+    return true
+}
+
+MouseWait(tp, waitDisappear:=false, ms:=5000) {
+    endTime := A_TickCount + ms
+    ;等待出现
+    ;tooltip("等待鼠标形状【出现】`n" . tp)
+    loop {
+        if (A_Cursor == tp) {
+            OutputDebug(format("d#{1} {2}:{3} waitA done {4} tp={5} A_Cursor={6}", A_LineFile,A_LineNumber,A_ThisFunc,A_Index,tp,A_Cursor))
+            break
+        }
+        if (A_TickCount > endtime) {
+            OutputDebug(format("i#{1} {2}:{3} waitA TimeOut {4} tp={5} A_Cursor={6}", A_LineFile,A_LineNumber,A_ThisFunc,A_Index,tp,A_Cursor))
+            return false
+        }
+        if (A_Cursor != tp) {
+            OutputDebug(format("i#{1} {2}:{3} waitA {4} tp={5} A_Cursor={6}", A_LineFile,A_LineNumber,A_ThisFunc,A_Index,tp,A_Cursor))
+            sleep(100)
+        }
+    }
+    ;等待结束
+    if (waitDisappear) {
+        endTime := A_TickCount + ms
+        loop {
+            if (A_Cursor != tp) {
+                OutputDebug(format("d#{1} {2}:{3} waitB done {4} tp={5} A_Cursor={6}", A_LineFile,A_LineNumber,A_ThisFunc,A_Index,tp,A_Cursor))
+                break
+            }
+            if (A_TickCount > endtime) {
+                OutputDebug(format("i#{1} {2}:{3} waitB TimeOut {4} tp={5} A_Cursor={6}", A_LineFile,A_LineNumber,A_ThisFunc,A_Index,tp,A_Cursor))
+                return false
+            }
+            if (A_Cursor = tp) {
+                OutputDebug(format("i#{1} {2}:{3} waitB {4} tp={5} A_Cursor={6}", A_LineFile,A_LineNumber,A_ThisFunc,A_Index,tp,A_Cursor))
+                sleep(100)
+            }
+        }
+    }
+    ;tooltip
+    return true
 }
