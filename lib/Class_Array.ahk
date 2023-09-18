@@ -4,6 +4,8 @@
 ;除了方法名以r开头的会修改原arr，且无返回值(rMoveDown)
 ;ip 1.2 转成 192.168.1.2
 ;map 方法已自带，NOTE 注意区分 map 的返回值和被 map 修改之后的 arr
+;提取二维数组的第1项组成一维数组
+;arr2.map((a)=>a[1])
 
 ; https://autohotkey.com/board/topic/83081-ahk-l-customizing-object-and-array
 defprop := object.DefineProp.bind(array.prototype)
@@ -25,6 +27,27 @@ class _Array extends Array {
     }
 
     toString() => this.toJson()
+
+    toArr2() {
+        if (!this.length)
+            return this
+        if (this[1] is array)
+            return this
+        arr := this
+        arr2 := []
+        if (!isobject(arr[1])) {
+            for v in arr
+                arr2.push([v])
+        } else if (arr[1] is map) { ;NOTE map
+            for obj in arr {
+                i := A_Index
+                arr[i] := []
+                for k,v in obj ;TODO k 是否要获取
+                    arr2[i].push(v)
+            }
+        }
+        return arr2
+    }
 
     ;获取
     count(value) {
@@ -109,16 +132,11 @@ class _Array extends Array {
         return obj
     }
 
-    ;目前只在 _Pwd 里使用
+    ;目前只在 _Pwd 里使用(用于给每行做索引)
     ;[ [A1,B1], [A2,B2] ] [title1, title2]
     ;{
     ;    title1 : [A1,B1],
     ;    title2 : [A2,B2],
-    ;}
-    ;TODO 是否应该是下面这种
-    ;{
-    ;    title1 : [A1,A2],
-    ;    title2 : [B1,B2],
     ;}
     toMapByArray(arrTitle:=unset) {
         arr := this
@@ -361,7 +379,7 @@ class _Array extends Array {
         arr.RemoveAt(arr.indexOf(value))
     }
 
-    ;[1,2,[3,4]]转为[1,2,3,4]
+    ;[[1,2],[3,4]]转为[1,2,3,4]
     static oArrTwo2Arr(arr) { ;2维转成1维数组
         arrRes := []
         for k, v in arr {

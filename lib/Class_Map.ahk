@@ -35,6 +35,8 @@ class _Map extends map {
 
     ;通过数组来获取值
     getEx(arr, default:="") {
+        if !(arr is array)
+            arr := [arr]
         if (!arr.length)
             return this
         obj := this
@@ -217,13 +219,13 @@ class _Map extends map {
         return substr(sWhere, 1, strlen(sWhere)-4) ;删除末尾 and
     }
 
-    deleteEmpty(obj) {
+    deleteEmpty() {
+        objRes := this.clone()
         arr := []
-        for k, v in obj {
+        for k, v in objRes {
             if (v == "")
-                arr.push(k) ;直接obj.delete会使得遍历出错
+                arr.push(k) ;直接objRes.delete会使得遍历出错
         }
-        objRes := obj.clone()
         for k, v in arr
             objRes.delete(v)
         return objRes

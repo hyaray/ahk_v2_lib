@@ -10,6 +10,7 @@ for k in proto.OwnProps() {
 }
 
 class _String {
+    static regSudo := "^\/(etc|var|usr|bin|sbin|boot|root|sys|proc)(\/|$)"
     static fileSZM := "d:\TC\hy\Rime\opencc\jiayin.txt"
     static fileTS := "d:\TC\hy\Rime\opencc\backup\TSCharacters.txt" ;来源于 opencc，稍微调整
     static regNum := "^-?\d+(\.\d+)?$"
@@ -57,7 +58,7 @@ class _String {
             loop(n-1)
                 arr.push(this.add1(index*A_Index))
         } else {
-        arr := []
+            arr := []
             loop(n)
                 arr.push(this)
         }
@@ -127,7 +128,11 @@ class _String {
         SplitPath(dir, &dirName)
         return dirName
     }
-    dirRep(dirOld, dirNew) => dirNew . substr(this, strlen(dirOld)+1)
+    dirRep(dirNew, dirOld:="") {
+        if (dirOld == "")
+            SplitPath(this,, &dirOld)
+        return dirNew . substr(this, strlen(dirOld)+1)
+    }
     extRep(extNew:="") => (extNew=="") ? RegExReplace(this, "\.\w+$") : RegExReplace(this, "\.\K\w+$", extNew)
     fnRep(fn) {
         SplitPath(this,, &dir)
@@ -137,8 +142,8 @@ class _String {
         SplitPath(this,, &dir, &ext)
         return format("{1}\{2}.{3}", dir,noExtNew,ext)
     }
-    ;fnn64名称再替换空格为_
-    fnn64(dealSpace:=false) { ;去除_x64.exe内容的名称(比如abc_x64.exe转成abc)
+    ;abc_x64.exe --> abc
+    fnn64(dealSpace:=false) {
         res := RegExReplace(this, "i)_?(x?(64))?(\.\w+)?$")
         if (dealSpace)
             res := StrReplace(res, A_Space, "_")
@@ -171,31 +176,33 @@ class _String {
         return arr
     }
 
-    ;会先删除文件/文件夹(p1)
+    ;会先删除文件/文件夹(fp1)
     ;this为实体所在路径
     ;mklink /j "c:\Users\Administrator\AppData\local\Chromium\User Data\" "s\User Data"
     ;判断文件是否是 mklink 用 _TC._info(fp, 2) == ".symlink"
     ;NOTE mklink的文件和文件夹，打包的时候，zip 都会打包原始文件，7z则会忽略文件
-    mklink(p1) {
-        p0 := this
-        if (!FileExist(p0))
+    mklink(fp1) {
+        fp0 := this
+        if (!FileExist(fp0)) {
+            msgbox("文件不存在`n" . fp0)
             return
-        if (DirExist(p1)) { ;文件夹
+        }
+        if (DirExist(fp1)) { ;文件夹
             try
-                DirDelete(p1, true)
+                DirDelete(fp1, true)
             catch
-                msgbox("删除文件夹出错`n" . p1)
-        } else if (FileExist(p1)) { ;文件
+                msgbox("删除文件夹出错`n" . fp1)
+        } else if (FileExist(fp1)) { ;文件
             try
-                FileDelete(p1)
+                FileDelete(fp1)
             catch
-                msgbox("删除文件出错`n" . p1)
+                msgbox("删除文件出错`n" . fp1)
             ;保证有文件夹
-            dir := p1.dir()
+            dir := fp1.dir()
             if (!DirExist(dir))
                 DirCreate(dir)
         }
-        RunWait(format('{1} /c mklink{2} "{3}" "{4}"',A_ComSpec,DirExist(p0)?" /j":"",p1,p0),, "hide")
+        RunWait(format('{1} /c mklink{2} "{3}" "{4}"',A_ComSpec,DirExist(fp0)?" /j":"",fp1,fp0),, "hide")
     }
 
     ;删除文件名前面的序号
@@ -819,6 +826,7 @@ class _String {
     deleteSameOrderByObj(hasEmpty:=false) => "`n".join(this.toMap(hasEmpty).keys())
 
     ;fun(A_LoopField, A_Index)
+    ;多行
     dealByLine(fun) {
         res := ""
         loop parse, this, "`n", "`r"
@@ -1288,14 +1296,17 @@ class _String {
     }
 
     ;m[0], m.Len[0], m.pos[0]分别存储子项目的值，长度和位置
-    grem(reg, startPos:=1) { ;全局正则
+    grem(reg, bValue:=false, startPos:=1) { ;全局正则
         str := this
         ;options := "U)^[imsxACDJOPSUX`a`n`r]+\)"
         ;reg := (RegExMatch(reg, options, &Opt) ? (instr(Opt, "O", 1) ? "" : "O") : "O)") . reg
         ms := []
         while RegExMatch(str, reg, &m, startPos) {
             startPos := m.pos(0)+m.len(0)
-            ms.push(m) ;非标准数组，只能用固定方法
+            if (bValue)
+                ms.push(m[0])
+            else
+                ms.push(m) ;非标准数组，只能用固定方法
         }
         return ms
     }
@@ -1320,7 +1331,7 @@ class _String {
             RegExMatch(this, "^(.*?)(\d+)(\D*)$", &m)
             return m[1] . format(format("{:0{1}s}",strlen(m[2])), m[2]+n) . m[3]
         } else if (i := (str ~= "零|一|二|三|四|五|六|七|八|九|十")) {
-            arr := ["零","一","二","三","四","五","六","七","八","九","十"]
+            arr := ["零","一","二","三","四","五","六","七","八","九","十","十一","十二","十三","十四","十五","十六","十七","十八","十九","二十"]
             sBefore := substr(str,1,i-1)
             sAfter := substr(str,i+1)
             idx := arr.indexOf(substr(str,i,1))
@@ -1466,6 +1477,7 @@ class _String {
     ; AABBCCDDEEFF
     isMAC() => (this ~= _String.regMAC)
 
+    isSudo() => (this ~= _String.regSudo)
     isIP() => (this ~= _String.regIP)
     isText() => (this.ext(1) ~= _String.regText)
     isPdf() => (this.ext(1) ~= _String.regText)

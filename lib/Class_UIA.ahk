@@ -41,7 +41,7 @@ NOTE NOTE NOTE 思路：
                不需要保存 elWin，而是一次性用完就丢。
                比如Excel的【查找和替换】对话框，可用下面方法获取 Name="范围(H)": 的 ComboBox
                el := UIA.FindControl("ComboBox", "范围(H):")
-               如果值不是精确匹配，比如查找部分匹配的，把 FindControl的flag参数设置为2(见PropertyConditionFlags)
+               如果值不是精确匹配，比如查找部分匹配的，把 FindControl的flag参数设置为2(见PropertyConditionFlags，本质上是调用 CreatePropertyConditionEx)
                TIM 选择表情
                    el := UIA.FindControl("ComboBox", "选择表情", "LegacyIAccessibleDescription")
                TabItem
@@ -64,7 +64,7 @@ NOTE NOTE NOTE 思路：
                             cond := UIA.CreatePropertyCondition("SelectionItemIsSelected", ComValue(0xB,-1))) ;boolean(判断属性是否为boolean可用 ~= "Is[A-Z]") 需要转成 ComValue
                      两个条件可用 And|Or 组合
                          cond := UIA.CreateAndCondition(UIA.CreatePropertyCondition("ControlType", "Button"), UIA.CreatePropertyCondition("Name", "确定"))
-                         cond := UIA.CreateOrCondition(UIA.CreatePropertyConditionEx("Name", "树"), UIA.CreatePropertyCondition("ValueValue", "树"))
+                         cond := UIA.CreateOrCondition(UIA.CreatePropertyCondition("Name", "树"), UIA.CreatePropertyCondition("ValueValue", "树"))
                      更多条件
                          CreateAndConditionFromArray
                          见 UIA.PropertyCondition([{ControlType: 50000, Name: "edit"}, {ControlType: 50004, Name: "edit", flags: 3}])
@@ -549,7 +549,9 @@ class UIA {
     static GetRootElement() => (comcall(5, this, "ptr*",&root:=0), IUIAutomationElement(root))
 
     ; Retrieves a UI Automation element for the specified window.
-    static ElementFromHandle(hwnd, asWin:=false) {
+    static ElementFromHandle(hwnd:=0, asWin:=true) {
+        if (!hwnd)
+            hwnd := WinActive("A")
         comcall(6, this, "ptr",hwnd, "ptr*",&element:=0)
         ;TODO 暂时记录 hwnd(不能是控件) 给 ClickByControl 用
         if (asWin)
@@ -647,7 +649,6 @@ class UIA {
                 ;OutputDebug(format("i#{1} {2}:no son, return parent", A_LineFile,A_LineNumber))
             loop { ;在所有兄弟里找
                 if (elSon.ContainXY(xScreen, yScreen, 1)) { ;包含坐标
-                    ;_GDIP.rectMark([elSon.GetBoundingRectangle()], "LButton")
                     ;OutputDebug(format("d#{1} {2}:containXY=({3},{4}) elSon={5}", A_LineFile,A_LineNumber,xScreen,yScreen,json.stringify(elSon.allProperty(),4)))
                     el := findInSons(elSon, 1) ;NOTE 递归查找最底层的元素
                     if (el) {
@@ -1072,6 +1073,7 @@ class IUIAutomationElement extends IUIABase {
         OutputDebug(format("w#{1} {2}:{3} A_TickCount takes={4}", A_LineFile,A_LineNumber,A_ThisFunc,A_TickCount - timeSave))
         return arrEl
     }
+    FindName(name) => this.FindAll(UIA.CreatePropertyConditionEx("Name", name))
     ;由于直接 Invoke|DoDefaultAction|Toggle 会无效，故增加了以下两个点击方式
     ;并且 GetBoundingRectangle 增加了获取中间坐标的选项
     ;NOTE 如果有 xOffset，则是相对于左/或右边缘，yOffset 同理
@@ -1189,7 +1191,7 @@ class IUIAutomationElement extends IUIABase {
             res .= format("{:X}", v) . ","
         return rtrim(res, ",")
     }
-    ;点击Text右侧以激活 Edit控件，并设置值
+    ;点击Text右侧获取激活的控件，并设置值
     ;arrFind 用于 FindControl 的所有参数
     ;elWin.FindByBeside(["Text", "名称"], [30,0])
     FindByBeside(arrFind, arrOffset:=30, value:=unset) {
@@ -1264,6 +1266,8 @@ class IUIAutomationElement extends IUIABase {
     ;一般是获取 value(name 用原生方式 CurrentName 获取)
     get(p*) {
         switch this.CurrentControlType {
+            case UIA.ControlType.Text:
+                return this.CurrentName
             case UIA.ControlType.Edit:
                 return this.GetCurrentPropertyValue("ValueValue") ;TODO 是否放 default 下
             case UIA.ControlType.RadioButton, UIA.ControlType.CheckBox, UIA.ControlType.ComboBox:
@@ -1271,11 +1275,19 @@ class IUIAutomationElement extends IUIABase {
             case UIA.ControlType.ListItem, UIA.ControlType.TabItem, UIA.ControlType.TreeItem:
                 return this.GetCurrentPropertyValue("SelectionItemIsSelected")
             case UIA.ControlType.Tab:
-                bName := p.length>=2 ? p[2] : true
+                bName := p.length>=2 ? p[2] : 1 ;1=获取名称(默认) 2=序号 其他=el
                 switch p[1] {
                     case ".": ;激活项
                         cond := UIA.smartCondition("TabItem", ComValue(0xB,-1), "SelectionItemIsSelected")
+                        if (bName == 2) { ;获取激活标签的序号(从1开始)
+                            for el in this.FindAll(UIA.smartCondition("TabItem"), 2) {
+                                if (el.GetCurrentPropertyValue("SelectionItemIsSelected"))
+                                    return A_Index
+                            }
+                        }
                         el := this.FindFirst(cond, 2)
+                        if (!el) ;TODO 为什么会找不到
+                            throw ValueError("no TabItem")
                         return bName ? el.CurrentName : el
                     case 0: ;所有
                         arr := []
@@ -1494,6 +1506,7 @@ class IUIAutomationElement extends IUIABase {
     ;Edit	el.GetCurrentPattern("Value").SetValue(val)
     ;TabItem等	el.GetCurrentPattern("SelectionItem").select()
     do(p*) {
+        OutputDebug(format("i#{1} {2}:{3} ControlType={4}", A_LineFile,A_LineNumber,A_ThisFunc,this.GetControlType()))
         switch this.CurrentControlType {
             case UIA.ControlType.Text:
                 elParent := this.GetParent()
@@ -1502,14 +1515,14 @@ class IUIAutomationElement extends IUIABase {
                         elParent.do(p*)
                     default:
                 }
-            case UIA.ControlType.Button:
-                this.GetCurrentPattern("Invoke").Invoke() ;TODO 经常会失败，或卡死，最好用 ClickByMouse|ClickByControl 补充。
-            case UIA.ControlType.Edit:
-                val := p[1]
-                if (p.length>=2) { ;TODO 待完善
+            case UIA.ControlType.Edit: ;p[1]=值 p[2]=offset
+                if (p[1] is func) ;从原值修改(NOTE 参数是控件)
+                    val := p[1](this)
+                else
+                    val := p[1]
+                if (p.length>=2) { ;TODO SetValue 无效才使用，并支持点击(比如输入后，会出现下拉框，需要再次点击确认)
                     yOffset := (p.length>=2) ? p[2] : 0
                     ms := (p.length>=3) ? p[3] : 500
-                    ;Edit SetValue 无效才使用，并支持点击(比如输入后，会出现下拉框，需要再次点击确认)
                     ;u9c 新建工作日历时用
                     this.SetFocus()
                     send("{end}{shift down}{home}{shift up}")
@@ -1521,26 +1534,8 @@ class IUIAutomationElement extends IUIABase {
                 } else { ;普通方式
                     this.GetCurrentPattern("Value").SetValue(val)
                 }
-            case UIA.ControlType.Tab: ;根据名称激活 TabItem
-                name := p[1]
-                for el in this.FindAll(UIA.CreateTrueCondition(), 2) {
-                    if (el.CurrentName == name) {
-                        el.do()
-                        return el
-                    }
-                }
-            case UIA.ControlType.ComboBox: ;TODO 可能和 RadioButton 同样的操作
-                ;这个方法专门用在下拉框选择上：前面需要点击，后面需要确定选择
-                ;3个参数分别是前 选择 后
-                ; https://stackoverflow.com/questions/5814779/selecting-combobox-item-using-ui-automation          
-                this.ClickByControl() ;NOTE 有时需要先点击才会出现列表(比如Excel的数据验证窗口)
-                sleep(100)
-                name := p[1]
-                elListItem := this.FindControl("ListItem", name)
-                if (!elListItem)
-                    throw ValueError(format('failed to find ListItem of "{1}"', name))
-                elListItem.do(1)
-                send("{enter}") ;TODO 如何优化
+            case UIA.ControlType.Button:
+                this.GetCurrentPattern("Invoke").Invoke() ;TODO 经常会失败，或卡死，最好用 ClickByMouse|ClickByControl 补充。
             case UIA.ControlType.RadioButton, UIA.ControlType.CheckBox:
                 if (!this.GetCurrentPropertyValue("IsTogglePatternAvailable")) { ;部分 RadioButton 比如FreeFileSync安装包不支持
                     if (this.GetCurrentPropertyValue("SelectionItemIsSelected") != p[1]) {
@@ -1566,9 +1561,29 @@ class IUIAutomationElement extends IUIABase {
                 } else {
                     OutputDebug(format("i#{1} {2}:{3} {4} already checked", A_LineFile,A_LineNumber,A_ThisFunc,this.CurrentName))
                 }
+            case UIA.ControlType.Tab: ;根据名称激活 TabItem
+                name := p[1]
+                for el in this.FindAll(UIA.CreateTrueCondition(), 2) {
+                    if (el.CurrentName == name) {
+                        el.do()
+                        return el
+                    }
+                }
+            case UIA.ControlType.ComboBox: ;TODO 可能和 RadioButton 同样的操作
+                ;这个方法专门用在下拉框选择上：前面需要点击，后面需要确定选择
+                ;3个参数分别是前 选择 后
+                ; https://stackoverflow.com/questions/5814779/selecting-combobox-item-using-ui-automation          
+                this.ClickByControl() ;NOTE 有时需要先点击才会出现列表(比如Excel的数据验证窗口)
+                sleep(100)
+                name := p[1]
+                elListItem := this.FindControl("ListItem", name)
+                if (!elListItem)
+                    throw ValueError(format('failed to find ListItem of "{1}"', name))
+                method := p.length>=2 ? p[2] : ""
+                elListItem.do(1, method, true)
             case UIA.ControlType.Tree:
                 this.selectByPath(p*)
-            case UIA.ControlType.ListItem, UIA.ControlType.TabItem, UIA.ControlType.TreeItem:
+            case UIA.ControlType.ListItem, UIA.ControlType.TabItem, UIA.ControlType.TreeItem: ;[boolean, method]
                 if (this.GetCurrentPropertyValue("SelectionItemIsSelected") != p[1]) {
                     method := p.length>=2 ? p[2] : ""
                     switch method {
@@ -1578,6 +1593,8 @@ class IUIAutomationElement extends IUIABase {
                     }
                 } else {
                     OutputDebug(format("i#{1} {2}:{3} {4} already checked", A_LineFile,A_LineNumber,A_ThisFunc,this.CurrentName))
+                    if (p.length >=3) ;NOTE 可能由 ComboBox 点击生成的，需要再次关闭
+                        this.ClickByControl()
                 }
                 ;扩展(仅限TreeItem)
                 if (p.length >=3 && this.GetCurrentPropertyValue("IsExpandCollapsePatternAvailable")) {

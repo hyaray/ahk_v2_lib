@@ -80,8 +80,8 @@ hyf_paste(str, k:="", ms:=500) {
         sleep(10)
     exeName := WinGetProcessName("A").fnn64(1)
     switch exeName {
-        ;case value1:
-        ;   send("{shift down}{ins}{shift up}")
+        case "MobaXterm":
+            send("{shift down}{ins}{shift up}")
         default:
             OutputDebug(format("i#{1} {2}:{3} ctrl-v", A_LineFile,A_LineNumber,A_ThisFunc))
             send("{ctrl down}v{ctrl up}")
@@ -93,7 +93,7 @@ hyf_paste(str, k:="", ms:=500) {
     A_Clipboard := c
 }
 
-;数字则sleep，{xxx}开头则 SendText
+;数字则sleep，{xxx}开头则 send，否则 SendText
 ;NOTE send("{1000}") 相当于 sleep(1000)，但有未知BUG，不要用
 ;sendEx("string1`n", 1000, "{tab}", "string2", 1000)
 ;NOTE 第1个参数为数组，则是有规律地批量录入，第2个参数最好也是数组，表示中间的按键
@@ -120,6 +120,14 @@ sendEx(arr*) {
         }
     }
     return 1
+}
+
+;指定utf-8类型
+hyf_readyaml(fp, arr:=unset, default:=unset) {
+    obj := yaml.parse(fileread(fp, "utf-8"))
+    if (isset(arr))
+        obj := obj.getEx(arr, default?)
+    return obj
 }
 
 deepclone(obj) {
@@ -218,6 +226,7 @@ hyf_getSelect(bVimNormal:=false, bInput:=false) {
         }
     }
     ;暂时应用是选中多个标题名
+    ;NOTE qz 里获取值依赖
     rng2str(rng, charCol:="`t") {
         if (rng.cells.count == 1)
             return rng.text
@@ -229,9 +238,9 @@ hyf_getSelect(bVimNormal:=false, bInput:=false) {
             r := A_Index
             ;if (mod(r,1000)==0)
             ;    tooltip(r)
-            res .= delete0(arrV[r,1]) . charCol
+            res .= delete0(arrV[r,1])
             loop(cs-1)
-                res .= delete0(arrV[r,A_Index+1])
+                res .= charCol . delete0(arrV[r,A_Index+1])
             res .= "`r`n"
         }
         ;tooltip
@@ -317,9 +326,9 @@ RegExist(dir) {
 }
 
 ;输入字符串，增加了置顶和非空检测，NOTE 不匹配直接exit
-hyf_inputstr(str:="请输入", varDefault:="") {
+hyf_inputstr(str:="请输入", varDefault:="", title:="") {
     SetTimer((p*)=>WinSetAlwaysOnTop(true, "A"), -500)
-    oInput := inputbox(str,,,varDefault)
+    oInput := inputbox(str, title,,varDefault)
     if (oInput.result=="Cancel" || (oInput.value=="")) {
         msgbox("错误：输入为空",,0x40000)
         exit
@@ -327,9 +336,9 @@ hyf_inputstr(str:="请输入", varDefault:="") {
     return oInput.value
 }
 
-hyf_inputnum(str:="请输入数字", varDefault:="") {
+hyf_inputnum(str:="请输入数字", varDefault:="", title:="") {
     SetTimer((p*)=>WinSetAlwaysOnTop(true, "A"), -500)
-    oInput := inputbox(str,,,varDefault)
+    oInput := inputbox(str, title,,varDefault)
     if (oInput.result == "Cancel" || !(oInput.value ~= "^-?\d+(\.\d+)?$")) {
         msgbox("错误：非数字",,0x40000)
         exit
@@ -405,9 +414,9 @@ msgbox(json.stringify(objOpt, 4))
 ;3.默认值
 ;   数组，则为 AddComboBox
 ;4.opt
-;   "n" 数字(输入时限制，返回为数字)
+;   "n" Edit只能输入数字，返回为数字类型
 ;   "b" 是否的 Checkbox
-;   2 多行Edit|ComboBox的默认项
+;   数字 多行Edit|ComboBox的默认项
 ;bOne 表示限制单结果，则会在 Edit内容改变时，清空其他控件
 ;关闭则返回map()
 ;NOTE 自动过滤空值，数字返回的是字符串
@@ -565,45 +574,49 @@ hyf_runByIE(url:="") { ;关闭当前窗口
 
 ;arrFnn 从后向前找第一个匹配的文件路径
 ;dirIn
-;   是文件夹，找不到就返回""
-;   是文件，找不到就返回 dirIn
+;   文件夹：找不到就返回""
+;   文件：找不到就返回 dirIn
+;   数组：按顺序返回第一个找的结果
 hyf_findFile(dirIn, arrFnn, ext:="*") {
+    ;数组
+    if (dirIn is array) {
+        for _ in dirIn {
+            fp := hyf_findFile(_, arrFnn, ext)
+            if (fp != "")
+                return fp
+        }
+        return ""
+    }
     if (DirExist(dirIn)) {
         dir := dirIn
         ;OutputDebug(format("i#{1} {2}:dir={3}", A_LineFile,A_LineNumber,dir))
         res := ""
-    } else {
+    } else if FileExist(dirIn) { ;文件
         SplitPath(dirIn,, &dir)
         res := dirIn
+    } else {
+        return
     }
     if (arrFnn is string)
         arrFnn := [arrFnn]
+    fps := []
     loop(arrFnn.length) {
-        fp := findPath(arrFnn[-A_Index]) ;NOTE 从后向前遍历
-        if (fp != "") {
-            ;OutputDebug(format("i#{1} {2}:found 【{3}】", A_LineFile,A_LineNumber,fp))
-            return fp
-        } else {
-            ;OutputDebug(format("i#{1} {2}:not found 【{4}】in dir={3}", A_LineFile,A_LineNumber,dir, arrFnn[-A_Index]))
+        fp := format("{1}\{2}.{3}", dir,arrFnn[-A_Index],ext)
+        loop files, fp, "RF" {
+            if (A_LoopFileAttrib ~= "[HS]")
+                continue
+            fps.push(A_LoopFileFullPath)
         }
+    }
+    ;OutputDebug(format("i#{1} {2}:{3} fps={4}", A_LineFile,A_LineNumber,A_ThisFunc,json.stringify(fps,4)))
+    ;找层级最深的文件
+    level := 0
+    for fp in fps {
+        StrReplace(fp, "\", "", 0, &cnt)
+        if (cnt > level)
+            res := fp
     }
     return res
-    findPath(fnn) {
-        ;先在子文件夹中找
-        loop files, format("{1}\*", dir), "DR" { ;明确的文件名，则只遍历文件夹，NOTE 不能有多文件
-            if (ext == "*") { ;较少
-                loop files, format("{1}\{2}.{3}", A_LoopFileFullPath,fnn,ext)
-                    return A_LoopFileFullPath
-            } else {
-                fp := format("{1}\{2}.{3}", A_LoopFileFullPath,fnn,ext)
-                if (FileExist(fp))
-                    return fp
-            }
-        }
-        ;在主目录中找
-        if (FileExist(format("{1}\{2}.{3}", dir,fnn,ext)))
-            return format("{1}\{2}.{3}", dir,fnn,ext)
-    }
 }
 
 hyf_searchFile(dir, sFile:="*", opt:="RF") {
@@ -933,25 +946,8 @@ hyf_exeOtherWindows(bSkipBlankTitle:=false) {
     return arrRes
 }
 
-hyf_tabExeOtherWindows() {
-    arrRes := hyf_exeOtherWindows()
-    if (arrRes.length == 0)
-        return
-    if (arrRes.length == 1) {
-        hwnd := arrRes.pop()[-1]
-    } else {
-        arrRes := hyf_GuiListView(arrRes, ["序号","标题","窗口ID"], "请选择OBA窗口(可双击选择)", [80, 500, 100])
-        if (!arrRes.length)
-            return
-        hwnd := integer(arrRes[1][-1])
-    }
-    WinShow(hwnd)
-    WinActivate(hwnd)
-    return hwnd
-}
-
 ;funHwnd 处理 hwnd 为 true 则添加
-;hyf_hwnds("ahk_exe a.exe", (p)=>substr(WinGetClass(p"),1,4) == "Afx:")[1]
+;hyf_hwnds("ahk_exe a.exe", hwnd=>hwnd.isDialog())
 ;hyf_hwnds("ahk_class Chrome_WidgetWin_1 ahk_exe chrome.exe")
 hyf_hwnds(winTitle, funHwnd:=unset) {
     saveDetect := A_DetectHiddenWindows
@@ -1313,38 +1309,48 @@ hyf_cell2objRecord(cell:="", skip:=false) {
     return obj
 }
 
+;值转成数组
+hyf_rng2array(rng:=unset) {
+    if (!isset(rng))
+        rng := ox().selection
+    arrVal := []
+    ;TODO 多区域则遍历单元格
+    if (rng.areas.count > 1) {
+        xl := rng.application
+        xl.ScreenUpdating := false
+        for cell in rng
+            arrVal.push(hyf_delete0(cell))
+        xl.ScreenUpdating := true
+    }
+    ;单单元格
+    if (rng.count == 1)
+        return [hyf_delete0(rng)]
+    ;多单元格
+    arrV := rng.value
+    loop(arrV.MaxIndex(1)) {
+        r := A_Index
+        loop(arrV.MaxIndex(2))
+            arrVal.push(hyf_delete0(arrV[r,A_Index]))
+    }
+    return arrVal
+}
+
 ;判断了单个单元格的情况
 ;funVal可直接修改原单元格值
-;   1(默认)=hyf_delete0
+;   unset=hyf_delete0
 ;   0=不处理
 ;   自定义函数
 ;fillUp 如果为空则填充上单元格的值(主要用于有合并单元格的情况)
-hyf_rng2arrayV(rng:=unset, fillUp:=false, funVal:=1, bWrite:=false) {
+hyf_rng2arrayV(rng:=unset, funVal:=unset, bWrite:=false) {
     if (!isset(rng))
         rng := ox().selection
-    if (!isobject(funVal)) {
-        if (funVal == 1)
-            funVal := hyf_delete0
-        else
-            funVal := x=>x
-    }
-    if (rng.cells.count == 1) {
-        if (bWrite) {
-            if (funVal is map)
-                rng.value := funVal.get(rng.value, rng.value)
-            else
-                rng.value := funVal(rng)
-            return
-        } else {
-            arrA := ComObjArray(12, 1, 1)
-            if (funVal is map)
-                arrA[0,0] := funVal.get(arrA[0,0], arrA[0,0])
-            else
-                arrA[0,0] := funVal(rng)
-            return arrA
+    if (rng.areas.count > 1) { ;TODO 多区域则直接修改值或转成arr
+        if (!isset(funVal)) { ;NOTE 未定义修改函数，则返回arrVal
+            arrVal := []
+            for cell in rng
+                arrVal.push(hyf_delete0(cell))
+            return arrVal
         }
-    }
-    if (rng.areas.count > 1) { ;TODO 多区域则直接修改值
         xl := rng.application
         xl.ScreenUpdating := false
         for cell in rng {
@@ -1354,23 +1360,45 @@ hyf_rng2arrayV(rng:=unset, fillUp:=false, funVal:=1, bWrite:=false) {
                 cell.value := funVal(cell)
         }
         xl.ScreenUpdating := true
-    } else {
-        arrV := rng.value
-        loop(arrV.MaxIndex(1)) {
-            r := A_Index
-            loop(arrV.MaxIndex(2)) {
-                if (fillUp && arrV[r,A_Index]=="") ;需要填充空白单元格
-                    arrV[r,A_Index] := arrV[r-1,A_Index]
-                else if (funVal is map)
-                    arrV[r,A_Index] := funVal.get(arrV[r,A_Index], arrV[r,A_Index])
-                else
-                    arrV[r,A_Index] := funVal(arrV[r,A_Index])
-            }
-        }
-        if (bWrite)
-            rng.value := arrV
-        return arrV
     }
+    if (!isset(funVal)) {
+        funVal := hyf_delete0
+    } else if (funVal is integer && funVal == 0) {
+        funVal := x=>x
+    }
+    ;单单元格
+    if (rng.cells.count == 1) {
+        if (bWrite) {
+            if (funVal is map)
+                rng.value := funVal.get(rng.value, rng.value)
+            else
+                rng.value := funVal(rng)
+        } else {
+            arrA := ComObjArray(12, 1, 1)
+            if (funVal is map)
+                arrA[0,0] := funVal.get(arrA[0,0], arrA[0,0])
+            else
+                arrA[0,0] := funVal(rng)
+            return arrA
+        }
+        return
+    }
+    ;多单元格
+    arrV := rng.value
+    loop(arrV.MaxIndex(1)) {
+        r := A_Index
+        loop(arrV.MaxIndex(2)) {
+            if (funVal is map)
+                arrV[r,A_Index] := funVal.get(arrV[r,A_Index], arrV[r,A_Index])
+            ;else if (fillUp && arrV[r,A_Index]=="") ;需要填充空白单元格
+            ;    arrV[r,A_Index] := arrV[r-1,A_Index]
+            else
+                arrV[r,A_Index] := funVal(arrV[r,A_Index])
+        }
+    }
+    if (bWrite)
+        rng.value := arrV
+    return arrV
 }
 
 ;普通数组转VBA标准数组
@@ -1518,9 +1546,17 @@ hyf_dir(cls, funFilter:="", bShowValue:=false) {
 }
 
 ;获取类|实例的所有属性和值
-hyf_objProps(cls, funFilter:="") {
-    obj := []
+;简单的直接用 msgbox(json.stringify(cls, 4))
+;funFilter
+;   隐藏 __开头的内置方法 (x)=>!(x~="^__")
+hyf_props(cls, funFilter:=unset) {
+    obj := map()
     for prop in cls.OwnProps() {
+        if (isset(funFilter)) {
+            if (!funFilter(prop))
+                continue
+        }
+        OutputDebug(format("i#{1} {2}:{3} prop={4} {5}", A_LineFile,A_LineNumber,A_ThisFunc,prop,json.stringify(cls.%prop%, 4)))
         try
             obj[prop] := cls.%prop%
     }
@@ -1684,7 +1720,7 @@ hyf_selectSingle(arr, title:="") {
 ;仅支持选择，不支持搜索，不支持输入
 ;返回二维数组(因为支持多选)
 ;arrCol
-;   1 从arr2第1项获取
+;   1 从arr2第1项获取(如果是数组则删除第1项)
 ;   0 从arr2第1项生成1-n作为标题
 ;   arr 直接用
 hyf_GuiListView(arr2, arrCol:=0, title:="", arrWidth:=unset) {
@@ -1696,9 +1732,22 @@ hyf_GuiListView(arr2, arrCol:=0, title:="", arrWidth:=unset) {
         hyf_msgbox(arr2[1], title)
         return
     }
+    ;处理arr2
     if !(arr2[1] is array) {
-        for v in arr2
-            arr2[A_Index] := [v]
+        if (!isobject(arr2[1])) {
+            for v in arr2
+                arr2[A_Index] := [v]
+        } else if (arr2[1] is map) { ;NOTE map
+            ;获取标题
+            if (arrCol == 1) {
+                arrCol := arr2[1].keys()
+            }
+            ;map转数组
+            for obj in arr2 {
+                i := A_Index
+                arr2[i] := obj.values()
+            }
+        }
     }
     oGui := gui("+resize +AlwaysOnTop +Border +LastFound +ToolWindow")
     oGui.BackColor := "222222"
@@ -1715,7 +1764,8 @@ hyf_GuiListView(arr2, arrCol:=0, title:="", arrWidth:=unset) {
         }
     }
     rs := min(arr2.length, 40)
-    oLv := oGui.AddListView(format("count grid checked w1000 r{1}", rs+2), arrCol)
+    w := 1200
+    oLv := oGui.AddListView(format("count grid checked w{1} r{2}", w,rs+2), arrCol)
     oLv.name := "lv"
     ;oLv.OnEvent("ItemCheck", do)
     oLv.OnEvent("DoubleClick", do)
@@ -1736,7 +1786,7 @@ hyf_GuiListView(arr2, arrCol:=0, title:="", arrWidth:=unset) {
     oGui.AddButton("center ys", "全选").OnEvent("click", btnSelectAll)
     oGui.AddButton("center ys", "全不选").OnEvent("click", btnSelectNone)
     oGui.AddStatusBar(, format("共有{1}项结果", arr2.length))
-    oGui.show("w1200 center")
+    oGui.show(format("w{1} center", w))
     WinWaitClose(oGui)
     return arrRes
     doEscape(oGui) => oGui.destroy()
@@ -1785,7 +1835,7 @@ hyf_GuiListView(arr2, arrCol:=0, title:="", arrWidth:=unset) {
                     arrRes[-1].push(oLv.GetText(r, A_Index))
             }
         }
-        msgbox(json.stringify(arrRes, 4))
+        ;msgbox(json.stringify(arrRes, 4))
         ctl.gui.destroy()
     }
 }
@@ -2226,12 +2276,69 @@ hyf_tooltipAsMenu(arrIn, strTip:="", x:=8, y:=8) {
     }
 }
 
+;网址，编码, 请求方式，post数据(NOTE 可能不好用)
+;https://docs.microsoft.com/en-us/windows/win32/winhttp/iwinhttprequest-send
+;form-data https://www.autohotkey.com/boards/viewtopic.php?p=480935
+hyf_post(url, objData:="", headers:="application/x-www-form-urlencoded", Encoding:="") {
+    rst := ComObject("WinHttp.WinHttpRequest.5.1")
+    rst.open("POST", url)
+    if (isobject(headers)) {
+        for k, v in headers {
+            if (v)
+                rst.SetRequestHeader(k, v)
+        }
+        headers := headers.get("Content-Type", "") ;修改 headers 用于判断 isLikeJson
+    } else if (headers != "") {
+        rst.SetRequestHeader("Content-Type", headers)
+    }
+    isLikeJson := (headers ~= "^application\/(json|octet-stream)$")
+    if (isobject(objData)) {
+        if (isLikeJson) {
+            rst.send(json.stringify(objData))
+        } else { ; if (headers == "application/x-www-form-urlencoded")
+            param := ""
+            for k, v in objData {
+                if (v is integer)
+                    param .= format("&{1}={2}", k,v)
+                else
+                    param .= format("&{1}={2}", k,v.UrlEncode()) ;NOTE 要转编码
+            }
+            OutputDebug(format("d#{1} {2}:param={3}", A_LineFile,A_LineNumber,param))
+            param := substr(param, 2)
+            rst.send(param)
+        }
+    } else {
+        rst.send()
+    }
+    ;rst.WaitForResponse(objData.has("timeout") ? objData.timeout : -1)
+    ; rsy.option(2) := nPage ;Codepage:nPage
+    if (Encoding && rst.ResponseBody) {
+        oADO := ComObject("adodb.stream")
+        oADO.Type := 1
+        oADO.Mode := 3
+        oADO.Open()
+        oADO.Write(rst.ResponseBody)
+        oADO.Position := 0
+        oADO.Type := 2
+        oADO.Charset := Encoding
+        res := oADO.ReadText()
+        oADO.Close()
+        return res
+    }
+    return rst.ResponseText
+}
+
 ;NOTE 最通用的闭包
-;目的是让所有 fun 延迟执行，并把结果当作 funmain 的参数
+;目的是让所有 fun 【延迟执行】，并把结果当作 funmain 的参数
 ;hyf_closure_funs((p*)=>msgbox(json.stringify(p,4)), strlen.bind("aa"), strlen.bind("aaa"))()
 ;hyf_closure_funs(ObjBindMethod(cls,"method"), strlen.bind("aa"), strlen.bind("aaa"))()
 ;hyf_closure_funs(SendText, strlen.bind("aa"), strlen.bind("aaa"))()
 hyf_closure_funs(funmain, fun*) => (p*)=>funmain(fun.map(f=>(f is func)?f():f)*)
+
+;目的是【绑定参数】
+;_(y) => ((x)=>(x + y))
+;fun := _(2) ;NOTE 绑定 y=2
+;合并 fun := (y)=>((x)=>(x + y))(2)
 
 ;hyf_closure_strs((p*)=>msgbox(json.stringify(p,4)), "aa", "aaa")()
 hyf_closure_strs(funmain, str*) => (p*)=>funmain(str*)

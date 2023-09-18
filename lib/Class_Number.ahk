@@ -14,16 +14,48 @@ class _Number {
     highParam() => this >> 16
     lowParam() => this & 0xffff
 
+    hasDialog() => WinGetStyle(this) & 0x08000000
+
+    ;TODO 不靠谱
     ;hwnd 对应窗口是否弹框
-    isDialog() => this & 0x80000000 && this & 0x10000000
+    isDialog(hwndMain:=0) {
+        ;过滤主窗口
+        if (hwndMain && this == hwndMain)
+            return false
+        style := WinGetStyle(this)
+        if !(style & 0x10000000) { ;不可见
+            ;OutputDebug(format("i#{1} {2}:{3} style={4} not visible", A_LineFile,A_LineNumber,A_ThisFunc,style))
+            return false
+        }
+        if (style & 0x80000000)
+            return true
+        ;if (style & 0x1000000) ;可最大化(不靠谱)
+        ;    return false
+        ;hParent := dllcall("GetParent", "Ptr",this) ;不靠谱，往往为0
+        ;if (hParent) {
+        ;    exe0 := WinGetProcessName(this)
+        ;    try {
+        ;        exe1 := WinGetProcessName(hParent)
+        ;    } catch {
+        ;        OutputDebug(format("i#{1} {2}:{3} this={4}, hParent={5} get exeName failed", A_LineFile,A_LineNumber,A_ThisFunc,this,hParent))
+        ;        return false
+        ;    } else {
+        ;        OutputDebug(format("i#{1} {2}:{3} exe0={4},exe1={5}", A_LineFile,A_LineNumber,A_ThisFunc,exe0,exe1))
+        ;        return (exe0 == exe1)
+        ;    }
+        ;} else {
+        ;    OutputDebug(format("w#{1} {2}:{3} style={4} unknown", A_LineFile,A_LineNumber,A_ThisFunc,style))
+        ;}
+        return true
+    }
 
     ;超过numA用 A-Z
     ;逆向见 _String.toNum(10)
-    toABCD(numA:=10) {
+    toABCD(numA:=10, bLower:=false) {
         if (this < numA)
             return string(this)
         else
-            return chr(65-numA+this)
+            return chr(65+bLower*32-numA+this)
     }
 
     ;获取
@@ -92,8 +124,9 @@ class _Number {
         return res
     }
 
-    toRectAsHwnd() {
-        WinGetPos(&x, &y, &w, &h, "ahk_id " . this)
+    ;hwnd
+    toRect() {
+        WinGetPos(&x, &y, &w, &h, this)
         return [x,y,w,h]
     }
 

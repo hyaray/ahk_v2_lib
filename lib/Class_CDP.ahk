@@ -17,6 +17,7 @@ class _CDP {
 
     ;统一管理各 Chrome 系浏览器的实例
     ;可以只传入 key, 会智能判断
+    ;key 可以是(chrome|msedge|obsidian) 也可以是 (page|url) 等(自动判断当前浏览器)
     static smartGet(name:="", key:="") {
         ;只传入key
         if (name != "" && !(name ~= "^(chrome|msedge|obsidian)$")) {
