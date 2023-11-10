@@ -1,9 +1,18 @@
 ﻿class _CB extends _CDP {
 
     ;只是为了方便打开网页
-    __new(url:="", funAfterDo:=false) {
+    __new(url:="", funAfterDo:=unset) {
         if (url != "")
-            _CDP.smartGet("chrome").tabOpenLink(url, funAfterDo)
+            _CDP.smartGet("chrome").tabOpenLink(url, funAfterDo?)
+    }
+
+    static onekey() {
+        if (WinActive("ahk_class Chrome_WidgetWin_1 ahk_exe chrome.exe")) {
+            WinMinimize ;防止左下角的网址残留
+            WinHide
+        } else {
+            _CDP.smartGet("chrome").tabOpenLink()
+        }
     }
 
     ;网页内容的元素
@@ -23,15 +32,6 @@
 
     ;ctrl-f查找
     static search(str)=>sendEx("{escape}{ctrl down}f{ctrl up}", 100, str)
-
-    static onekey() {
-        if (WinActive("ahk_class Chrome_WidgetWin_1 ahk_exe chrome.exe")) {
-            WinMinimize ;防止左下角的网址残留
-            WinHide
-        } else {
-            _CDP.smartGet("chrome").tabOpenLink()
-        }
-    }
 
     ;扩展所在目录
     static getExtensionDir(extName) {

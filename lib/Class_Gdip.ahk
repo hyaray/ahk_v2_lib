@@ -212,10 +212,7 @@ class _GDIP {
     ;   funcRect
     ;aRect 画框
     ;oGui := _GDIP.rectMark(el.GetBoundingRectangle())
-    ;oGui := _GDIP.rectMark(_Win.toRect(hwnd))
-    ;标窗口
-    ;WinGetPos(&x, &y, &w, &h, hwnd)
-    ;_GDIP.rectMark([x,y,w,h])
+    ;oGui := _GDIP.rectMark(hwnd.toRect())
     static rectMark(aRects, keyWaitClose:="", arrRectStyle:=unset, arrFontOpt:=unset) {
         objFontOpts := map(
             "font", "微软雅黑",

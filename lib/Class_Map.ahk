@@ -1,6 +1,7 @@
 ﻿;不修改原obj
 ;优先使用Arrays
 ;连续的 key 保存在 arr里，如何用arr:=["a","b"]一次性引用=obj["a"]["b"]
+;TODO CDP返回的map，key有顺序，ahk如何实现？
 
 ;v1 https://www.autohotkey.com/board/topic/83081-ahk-l-customizing-object-and-array
 defprop := object.DefineProp.bind(map.prototype)
@@ -22,14 +23,24 @@ class _Map extends map {
         e(&k:=0)
         return isValue ? this[k] : k
     }
+
     ;参考python
     ;如果指定了i，则返回对应序号的k
+    ;TODO 如何自定义顺序
     keys(i:=unset) {
         if (isset(i))
             return this._index(0, i)
         arr := []
         for k, v in this
             arr.push(k)
+        return arr
+    }
+    values(i:=unset) {
+        if (isset(i))
+            return this._index(1, i)
+        arr := []
+        for k, v in this
+            arr.push(v)
         return arr
     }
 
@@ -51,16 +62,15 @@ class _Map extends map {
         return obj
     }
 
-    values(i:=unset) {
-        if (isset(i))
-            return this._index(1, i)
-        arr := []
+    ;TODO CDP返回的map，key有顺序，ahk如何实现？
+    cloneEx() {
+        obj := map()
         for k, v in this
-            arr.push(v)
-        return arr
+            obj[k] := v
+        return obj
     }
 
-    ;转成二维数组
+    ;转成二维数组(参考python)
     items() {
         arr := []
         for k, v in this
@@ -77,7 +87,8 @@ class _Map extends map {
         return ""
     }
     ;obj的值覆盖this
-    coverByMap(obj) {
+    ;名称来源python
+    update(obj) {
         for k, v in obj
             this[k] := v
         return this
@@ -171,21 +182,34 @@ class _Map extends map {
     }
 
     ;简单键值对的比较
-    ;返回 key, [v0, v1]
+    ;tp 1=值不同，返回 key, [v0, v1]
+    ;tp 0=键不同，返回 arrKey
     ;obj0放前面
     ;另见 IUIAutomationElement.compareUIE()
-    compare(obj0) {
+    compare(obj0, tp:=1) {
         obj0.default := ""
         obj1 := this
         obj1.default := ""
         objRes := map()
-        for k, v in obj1 {
-            if (v != obj0[k])
-                objRes[k] := [obj0[k], v]
-        }
-        for k, v in obj0 { ;记录 obj0 中独有的内容
-            if (v != obj1[k] && !objRes.has(k))
-                objRes[k] := [v, "null"]
+        switch tp {
+            case 0:
+                for k, v in obj1 {
+                    if (!obj0.has(k))
+                        objRes[k] := 1
+                }
+                for k, v in obj0 { ;记录 obj0 中独有的内容
+                    if (v != obj1[k] && !objRes.has(k))
+                        objRes[k] := [v, "null"]
+                }
+            case 1:
+                for k, v in obj1 {
+                    if (v != obj0[k])
+                        objRes[k] := [obj0[k], v]
+                }
+                for k, v in obj0 { ;记录 obj0 中独有的内容
+                    if (v != obj1[k] && !objRes.has(k))
+                        objRes[k] := [v, "null"]
+                }
         }
         return (objRes.count) ? objRes : map()
         objToTable(obj, charItem:="`t") {

@@ -3,16 +3,18 @@ class _CDP {
 
     static objInstance := map()
     static objSingleHost := map() ;指定单页面的host(在_AutoCmd里被修改)
-    static data := map(
+    static data := map( ;NOTE 后续值可被覆盖
         "chrome", ["C:\Users\administrator\AppData\Local\Google\Chrome\Chrome.exe", 9222],
         "msedge", ["c:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe", 9223],
         "obsidian", [EnvGet("LOCALAPPDATA") . "\Obsidian\Obsidian.exe", 9221],
     )
 
     ;NOTE 统计管理各应用的端口，顺便管理路径
-    static getInfo(name) {
+    static getInfo(name, fp:="") {
         name := StrReplace(StrLower(name), ".exe")
-        return _CDP.data[name]
+        if (fp != "") ;NOTE 覆盖值
+            this.data[name][1] := fp
+        return this.data[name]
     }
 
     ;统一管理各 Chrome 系浏览器的实例
@@ -41,14 +43,14 @@ class _CDP {
             }
         }
         ;获取 oCDP
-        if (!_CDP.objInstance.has(name))
-            _CDP.objInstance[name] := _CDP(_CDP.getInfo(name)*)
-        oCDP := _CDP.objInstance[name]
+        if (!this.objInstance.has(name))
+            this.objInstance[name] := this(this.getInfo(name)*)
+        oCDP := this.objInstance[name]
         ;处理 key
         switch key {
-            case "page": return oCDP.getPage()
             case "": return oCDP
-            default: return oCDP.getCurrentPage(key)
+            case "page": return oCDP.getPage() ;获取指定的 page则先返回 oCDP再手工获取
+            default: return oCDP.getByHttp(key)
         }
     }
 
@@ -98,8 +100,8 @@ class _CDP {
     ;pathname前面要带 /
     static httpOpen(http, pathname:="", port:="") {
         url := format("http://127.0.0.1:{1}/json{2}", port,pathname)
-        res := http.open('GET', url)
-        ;OutputDebug(format("i#{1} {2}:{3} open res={4}", A_LineFile,A_LineNumber,A_ThisFunc,res))
+        OutputDebug(format("i#{1} {2}:{3} url={4}", A_LineFile,A_LineNumber,A_ThisFunc,url))
+        http.open('GET', url)
         try {
             resSend := http.send()
         } catch {
@@ -107,7 +109,7 @@ class _CDP {
             tooltip("rebuild http",,, 9)
             SetTimer(tooltip.bind(,,, 9), -1000)
             http := ComObject('WinHttp.WinHttpRequest.5.1')
-            res := http.open('GET', url)
+            http.open('GET', url)
             resSend := http.send()
         }
         return pathname=="" ? JSON.parse(http.responseText) : resSend
@@ -170,7 +172,7 @@ class _CDP {
 
     ;NOTE 有些页面只限制打开1个，规则在哪里指定
     ;往往在 __new 里被调用 或见 CDPdo.openUrl()
-    tabOpenLink(arrUrl:="", funAfterDo:="", bActive:=true) { ;about:blank chrome://newtab
+    tabOpenLink(arrUrl:="", funAfterDo:=unset, bActive:=true) { ;about:blank chrome://newtab
         ;OutputDebug(format("i#{1} {2}:A_ThisFunc={3}", A_LineFile,A_LineNumber,A_ThisFunc))
         if (arrUrl is string)
             arrUrl := StrSplit(trim(arrUrl,"`r`n"), "`n", "`r")
@@ -204,10 +206,11 @@ class _CDP {
                     }
                     OutputDebug(format("i#{1} {2}:this.arrEmpty={3}", A_LineFile,A_LineNumber,json.stringify(this.arrEmpty,4)))
                     ;打开标签
-                    if (this.arrEmpty.length) ;优先在空白页打开
+                    if (this.arrEmpty.length) { ;优先在空白页打开
                         this.getPage().navigate(urlOpen, bActive)
-                    else ;新标签打开
+                    } else { ;新标签打开
                         this.httpOpen("/new?" . urlOpen) ;TODO 哪里有问题
+                    }
                 }
             }
             WinShow(this.hwnd)
@@ -231,7 +234,7 @@ class _CDP {
             oPage := this.getPage()
             this.thisisunsafe(oPage)
             ;自动登录接口，为了解耦，不直接放实现函数
-            if (funAfterDo) { ;TODO 判断条件不好获取
+            if (isset(funAfterDo) && funAfterDo is func) { ;TODO 判断条件不好获取
                 OutputDebug(format("i#{1} {2}:{3} WaitForLoad", A_LineFile,A_LineNumber,A_ThisFunc))
                 oPage.WaitForLoad()
                 funAfterDo(oPage)
@@ -319,7 +322,7 @@ class _CDP {
     }
 
     /*
-    NOTE 仅当非常明确只是获取网址和标题，用 getCurrentPage("json")
+    NOTE 仅当非常明确只是获取网址和标题，用 getByHttp("json")
     其他考虑功能性，都用 getPage
     {
         "description": "",
@@ -332,7 +335,7 @@ class _CDP {
         "webSocketDebuggerUrl": "ws://127.0.0.1:9222/devtools/page/8A5B6CDB1ABE9E40BAD3C9902841BBE2"
     }
     */
-    getCurrentPage(key:="") {
+    getByHttp(key:="") {
         ;this.detect(true)
         ;debug 模式获取
         ;OutputDebug(format("i#{1} {2}:httpAll={3}", A_LineFile,A_LineNumber,json.stringify(this.httpOpen("",true),4)))
@@ -360,6 +363,8 @@ class _CDP {
     keyJson
         ="" 则返回数组
         否则应设置为 jsonUrl 包含的 key，返回以 keyJson | "href" 为索引的 map(用来判断xx页面是否存在)
+    funTrue
+        默认只获取 page，如果要获取所有，则传入(*)=>1
     */
     getPageList(funTrue:=unset, keyJson:="") {
         if (!isset(funTrue))
@@ -440,7 +445,7 @@ class _CDP {
     ;https://player.bilibili.com/player.html?aid=976962208&bvid=BV1244y1Y7VR&cid=457445567&page=1
     ;<iframe src="//player.bilibili.com/player.html?aid=720241593&bvid=BV1KQ4y1a7pd&cid=401115360&page=1" scrolling="no" border="0" frameborder="no" framespacing="0" allowfullscreen="true"> </iframe>
     ;iframeCode() {
-    ;    obj := this.getCurrentPage()
+    ;    obj := this.getByHttp()
     ;    return format('<iframe src="{1}" scrolling="no" border="0" frameborder="no" framespacing="0" allowfullscreen="true" width="100%" height="450px"> </iframe>', obj["href"])
     ;}
 
@@ -527,28 +532,27 @@ class _CDP {
     ;    msgbox("【保护您和您的设备不受危险网站的侵害】选项取消打勾")
     ;}
 
-    getPage(funObj:=unset) {
-        if (isset(funObj)) {
+    ;funHttp 一般方式 (o)=>o["url"].jsonUrl("pathname")
+    ;_CDP.smartGet("page")
+    ;_CDP.smartGet().getPage((o)=>instr(o["url"].jsonUrl("pathname"),"/app/print-format/")==1)
+    getPage(funHttp:=unset, bActive:=false) {
+        if (isset(funHttp)) {
             arr := this.httpOpen()
             for objHttp in arr {
                 OutputDebug(format("i#{1} {2}:{3} objHttp={4}", A_LineFile,A_LineNumber,A_ThisFunc,json.stringify(objHttp,4)))
                 if (objHttp["type"] == "page" && objHttp["title"] != "DevTools") {
-                    if (funObj(objHttp["url"].jsonUrl())) {
+                    ;if (funHttp(objHttp["url"].jsonUrl()))
+                    if (funHttp(objHttp)) {
                         OutputDebug(format("i#{1} {2}:{3} url={4}", A_LineFile,A_LineNumber,A_ThisFunc,objHttp["url"]))
-                        return _CDP.CDPP(objHttp, this.http)
+                        oPage := _CDP.CDPP(objHttp, this.http)
+                        if (bActive)
+                            oPage.activate()
+                        return oPage
                     }
                 }
             }
         } else {
-            return _CDP.CDPP(this.getCurrentPage(), this.http)
-        }
-    }
-
-    activatePage(funObj) {
-        oPage := this.getPage(funObj)
-        if (isobject(oPage)) {
-            oPage.activate()
-            return oPage
+            return _CDP.CDPP(this.getByHttp(), this.http)
         }
     }
 
@@ -570,6 +574,7 @@ class _CDP {
     class CDPP extends WebSocket {
 
         __new(objHttp, http) {
+            OutputDebug(format("i#{1} {2}:{3} CDPP(objHttp)={4}", A_LineFile,A_LineNumber,A_ThisFunc,json.stringify(objHttp,4)))
             this.idx := 0
             this.responses := map()
             RegExMatch(objHttp["webSocketDebuggerUrl"], 'ws://[\d\.]+:(\d+)', &m)
@@ -686,7 +691,7 @@ class _CDP {
                 for k, v in objHttp
                     this.%k% := v
                 this.objUrl := objHttp["url"].jsonUrl() ;url 会在后面被修改
-                ;this.objUrl["title"] := objHttp["title"] ;和 getCurrentPage("json") 同格式
+                ;this.objUrl["title"] := objHttp["title"] ;和 getByHttp("json") 同格式
             } else {
                 this.objUrl := objHttp.jsonUrl() ;url 会在后面被修改
             }

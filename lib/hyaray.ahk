@@ -74,6 +74,11 @@ hyf_checkNewPlugin(includeFile, arrDirs, strBefore:="", arrDefault:=unset) {
 ;如果可直接键盘输出，一般用 SendText
 ;用剪切板发送字符串
 hyf_paste(str, k:="", ms:=500) {
+    if (ProcessExist("Ditto.exe")) {
+        saveDetect := A_DetectHiddenWindows
+        DetectHiddenWindows(true)
+        PostMessage(0x111, 32775,,, "Ditto") ;断开剪切板
+    }
     c := A_Clipboard
     A_Clipboard := str
     while(A_Clipboard != str)
@@ -91,6 +96,10 @@ hyf_paste(str, k:="", ms:=500) {
         send(k)
     sleep(ms) ;有些应用反应比较慢
     A_Clipboard := c
+    if (ProcessExist("Ditto.exe")) {
+        PostMessage(0x111, 32775,,, "Ditto") ;连接剪切板
+        DetectHiddenWindows(saveDetect)
+    }
 }
 
 ;数字则sleep，{xxx}开头则 send，否则 SendText
@@ -312,11 +321,18 @@ hyf_getSelect(bVimNormal:=false, bInput:=false) {
 hyf_setClip(str, stip:="已复制", n:=3000) {
     if (str == "")
         return
-    A_Clipboard := str
+    if (GetKeyState("LCtrl", "P"))
+        A_Clipboard := format("{1}`n{2}", A_Clipboard,str)
+    else
+        A_Clipboard := str
     ;if (WinExist("ahk_class tooltips_class32"))
     ;    tooltip
     tooltip(format("{1}`n`n{2}", stip,str))
     SetTimer(tooltip, -n)
+}
+
+hyf_addClip(str) {
+    hyf_setClip(format("{1}`n{2}", A_Clipboard,str))
 }
 
 RegExist(dir) {
@@ -411,7 +427,7 @@ msgbox(json.stringify(objOpt, 4))
 ;arr的子数组
 ;1.提示文字
 ;2.变量名
-;3.默认值
+;3.默认值(可选)
 ;   数组，则为 AddComboBox
 ;4.opt
 ;   "n" Edit只能输入数字，返回为数字类型
@@ -442,11 +458,15 @@ hyf_inputOption(arr, title:="", bTrim:=false, bOne:=false) {
             continue
         varName := a[2]
         ;设置 opt
-        if (a[3] is array) { ;下拉框，根据内容设置长度
-            lMax := max(a[3].map(x=>strlen(x))*)
-            opt := funOpt(varName, max(lMax*30, 50))
-        } else if (a.length>=4 && a[4] == "b") { ;boolean
-            opt := funOpt(varName, 100)
+        if (a.length >= 3) { ;下拉框，根据内容设置长度
+            if (a[3] is array) {
+                lMax := max(a[3].map(x=>strlen(x))*)
+                opt := funOpt(varName, max(lMax*30, 50))
+            } else if (a.length>=4 && a[4] == "b") { ;boolean
+                opt := funOpt(varName, 100)
+            } else {
+                opt := funOpt(varName)
+            }
         } else {
             opt := funOpt(varName)
         }
@@ -468,10 +488,13 @@ hyf_inputOption(arr, title:="", bTrim:=false, bOne:=false) {
                             oGui.AddEdit(format("{1} r{2}", funOpt(varName),a[4]), a[3]).OnEvent("change", editChange)
                     }
             }
-        } else if (a[3] is array) { ;下拉框，根据内容设置长度
-            oGui.AddComboBox(opt, a[3])
+        } else if (a.length == 3) {
+            if (a[3] is array) ;下拉框，根据内容设置长度
+                oGui.AddComboBox(opt, a[3])
+            else
+                oGui.AddEdit(opt, a[3]).OnEvent("change", editChange)
         } else {
-            oGui.AddEdit(opt, a[3]).OnEvent("change", editChange)
+            oGui.AddEdit(opt).OnEvent("change", editChange)
         }
         if (a.length >= 4)
             focusCtl := varName
@@ -502,7 +525,7 @@ hyf_inputOption(arr, title:="", bTrim:=false, bOne:=false) {
             catch
                 continue
             ;根据控件提取结果
-            if (a[3] is array) {
+            if (a.length >= 3 && a[3] is array) {
                 v := a[3][ctl.gui[a[2]].value]
             } else {
                 ;值在控件的value还是text
@@ -577,6 +600,9 @@ hyf_runByIE(url:="") { ;关闭当前窗口
 ;   文件夹：找不到就返回""
 ;   文件：找不到就返回 dirIn
 ;   数组：按顺序返回第一个找的结果
+;ext
+;   ""精准
+;   "*"搜索
 hyf_findFile(dirIn, arrFnn, ext:="*") {
     ;数组
     if (dirIn is array) {
@@ -601,14 +627,24 @@ hyf_findFile(dirIn, arrFnn, ext:="*") {
         arrFnn := [arrFnn]
     fps := []
     loop(arrFnn.length) {
-        fp := format("{1}\{2}.{3}", dir,arrFnn[-A_Index],ext)
-        loop files, fp, "RF" {
-            if (A_LoopFileAttrib ~= "[HS]")
-                continue
-            fps.push(A_LoopFileFullPath)
+        if (ext == "") { ;精准文件名
+            dir := format("{1}\{2}", dir,arrFnn[-A_Index]) ;d:\a\b.txt 可以遍历搜索b.txt
+            loop files, dir, "RF"
+                fps.push(A_LoopFileFullPath)
+        } else {
+            fp := format("{1}\{2}.{3}", dir,arrFnn[-A_Index],ext)
+            loop files, fp, "RF" {
+                if (A_LoopFileAttrib ~= "[HS]")
+                    continue
+                fps.push(A_LoopFileFullPath)
+            }
         }
+        if (fps.length)
+            break
     }
     ;OutputDebug(format("i#{1} {2}:{3} fps={4}", A_LineFile,A_LineNumber,A_ThisFunc,json.stringify(fps,4)))
+    if (fps.length == 1)
+        return fps[1]
     ;找层级最深的文件
     level := 0
     for fp in fps {
@@ -617,6 +653,17 @@ hyf_findFile(dirIn, arrFnn, ext:="*") {
             res := fp
     }
     return res
+}
+
+FileExistEx(fp, ms:=5000) {
+    endTime := A_TickCount + ms
+    loop {
+        if (FileExist(fp))
+            return true
+        else
+            sleep(100)
+    } until (A_TickCount >= endTime)
+    return false
 }
 
 hyf_searchFile(dir, sFile:="*", opt:="RF") {
@@ -1372,7 +1419,7 @@ hyf_rng2arrayV(rng:=unset, funVal:=unset, bWrite:=false) {
             if (funVal is map)
                 rng.value := funVal.get(rng.value, rng.value)
             else
-                rng.value := funVal(rng)
+                rng.value := funVal(rng.text)
         } else {
             arrA := ComObjArray(12, 1, 1)
             if (funVal is map)
@@ -1764,8 +1811,8 @@ hyf_GuiListView(arr2, arrCol:=0, title:="", arrWidth:=unset) {
         }
     }
     rs := min(arr2.length, 40)
-    w := 1200
-    oLv := oGui.AddListView(format("count grid checked w{1} r{2}", w,rs+2), arrCol)
+    w := 1200.fromDPI()
+    oLv := oGui.AddListView(format("VScroll count grid checked w{1} r{2}", w-50,rs+2), arrCol)
     oLv.name := "lv"
     ;oLv.OnEvent("ItemCheck", do)
     oLv.OnEvent("DoubleClick", do)
@@ -1774,11 +1821,12 @@ hyf_GuiListView(arr2, arrCol:=0, title:="", arrWidth:=unset) {
         oLv.add(, arr*)
     ;设置宽度
     cntCol := oLv.GetCount("column")
-    loop(cntCol) {
-        if (isset(arrWidth))
+    if (isset(arrWidth)) {
+        loop(cntCol)
             oLv.ModifyCol(A_Index, arrWidth is integer ? arrWidth : arrWidth[A_Index])
-        else
-            oLv.ModifyCol(A_Index, 1000//cntCol)
+    } else {
+        ;oLv.ModifyCol(A_Index, 1000//cntCol)
+        oLv.ModifyCol()
     }
     oLv.opt("+Redraw")
     arrRes := []
@@ -1896,7 +1944,7 @@ hyf_selectByArr(arr2, indexKey:=1, sPyAndIndex:="21", bDistinct:=false) {
     }
     ;ListView 标题名
     ;field := 65
-    oLv := oGui.AddListView("vlv1 xs r20 cRed w1400", arrField) ;NOTE selectN 要用 lv1 获取控件，不要用 oLv(影响释放)
+    oLv := oGui.AddListView("VScroll vlv1 xs r20 cRed w1400", arrField) ;NOTE selectN 要用 lv1 获取控件，不要用 oLv(影响释放)
     oLv.OnEvent("DoubleClick", do)
     oLv.OnEvent("ItemFocus", tips)
     tooltip("加载数据...")
@@ -2100,47 +2148,53 @@ hyf_GuiMsgbox(obj, title:="By hyaray", defButton:="", fun:=unset, oGui:="", time
     if (obj is map && !obj.count)
         return
     if (times == 0) {
-        oGui := gui("+resize +AlwaysOnTop +Border +LastFound +ToolWindow")
+        oGui := gui("+resize +OwnDialogs +AlwaysOnTop +Border +LastFound +ToolWindow")
         oGui.title := title
-        oGui.SetFont("cBlue s11")
+        oGui.SetFont("cBlue s12")
         oGui.OnEvent("escape",doEscape)
     }
     funDo := isset(fun) ? fun : hyf_GuiMsgbox_1
+    optButton := "ys yp-5"
+    wLabel := 600.fromDPI()
+    rs := 20
     for k, v in obj {
         x := times*30 + 10 ;缩进30，离左边缘10
-        oGui.AddText("section x" . x, k)
+        if (mod(A_Index, rs) == 1)
+            oGui.AddText(format("section x{1} y10", x+wLabel*((A_Index-1)//rs)), k).OnEvent("click", funDo)
+        else
+            oGui.AddText("section xs", k).OnEvent("click", funDo)
         if (isobject(v)) {
             if (v is ComValue) {
-                oGui.AddButton("ys yp-5", "ComValue").OnEvent("click", funDo)
+                oGui.AddButton(optButton, "ComValue").OnEvent("click", funDo)
             } else if (v is array) {
                 switch v.length {
-                    case 1:
-                        oGui.AddText("ys yp", v[1])
-                        oGui.AddButton("ys yp-5", v[1]).OnEvent("click", funDo)
-                    case 2:
-                        oGui.AddText("ys yp", v[1])
-                        oGui.AddButton("ys yp-5", v[2]).OnEvent("click", funDo)
+                    case 1,2:
+                        oGui.AddText("ys yp", v[1]).OnEvent("click", funDo)
+                        oGui.AddButton(optButton, v[-1]).OnEvent("click", funDo)
                     default:
                         %A_ThisFunc%(v, title, defButton, funDo, oGui, times+1)
                 }
             } else {
                 %A_ThisFunc%(v, title, defButton, funDo, oGui, times+1)
             }
-        } else if (defButton != "") && (k = defButton) {
-            oGui.AddButton("ys yp-5 default", v).OnEvent("click", funDo)
+        } else if (defButton != "") && (v = defButton) {
+            oGui.AddButton(optButton . " cRed default", v).OnEvent("click", funDo)
         } else {
             try
-                oGui.AddButton("ys yp-5", v).OnEvent("click", funDo)
+                oGui.AddButton(optButton, v).OnEvent("click", funDo)
             catch
-                oGui.AddButton("ys yp-5", v)
+                oGui.AddButton(optButton, v)
         }
     }
     if (times = 0)
         oGui.show("center")
     return oGui
     hyf_GuiMsgbox_1(ctl, p*) {
-        hyf_setClip(ctl.text)
-        ctl.gui.destroy()
+        if (GetKeyState("LCtrl", "P"))
+            hyf_addClip(ctl.text)
+        else
+            hyf_setClip(ctl.text)
+        ;ctl.gui.destroy() ;NOTE
     }
     doEscape(oGui) => oGui.destroy()
 }
@@ -2301,7 +2355,7 @@ hyf_post(url, objData:="", headers:="application/x-www-form-urlencoded", Encodin
                 if (v is integer)
                     param .= format("&{1}={2}", k,v)
                 else
-                    param .= format("&{1}={2}", k,v.UrlEncode()) ;NOTE 要转编码
+                    param .= format("&{1}={2}", k,v.uriEncode()) ;NOTE 要转编码
             }
             OutputDebug(format("d#{1} {2}:param={3}", A_LineFile,A_LineNumber,param))
             param := substr(param, 2)

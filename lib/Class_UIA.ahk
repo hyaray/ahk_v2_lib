@@ -1089,12 +1089,38 @@ class IUIAutomationElement extends IUIABase {
         ControlClick(format("X{1} Y{2}", arrXY*))
         return arrXY
     }
-    ClickByMouse(bStay:=true, xOffset:=0, yOffset:=0, cnt:=1, isOut:=1) { ;优先用 ClickByControl 备用 TODO Button IsInvokePatternAvailable=false
+    clickTo(xOffset:=0, yOffset:=0, cnt:=1, isOut:=1) {
+        arrXY := this.offsetOut(xOffset, yOffset, isOut)
+        cmMouse := A_CoordModeMouse
+        CoordMode("mouse", "Screen")
+        MouseMove(arrXY[1], arrXY[2], 0)
+        sleep(20)
+        (cnt) && click(cnt)
+        CoordMode("mouse", cmMouse)
+        return arrXY
+    }
+    clickBack(xOffset:=0, yOffset:=0, cnt:=1, isOut:=1) {
         arrXY := this.offsetOut(xOffset, yOffset, isOut)
         cmMouse := A_CoordModeMouse
         CoordMode("mouse", "Screen")
         ;记录原位置
         MouseGetPos(&x0, &y0)
+        MouseMove(arrXY[1], arrXY[2], 0)
+        sleep(20)
+        (cnt) && click(cnt)
+        sleep(20)
+        ;回到原位置
+        MouseMove(x0, y0, 0)
+        CoordMode("mouse", cmMouse)
+        return arrXY
+    }
+    ClickByMouse(bStay:=true, xOffset:=0, yOffset:=0, cnt:=1, isOut:=1) { ;❌弃用 clickTo 和 clickBack 含义更清晰
+        arrXY := this.offsetOut(xOffset, yOffset, isOut)
+        cmMouse := A_CoordModeMouse
+        CoordMode("mouse", "Screen")
+        ;记录原位置
+        if (!bStay)
+            MouseGetPos(&x0, &y0)
         MouseMove(arrXY[1], arrXY[2], 0)
         sleep(20)
         (cnt) && click(cnt)
@@ -1104,7 +1130,7 @@ class IUIAutomationElement extends IUIABase {
         CoordMode("mouse", cmMouse)
         return arrXY
     }
-    ;主要配合 ClickByMouse 用
+    ;主要配合 clickTo 用
     ;以 xOffset为例, yOffset 同理
     ;   0 = 中点
     ;   小数点则按宽的百分比
@@ -1353,7 +1379,8 @@ class IUIAutomationElement extends IUIABase {
                 }
             case UIA.ControlType.Table:
                 return this.getTableData(p*) ;通过 elField 获取表格内容
-            default: return ""
+            default:
+                return this.CurrentName
         }
         getTableData(p*) {
             tp := p.length>=1 ? p[1] : false ;0=obj 1=arrData 2=arrTable
@@ -1529,20 +1556,26 @@ class IUIAutomationElement extends IUIABase {
                     SendText(val)
                     if (yOffset) { ;需要点击确认，如u9网页上
                         sleep(ms)
-                        this.ClickByMouse(true,, yOffset)
+                        this.clickTo(, yOffset)
                     }
                 } else { ;普通方式
                     this.GetCurrentPattern("Value").SetValue(val)
                 }
             case UIA.ControlType.Button:
-                this.GetCurrentPattern("Invoke").Invoke() ;TODO 经常会失败，或卡死，最好用 ClickByMouse|ClickByControl 补充。
+                if (p.length) {
+                    switch p {
+                        case 1: return this.clickTo()
+                        case 2: return this.ClickByControl()
+                    }
+                }
+                this.GetCurrentPattern("Invoke").Invoke() ;TODO 经常会失败，或卡死，最好用 clickTo|ClickByControl 补充。
             case UIA.ControlType.RadioButton, UIA.ControlType.CheckBox:
                 if (!this.GetCurrentPropertyValue("IsTogglePatternAvailable")) { ;部分 RadioButton 比如FreeFileSync安装包不支持
                     if (this.GetCurrentPropertyValue("SelectionItemIsSelected") != p[1]) {
                         method := p.length>=2 ? p[2] : ""
                         switch method {
                             case "": this.GetCurrentPattern("SelectionItem").select()
-                            case "ClickByMouse": this.ClickByMouse(1)
+                            case "clickTo": this.clickTo(1)
                             default: this.%method%() ;作为补充
                         }
                     }
@@ -1555,7 +1588,7 @@ class IUIAutomationElement extends IUIABase {
                     method := p.length>=2 ? p[2] : ""
                     switch method {
                         case "": oTG.Toggle()
-                        case "ClickByMouse": this.ClickByMouse(1)
+                        case "clickTo": this.clickTo(1)
                         default: this.%method%() ;作为补充
                     }
                 } else {
@@ -1563,12 +1596,20 @@ class IUIAutomationElement extends IUIABase {
                 }
             case UIA.ControlType.Tab: ;根据名称激活 TabItem
                 name := p[1]
-                for el in this.FindAll(UIA.CreateTrueCondition(), 2) {
-                    if (el.CurrentName == name) {
-                        el.do()
-                        return el
+                if (name is integer) {
+                    arr := this.FindAll(UIA.CreatePropertyCondition("ControlType", "TabItem"), 2)
+                    arr[name].do(1)
+                    return arr[name]
+                } else {
+                    for el in this.FindAll(UIA.CreateTrueCondition(), 2) {
+                        OutputDebug(format("i#{1} {2}:{3} A_Index={4} A_Index,el.CurrentName={5}", A_LineFile,A_LineNumber,A_ThisFunc,A_Index,el.CurrentName))
+                        if (el.CurrentName == name) {
+                            el.do()
+                            return el
+                        }
                     }
                 }
+                return false
             case UIA.ControlType.ComboBox: ;TODO 可能和 RadioButton 同样的操作
                 ;这个方法专门用在下拉框选择上：前面需要点击，后面需要确定选择
                 ;3个参数分别是前 选择 后
@@ -1588,7 +1629,7 @@ class IUIAutomationElement extends IUIABase {
                     method := p.length>=2 ? p[2] : ""
                     switch method {
                         case "": this.GetCurrentPattern("SelectionItem").select()
-                        case "ClickByMouse": this.ClickByMouse(1)
+                        case "clickTo": this.clickTo()
                         default: this.%method%() ;作为补充
                     }
                 } else {
@@ -1615,7 +1656,7 @@ class IUIAutomationElement extends IUIABase {
     ;    SendText(val)
     ;    if (yOffset) { ;需要点击确认，如u9网页上
     ;        sleep(ms)
-    ;        this.ClickByMouse(true,, yOffset)
+    ;        this.clickTo(,, yOffset)
     ;    }
     ;}
 
@@ -1626,7 +1667,7 @@ class IUIAutomationElement extends IUIABase {
             return []
         arrEl := this.FindControls(arrParams)
         for el in arrEl
-            el.ClickByMouse(true, xOffset)
+            el.clickTo(xOffset)
         return arrEl
     }
 
@@ -2464,6 +2505,10 @@ class IUIAutomationElementArray extends IUIABase {
     ; Retrieves the number of elements in the collection.
     length => (comcall(3, this, "int*",&length:=0), length)
 
+    __item[i] {
+        get => this.GetElement(i-1)
+    }
+
     ; Retrieves a Microsoft UI Automation element from the collection.
     ; 'index' base of 0
     GetElement(index) => (comcall(4, this, "int",index, "ptr*",&element:=0), IUIAutomationElement(element))
@@ -3139,6 +3184,10 @@ class IUIAutomationTextRange extends IUIABase {
 class IUIAutomationTextRangeArray extends IUIABase {
     ; Retrieves the number of text ranges in the collection.
     Length => (comcall(3, this, "int*",&length:=0), length)
+
+    __item[i] {
+        get => this.GetElement(i)
+    }
 
     ; Retrieves a text range from the collection.
     GetElement(index) => (comcall(4, this, "int",index, "ptr*",&element:=0), IUIAutomationTextRange(element))

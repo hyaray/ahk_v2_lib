@@ -13,6 +13,7 @@ class _String {
     static regSudo := "^\/(etc|var|usr|bin|sbin|boot|root|sys|proc)(\/|$)"
     static fileSZM := "d:\TC\hy\Rime\opencc\jiayin.txt"
     static fileTS := "d:\TC\hy\Rime\opencc\backup\TSCharacters.txt" ;来源于 opencc，稍微调整
+    static regJson := "^\s*(\[.*\]|(\{.*\}))\s*$"
     static regNum := "^-?\d+(\.\d+)?$"
     static regIP := "^(25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d?)(\.(25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d?)){3}$"
     static regSfz := "^\d{17}[\dXx]$" ;身份证
@@ -23,10 +24,10 @@ class _String {
     static regImage := "i)^(bmp|jpe|jpeg|jpg|png|gif|ico|psd|tif|tiff)$"
     ;   编程源代码
     static regCode := "i)^(ah[k1]|js|sh|vim|bas|html?|wxml|css|wxss|lua|hh[cpk])$"
-    static regText := "i)^(ah[k1]|js|sh|vim|bas|html?|wxml|css|wxss|lua|hh[cpk]|md|yaml|log|csv|json|txt|ini)$"
+    static regText := "i)^(ah[k1]|js|py|sh|vim|bas|html?|wxml|css|wxss|lua|hh[cpk]|md|yaml|log|csv|json|txt|ini)$"
     static regAudeo := "i)^(wav|mp3|m4a|wma)$"
     static regVideo := "i)^(mp4|wmv|mkv|m4a|m4s|rm(vb)?|flv|mpeg|avi)$"
-    static regZip := "i)^(7z|zip|rar|iso|img|gz|cab|arj|lzh|ace|tar|GZip|uue|bz2)$"
+    static regZip := "i)^(7z|zip|rar|iso|img|gz|cab|arj|lzh|ace|tar|tgz|GZip|uue|bz2)$"
 
     __item[i] {
         get => substr(this, i, 1)
@@ -128,10 +129,13 @@ class _String {
         SplitPath(dir, &dirName)
         return dirName
     }
-    dirRep(dirNew, dirOld:="") {
+    dirRep(dirNew, dirOld:="", toSlash:=false) {
         if (dirOld == "")
             SplitPath(this,, &dirOld)
-        return dirNew . substr(this, strlen(dirOld)+1)
+        res := dirNew . substr(this, strlen(dirOld)+1)
+        if (toSlash)
+            res := res.toSlash()
+        return res
     }
     extRep(extNew:="") => (extNew=="") ? RegExReplace(this, "\.\w+$") : RegExReplace(this, "\.\K\w+$", extNew)
     fnRep(fn) {
@@ -148,6 +152,26 @@ class _String {
         if (dealSpace)
             res := StrReplace(res, A_Space, "_")
         return res
+    }
+    ;this	d:\a\b\c\d\e\1.txt
+    ;dir	d:\c\d
+    ;返回["d:\a\b\c\d", "\e\1.txt"]
+    dirMatch(dir) {
+        fp := this
+        arr := StrSplit(dir, "\")
+        s := format("\{1}\", arr[-1])
+        loop(arr.length) {
+            ;OutputDebug(format("i#{1} {2}:{3} s={4}", A_LineFile,A_LineNumber,A_ThisFunc,s))
+            i := instr(fp, s)
+            if i {
+                res := substr(fp, 1, i-1) . rtrim(s, "\")
+                ;OutputDebug(format("i#{1} {2}:{3} res={4} {5}", A_LineFile,A_LineNumber,A_ThisFunc,res,substr(fp, 1, i)))
+            } else {
+                return [res, substr(fp, strlen(res)+1)]
+            }
+            s := format("\{1}{2}", arr[-A_Index-1],s)
+        }
+        return ""
     }
 
     fn2fp(dir:="") {
@@ -596,9 +620,9 @@ class _String {
             ;行首有空白字符
             if (A_LoopField ~= "^\s") {
                 if (substr(A_LoopField,1,1) == A_Tab)
-                    return 1
+                    return strlen(A_LoopField) - strlen(RegExReplace(A_LoopField, "^`t+"))
                 else if (substr(A_LoopField,1,1) == A_Space)
-                    return strlen(A_LoopField) - strlen(RegExReplace(A_LoopField, "^ *"))
+                    return strlen(A_LoopField) - strlen(RegExReplace(A_LoopField, "^ +"))
             }
         }
     }
@@ -949,10 +973,12 @@ class _String {
     }
 
     ;路径转变量(TC ahk windows)
-    toVar(tp) {
+    toVar(tp?) {
         str := this
         if (str == "")
             return ""
+        if (RegExMatch(str, "^\/home\/[^\/]+(.*)", &m)) ;linux路径
+            return "~" . m[1]
         switch tp {
             case "ahk":
                 obj := map(
@@ -1362,6 +1388,16 @@ class _String {
         return substr(__,1,n) . str
     }
 
+    ;智能添加引号(如果内容包含单引号则两边添加双引号，否则相反)
+    ;用于动态生成条件
+    smartQuote() {
+        str := this
+        if (instr(str, '"'))
+            return format("'{1}'", str)
+        else ;默认添加双引号
+            return format('"{1}"', str)
+    }
+
     addQuote(cSplit:="") {
         str := rtrim(this, "`r`n")
         if (instr(str, "`n")) { ;多行
@@ -1479,6 +1515,7 @@ class _String {
 
     isSudo() => (this ~= _String.regSudo)
     isIP() => (this ~= _String.regIP)
+    isJson() => (this ~= _String.regJson)
     isText() => (this.ext(1) ~= _String.regText)
     isPdf() => (this.ext(1) ~= _String.regText)
     isImage() => (this.ext(1) ~= _String.regImage) ;是否图片文件
@@ -1724,14 +1761,13 @@ class _String {
         return s
     }
 
-    ;NOTE 各种编码相互转换
+    ;NOTE 各种编码相互转换(通用方法)
     ;来源 http://www.autohotkey.com/board/topic/75390-ahk-l-unicode-uri-encode-url-encode-function/?p=480216
     ;编码知识收录 https://www.autohotkey.com/boards/viewtopic.php?p=23975#p23975
     ; https://www.bilibili.com/video/BV1gZ4y1x7p7
     ; https://docs.microsoft.com/en-us/windows/win32/intl/code-page-identifiers?redirectedfrom=MSDN
     ;enc 都用 CP* 来表示
-    ;NOTE 空格和%可能要单独处理
-    ;ascii 是否转换!
+    ;网址相关见 uriEncode
     encode(enc:="CP65001", charSeparate:="", toString:=true) {
         str := this
         if (enc == "base64") {
@@ -1829,63 +1865,53 @@ class _String {
         return uri
     }
 
-    ;字符串特殊字符转义成URL格式(来自万年书妖)
+    ;所有字符转成%xx形式(来自万年书妖)
     ;TODO 2次 urlencod https://cloud.baidu.com/doc/SPEECH/s/Qk38y8lrl
-    UrlEncode(enc:="UTF-8") { ;字符串特殊字符转义成URL格式(来自万年书妖)
-        buff := this.toBuffer(enc)
-        res := ""
-        hex := "00"
-        while((code:=numget(buff, A_Index-1, "UChar")) && dllcall("msvcrt\swprintf", "str",hex, "str","%%%02X", "uchar",code, "cdecl"))
-            res .= hex
-        return res
-        ;StringReplace, str, str, `%,, A ;%为URL特殊转义符，先处理（Google对%符的搜索支持不好才删除,否则替换为%25）
-        ;array := map("&","%26"," ","%20","(","%28",")","%29","'","%27",",","%3A","/","%2F","+","%2B",A_Tab,"%21","`r`n","%0A") ;`r`n必须放一起，可用记事本测试
-        ;for, key, value in array  ;特殊字符url转义
-        ;StringReplace, str, str, %key%, %value%, A ;此处循环，两个参数必须一样
-        ;return str
-    }
+    ;;TODO 用uriEncode代替 <2023-10-19 00:06:00> hyaray
+    ;UrlEncode(enc:="UTF-8") { ;字符串特殊字符转义成URL格式(来自万年书妖)
+    ;    buf := this.toBuffer(enc)
+    ;    res := ""
+    ;    hex := "00"
+    ;    while((code:=numget(buf, A_Index-1, "UChar")) && dllcall("msvcrt\swprintf", "str",hex, "str","%%%02X", "uchar",code, "cdecl"))
+    ;        res .= hex
+    ;    return res
+    ;}
 
-    ; "U9数据字典V2.0SP1"
-    ; "U9%E6%95%B0%E6%8D%AE%E5%AD%97%E5%85%B8V2.0SP1"
-    ; "U9%E6%95%B0%E6%8D%AE%E5%AD%97%E5%85%B8V2%2E0SP1"
-    ;不转义\w，要转义见 toUrl
-    ;NOTE 和 encode("CP65001","%") 的区别是空格转成%20，字母不转义
-    ; v 0.3 / (w) 24.06.2008 by derRaphael / zLib-Style release
+    ;不转义\w和.-_~
+    ;和 encode("CP65001","%") 类似，但是这个方法针对网址的特殊性做了处理
     uriEncode() {
         str := this
         if (str == "")
             return
-        if (1) {
-            buf := str.toBuffer()
-            while (Code := NumGet(buf, A_Index-1, "UChar")) {
-                if (Code >= 0x30 && Code <= 0x39 || Code >= 0x41 && Code <= 0x5A || Code >= 0x61 && Code <= 0x7A) ;0-9 A-Z a-z
-                    res .= chr(code)
-                else
-                    res .= "%" . substr(format("{:02X}", code + 0x100), 2)
+        buf := str.toBuffer()
+        while (code := numget(buf, A_Index-1, "UChar")) {
+            switch code {
+                case 0x2D: res .= "-"
+                case 0x2E: res .= "."
+                case 0x5F: res .= "_"
+                case 0x7E: res .= "~"
+                default:
+                    if (code < 0xFF) {
+                        char := chr(code)
+                        if (char ~= "\w") {
+                            res .= char
+                            continue
+                        }
+                    }
+                    res .= "%" . format("{:02X}", code) ;;TODO 待核实 <2023-10-18 23:58:39> hyaraysubstr(format("{:02X}", code + 0x100), 2)
             }
-            return res
-        } else {
-            oSC := ComObject("ScriptControl")
-            oSC.Language := "JavaScript"
-            return oSC.eval(format('encodeURI("{1}")', str))
         }
+        return res
     }
-    ;utf-8也用此方法
     uriDecode() {
         str := this
-        if (1) {
-            loop {
-                if (RegExMatch(str, "i)(?<=%)[[:xdigit:]]{1,2}", &hex))
-                    str := StrReplace(str, "%" . hex[0], chr("0x" . hex[0]))
-                else
-                    break
-            }
-            return str
-        } else {
-            oSC := ComObject("ScriptControl")
-            oSC.Language := "JavaScript"
-            return oSC.eval(format('decodeURIComponent("{1}")', this))
+        loop {
+            if (RegExMatch(str, "i)(?<=%)[[:xdigit:]]{2}", &hex)) ;;TODO  <2023-10-19 00:07:50> hyaray是否应该是{2}
+                str := StrReplace(str, "%" . hex[0], chr("0x" . hex[0]))
+            else
+                break
         }
+        return str
     }
 
     ;单个中文和编码(不含符号)

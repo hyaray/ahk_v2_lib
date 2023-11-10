@@ -1,9 +1,9 @@
 ﻿class _Edge extends _CDP {
 
     ;只是为了方便打开网页
-    __new(url:="", funAfterDo:=false) {
+    __new(url:="", funAfterDo:=unset) {
         if (url != "")
-            _CDP.smartGet("msedge").tabOpenLink(url, funAfterDo)
+            _CDP.smartGet("msedge").tabOpenLink(url, funAfterDo?)
     }
 
     static onekey() {

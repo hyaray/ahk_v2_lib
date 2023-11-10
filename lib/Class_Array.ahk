@@ -3,9 +3,10 @@
 ;默认都是不修改原arr，方法内都会clone()并操作
 ;除了方法名以r开头的会修改原arr，且无返回值(rMoveDown)
 ;ip 1.2 转成 192.168.1.2
-;map 方法已自带，NOTE 注意区分 map 的返回值和被 map 修改之后的 arr
+;NOTE map 方法已自带，参数是(v,k)，注意区分 map 的返回值和被 map 修改之后的 arr
 ;提取二维数组的第1项组成一维数组
 ;arr2.map((a)=>a[1])
+;自带 arr.filter((v)=>v == 2)
 
 ; https://autohotkey.com/board/topic/83081-ahk-l-customizing-object-and-array
 defprop := object.DefineProp.bind(array.prototype)
@@ -16,15 +17,6 @@ for k in proto.OwnProps() {
 }
 
 class _Array extends Array {
-
-    static __new() {
-        defprop := {}.DefineProp.bind(super.prototype)
-        proto := this.prototype
-        for k in proto.OwnProps() {
-            if (k != "__Class")
-                defprop(k, proto.GetOwnPropDesc(k))
-        }
-    }
 
     toString() => this.toJson()
 
@@ -80,6 +72,23 @@ class _Array extends Array {
         return arr
     }
 
+    deleteEmpty() {
+        arr := []
+        for v in this {
+            if (v != "")
+                arr.push(v)
+        }
+        return arr
+    }
+
+    ;二维数组，删除第n列
+    delete(c) {
+        arr2 := this
+        for arr in arr2
+            arr.RemoveAt(c)
+        return arr2
+    }
+
     extend(arr) {
         arr0 := this
         for v in arr
@@ -130,6 +139,37 @@ class _Array extends Array {
         for v in this
             obj[v] := v
         return obj
+    }
+
+    ;arr2 转成字典数组
+    ;[ [A1,B1], [A2,B2] ] [title1, title2]
+    ;返回[
+    ;    map("title1",A1, "title2",B1),
+    ;    map("title1",A2, "title2",B2),
+    ;]
+    ;
+    ;[A1,B1], [title1, title2]
+    ;返回    map("title1",A1, "title2",B1)
+    toMapEx(arrTitle) {
+        arrRes := []
+        if (this[1] is array) {
+            for arr in this {
+                obj := map()
+                for v in arr {
+                    if isset(v) ;过滤null
+                        obj[arrTitle[A_Index]] := v
+                }
+                arrRes.push(obj)
+            }
+            return arrRes
+        } else {
+            obj := map()
+            for v in this {
+                if isset(v) ;过滤null
+                    obj[arrTitle[A_Index]] := v
+            }
+            return obj
+        }
     }
 
     ;目前只在 _Pwd 里使用(用于给每行做索引)
@@ -392,10 +432,6 @@ class _Array extends Array {
         }
         return arrRes
     }
-
-    ;sum {
-    ;    get => this.sum()
-    ;}
 
     ;修改行，列，参考 numpy
     ;msgbox(json.stringify([1,2,3,4,5,6].reshape(2,3)))
