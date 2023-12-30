@@ -44,6 +44,14 @@ class _Map extends map {
         return arr
     }
 
+    ;转成二维数组arr2(参考python)
+    items() {
+        arr := []
+        for k, v in this
+            arr.push([k, v])
+        return arr
+    }
+
     ;通过数组来获取值
     getEx(arr, default:="") {
         if !(arr is array)
@@ -68,14 +76,6 @@ class _Map extends map {
         for k, v in this
             obj[k] := v
         return obj
-    }
-
-    ;转成二维数组(参考python)
-    items() {
-        arr := []
-        for k, v in this
-            arr.push([k, v])
-        return arr
     }
 
     ;遍历 arr，看是否包含

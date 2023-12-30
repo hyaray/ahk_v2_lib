@@ -51,14 +51,6 @@ class _Array extends Array {
         return res
     }
 
-    indexOf(value) {
-        for k, v in this {
-            if (v = value)
-                return k
-        }
-        return 0
-    }
-
     ;删除重复
     unique() {
         arr := []

@@ -72,7 +72,7 @@ class _Ctrl {
 
     ;getIndexByFunText("SysListView321", (sLine)=>StrSplit(sLine,A_Tab)[1]==value)
     static getIndexByFunText(ctl, funStrLine) {
-        for k, sLine in ControlGetItems(this.hCtl) {
+        for sLine in ControlGetItems(this.hCtl) {
             msgbox(sLine)
              if (funStrLine.call(sLine))
                  return A_Index
@@ -963,7 +963,7 @@ class RemoteBuffer {
     ;PROCESS_VM_OPERATION:=0x8 PROCESS_VM_READ:=0x10 PROCESS_VM_WRITE:=0x20 PROCESS_QUERY_INFORMATION:=0x400
     __new(pid, size:=0, DesiredAccess:=56) { ; 0x8|0x10|0x20==56
         if !(this.hProcess := dllcall("OpenProcess", "UInt",DesiredAccess, "Int",0, "UInt",pid, "Ptr"))
-            return ""
+            return
         this.arrBuffer := [] ;NOTE 可申请多个内存，所以用数组
         this.arrSize := []
         if (size)
@@ -974,11 +974,11 @@ class RemoteBuffer {
         if (idx) {
             pBuffer := this.arrBuffer.RemoveAt(idx)
             this.arrSize.RemoveAt(idx)
-            dllcall("VirtualFreeEx", "Ptr",this.hProcess, "Ptr",pBuffer, "UInt",0, "UInt",MEM_RELEASE:=0x8000)
+            dllcall("VirtualFreeEx", "Ptr",this.hProcess, "Ptr",pBuffer, "UInt",0, "UInt",0x8000) ;MEM_RELEASE=0x8000
             dllcall("CloseHandle", "Ptr",this.hProcess)
         } else { ;删除全部
-            for k, pBuffer in this.arrBuffer
-                dllcall("VirtualFreeEx", "Ptr",this.hProcess, "Ptr",pBuffer, "UInt",0, "UInt",MEM_RELEASE:=0x8000)
+            for pBuffer in this.arrBuffer
+                dllcall("VirtualFreeEx", "Ptr",this.hProcess, "Ptr",pBuffer, "UInt",0, "UInt",0x8000)
             dllcall("CloseHandle", "Ptr",this.hProcess)
         }
     }
@@ -987,7 +987,7 @@ class RemoteBuffer {
     ;文字内容往往在 pBuffer + size 的后面
     addBuffer(size) {
         if !(pBuffer := dllcall("VirtualAllocEx", "UInt",this.hProcess, "UInt",0, "UInt",size, "UInt",MEM_COMMIT:=0x1000, "UInt",PAGE_READWRITE:=4, "Ptr"))
-            return ""
+            return
         this.arrBuffer.push(pBuffer)
         this.arrSize.push(size)
         return pBuffer

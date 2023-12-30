@@ -41,6 +41,8 @@ company := "My Company"
 #include lib\Class_Date.ahk
 #include lib\Yaml.ahk
 #include lib\WinHttpRequest.ahk
+#include lib\Class_Gui.ahk
+#include lib\LVICE_XXS.ahk
 
 #include lib\Socket.ahk
 #include lib\Class_CDP.ahk

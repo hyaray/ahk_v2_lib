@@ -91,10 +91,7 @@ hyf_paste(str, k:="", ms:=500) {
             OutputDebug(format("i#{1} {2}:{3} ctrl-v", A_LineFile,A_LineNumber,A_ThisFunc))
             send("{ctrl down}v{ctrl up}")
     }
-    sleep(20)
-    if (k != "")
-        send(k)
-    sleep(ms) ;有些应用反应比较慢
+    sendEx(20, k, ms) ;ms是因为有些应用反应比较慢
     A_Clipboard := c
     if (ProcessExist("Ditto.exe")) {
         PostMessage(0x111, 32775,,, "Ditto") ;连接剪切板
@@ -415,16 +412,16 @@ inputboxEX(tips, sDefaluet:="", sTitle:="", bEmpty:=false) {
 }
 
 /*
-arr := [
+arr2 := [
  ["姓名", "name", "default"],
- ["性别", "gender", ["男","女"], "2"],
+ ["性别", "gender", ["男","女"], 2],
  ["年龄", "age", "20", "n"],
  ["是否党员", "dangyuan", 0, "b"],
  ["备注", "beizhu", "", "2"],
 ]
-objOpt := hyf_inputOption(arr, "提示")
+objOpt := hyf_inputOption(arr2, "提示")
 msgbox(json.stringify(objOpt, 4))
-;arr的子数组
+;arr2的子数组
 ;1.提示文字
 ;2.变量名
 ;3.默认值(可选)
@@ -437,11 +434,10 @@ msgbox(json.stringify(objOpt, 4))
 ;关闭则返回map()
 ;NOTE 自动过滤空值，数字返回的是字符串
 */
-hyf_inputOption(arr, title:="", bTrim:=false, bOne:=false) {
-    if (arr is map) {
-        arr1 := arr.clone()
-        for k, v in arr1
-            arr.push([k,k,v])
+hyf_inputOption(arr2, title:="", bTrim:=false, bOne:=false) {
+    if (arr2 is map) {
+        for k, v in arr2.clone()
+            arr2.push([k,k,v])
     }
     oGui := gui("+resize +AlwaysOnTop +Border +LastFound +ToolWindow")
     if (title != "")
@@ -452,17 +448,17 @@ hyf_inputOption(arr, title:="", bTrim:=false, bOne:=false) {
     oGui.SetFont("cDefault s11")
     funOpt := (x,w:=600)=>format("ys v{1} w{2}", x,w) ;默认宽
     focusCtl := ""
-    for a in arr {
-        oGui.AddText("x10 section", a[1])
-        if (a.length > 4)
+    for arr in arr2 {
+        oGui.AddText("x10 section", arr[1])
+        if (arr.length > 4)
             continue
-        varName := a[2]
+        varName := arr[2]
         ;设置 opt
-        if (a.length >= 3) { ;下拉框，根据内容设置长度
-            if (a[3] is array) {
-                lMax := max(a[3].map(x=>strlen(x))*)
+        if (arr.length >= 3) { ;下拉框，根据内容设置长度
+            if (arr[3] is array) {
+                lMax := max(arr[3].map(x=>strlen(x))*)
                 opt := funOpt(varName, max(lMax*30, 50))
-            } else if (a.length>=4 && a[4] == "b") { ;boolean
+            } else if (arr.length>=4 && arr[4] == "b") { ;boolean
                 opt := funOpt(varName, 100)
             } else {
                 opt := funOpt(varName)
@@ -470,33 +466,33 @@ hyf_inputOption(arr, title:="", bTrim:=false, bOne:=false) {
         } else {
             opt := funOpt(varName)
         }
-        if (a.length == 4) { ;有选项
-            switch a[4] {
+        if (arr.length == 4) { ;有选项
+            switch arr[4] {
                 case "n": ;限制为数字
-                    oGui.AddEdit(funOpt(varName,100) . " number", a[3]).OnEvent("change", editChange)
+                    oGui.AddEdit(funOpt(varName,100) . " number", arr[3]).OnEvent("change", editChange)
                 case "b": ;boolean
                     oGui.SetFont("cRed")
-                    if (a[3])
+                    if (arr[3])
                         opt .= " checked"
                     oGui.AddCheckbox(opt)
                     oGui.SetFont("cDefault")
                 default:
-                    if (a[4] is integer) {
-                        if (a[3] is array) ;默认选择项
-                            oGui.AddComboBox(format("{1} choose{2}", opt,a[4]), a[3])
+                    if (arr[4] is integer) {
+                        if (arr[3] is array) ;默认选择项
+                            oGui.AddComboBox(format("{1} choose{2}", opt,arr[4]), arr[3])
                         else ;指定行数
-                            oGui.AddEdit(format("{1} r{2}", funOpt(varName),a[4]), a[3]).OnEvent("change", editChange)
+                            oGui.AddEdit(format("{1} r{2}", funOpt(varName),arr[4]), arr[3]).OnEvent("change", editChange)
                     }
             }
-        } else if (a.length == 3) {
-            if (a[3] is array) ;下拉框，根据内容设置长度
-                oGui.AddComboBox(opt, a[3])
+        } else if (arr.length == 3) {
+            if (arr[3] is array) ;下拉框，根据内容设置长度
+                oGui.AddComboBox(opt, arr[3])
             else
-                oGui.AddEdit(opt, a[3]).OnEvent("change", editChange)
+                oGui.AddEdit(opt, arr[3]).OnEvent("change", editChange)
         } else {
             oGui.AddEdit(opt).OnEvent("change", editChange)
         }
-        if (a.length >= 4)
+        if (arr.length >= 4)
             focusCtl := varName
     }
     oBtn := oGui.AddButton("default center", "确定")
@@ -518,32 +514,19 @@ hyf_inputOption(arr, title:="", bTrim:=false, bOne:=false) {
         }
     }
     btnClick(ctl, p*) {
-        ctl.gui.submit
-        for a in arr {
-            try ;有些控件并未生成
-                ctl.gui[a[2]]
-            catch
-                continue
-            ;根据控件提取结果
-            if (a.length >= 3 && a[3] is array) {
-                v := a[3][ctl.gui[a[2]].value]
-            } else {
-                ;值在控件的value还是text
-                if (a.length >=4) {
-                    v := ctl.gui[a[2]].value
-                } else {
-                    v := ctl.gui[a[2]].text
-                }
-            }
-            ;结果二次加工
-            if (bTrim && v is string)
-                v := trim(v) ;TODO 是否trim(比如每行前加"- "转成无序列表)
+        o := ctl.gui.submit()
+        ;msgbox(type(o) . "`n" . json.stringify(hyf_props(o), 4))
+        for arr in arr2 {
+            v := o[arr[2]]
             ;记录
             if (v != "") { ;过滤空值
-                if (a.length >=4 && a[4]=="n")
-                    objRes[a[2]] := number(v)
+                ;结果二次加工
+                if (bTrim)
+                    v := trim(v) ;TODO 是否trim(比如每行前加"- "转成无序列表)
+                if (arr.length >=4 && arr[4]=="n")
+                    objRes[arr[2]] := number(v)
                 else
-                    objRes[a[2]] :=  v
+                    objRes[arr[2]] := v
             }
         }
         ctl.gui.destroy()
@@ -1766,11 +1749,12 @@ hyf_selectSingle(arr, title:="") {
 ;defButton是默认按钮前面的text内容
 ;仅支持选择，不支持搜索，不支持输入
 ;返回二维数组(因为支持多选)
-;arrCol
+;arr2 支持 ao
+;arrField
 ;   1 从arr2第1项获取(如果是数组则删除第1项)
-;   0 从arr2第1项生成1-n作为标题
+;   0 以1-n作为标题
 ;   arr 直接用
-hyf_GuiListView(arr2, arrCol:=0, title:="", arrWidth:=unset) {
+hyf_GuiListView(arr2, arrField:=0, title:="", arrWidth:=unset) {
     if (!isobject(arr2))
         return
     if (!arr2.length)
@@ -1786,8 +1770,8 @@ hyf_GuiListView(arr2, arrCol:=0, title:="", arrWidth:=unset) {
                 arr2[A_Index] := [v]
         } else if (arr2[1] is map) { ;NOTE map
             ;获取标题
-            if (arrCol == 1) {
-                arrCol := arr2[1].keys()
+            if (arrField == 1) {
+                arrField := arr2[1].keys()
             }
             ;map转数组
             for obj in arr2 {
@@ -1801,21 +1785,20 @@ hyf_GuiListView(arr2, arrCol:=0, title:="", arrWidth:=unset) {
     oGui.title := format("{1}", title)
     oGui.SetFont("s13")
     oGui.OnEvent("escape",doEscape)
-    if (arrCol is integer) {
-        switch arrCol {
-            case 1: arrCol := arr2.RemoveAt(1)
+    if (arrField is integer) {
+        switch arrField {
+            case 1: arrField := arr2.RemoveAt(1)
             case 0: ;自动生成
-                arrCol := []
+                arrField := []
                 for v in arr2[1]
-                    arrCol.push(A_Index)
+                    arrField.push(A_Index)
         }
     }
     rs := min(arr2.length, 40)
     w := 1200.fromDPI()
-    oLv := oGui.AddListView(format("VScroll count grid checked w{1} r{2}", w-50,rs+2), arrCol)
+    oLv := oGui.AddListView(format("VScroll count grid checked w{1} r{2}", w-50,rs+2), arrField)
     oLv.name := "lv"
-    ;oLv.OnEvent("ItemCheck", do)
-    oLv.OnEvent("DoubleClick", do)
+    ;oLv.OnEvent("DoubleClick", do)
     oLv.opt("-Redraw")
     for k, arr in arr2
         oLv.add(, arr*)
@@ -1835,6 +1818,7 @@ hyf_GuiListView(arr2, arrCol:=0, title:="", arrWidth:=unset) {
     oGui.AddButton("center ys", "全不选").OnEvent("click", btnSelectNone)
     oGui.AddStatusBar(, format("共有{1}项结果", arr2.length))
     oGui.show(format("w{1} center", w))
+    LVICE := LVICE_XXS(oLV)
     WinWaitClose(oGui)
     return arrRes
     doEscape(oGui) => oGui.destroy()

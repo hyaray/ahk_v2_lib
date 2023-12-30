@@ -45,13 +45,12 @@ class _String {
 
  ;字符串长度（宽字符算2）
     lenByte() => strlen(RegExReplace(this, "[^\x00-\xff]", 11))
-
-    reverse() { ;字符串反转
-        dllcall("msvcrt\_wcsrev", "str",str:=this, "cdecl")
-        return str
-    }
-
     length => strlen(this)
+    lines() {
+        StrReplace(this, "`n",,, &cntLine)
+        cntLine++
+        return cntLine
+    }
     repeat(n, char:="") => rtrim(StrReplace(format(format("{:{1}}",n),""), " ", this . char), char)
     repeatArr(n, index:=unset) {
         if (isset(index)) { ;当序号
@@ -69,6 +68,11 @@ class _String {
     left(n) => substr(this, 1, n)
     right(n) => substr(this, -n)
     split(p*) => StrSplit(this, p*)
+
+    reverse() { ;字符串反转
+        dllcall("msvcrt\_wcsrev", "str",str:=this, "cdecl")
+        return str
+    }
 
     ;路径相关
     fn() {
@@ -203,9 +207,10 @@ class _String {
     ;会先删除文件/文件夹(fp1)
     ;this为实体所在路径
     ;mklink /j "c:\Users\Administrator\AppData\local\Chromium\User Data\" "s\User Data"
-    ;判断文件是否是 mklink 用 _TC._info(fp, 2) == ".symlink"
+    ;判断文件|文件夹用 instr(FileGetAttrib(fp), "L")
+    ;源文件路径暂用 _TC._info()
     ;NOTE mklink的文件和文件夹，打包的时候，zip 都会打包原始文件，7z则会忽略文件
-    mklink(fp1) {
+    mklink(fp1, isHard:=false) {
         fp0 := this
         if (!FileExist(fp0)) {
             msgbox("文件不存在`n" . fp0)
@@ -226,7 +231,12 @@ class _String {
             if (!DirExist(dir))
                 DirCreate(dir)
         }
-        RunWait(format('{1} /c mklink{2} "{3}" "{4}"',A_ComSpec,DirExist(fp0)?" /j":"",fp1,fp0),, "hide")
+        if isHard ;NOTE 硬链接刷新
+            sCmd := format('{1} /c fsutil hardlink create "{2}" "{3}"',A_ComSpec,fp1,fp0)
+        else
+            sCmd := format('{1} /c mklink{2} "{3}" "{4}"',A_ComSpec,DirExist(fp0)?" /j":"",fp1,fp0)
+        OutputDebug(format("d#{1} {2}:{3} sCmd={4}", A_LineFile,A_LineNumber,A_ThisFunc,sCmd))
+        RunWait(sCmd,, "hide")
     }
 
     ;删除文件名前面的序号
@@ -1164,7 +1174,7 @@ class _String {
                 } else {
                     res := data[1]
                     loop(data.length-1)
-                        res .= this . data[A_Index+1]
+                        res .= this . (data[A_Index+1] is ComValue ? "" : data[A_Index+1])
                     return res
                 }
             }

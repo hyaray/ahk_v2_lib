@@ -67,6 +67,8 @@ class WinHttpRequest {
 		this.Open(method, url)
 		for k, v in headers.OwnProps()
 			this.SetRequestHeader(k, v)
+        if (isset(post_data) && isobject(post_data))
+            post_data := json.stringify(post_data)
 		this.Send(post_data?)
 		return this.ResponseText
 	}
@@ -127,7 +129,11 @@ class WinHttpRequest {
 	SetRequestHeader(Header, Value) => this.whr.SetRequestHeader(Header, Value)
 	GetResponseHeader(Header) => this.whr.GetResponseHeader(Header)
 	GetAllResponseHeaders() => this.whr.GetAllResponseHeaders()
-	Send(Body?) => (this._ievents && this._ref := this, this.whr.Send(Body?))
+    Send(Body?) {
+        if this._ievents
+            this._ref := this
+        return this.whr.Send(Body?)
+    }
 	Open(verb, url, async := false) {
 		this.readyState := 0
 		this.whr.Open(verb, url, async)
