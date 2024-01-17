@@ -28,16 +28,14 @@ NOTE NOTE NOTE 思路：
                 obj[propertyId] := this.GetCachedPropertyValue(propertyId)
             return obj
 
-        每个类都有个 __ 属性(用在 comcall)，其他基本上全是方法
-
 使用步骤：
     1.获取【窗口】或【控件】el(为 IUIAutomationElement 类的实例，获取方式见 IUIAutomationElement_instance 下面的方法)
-        2.1简单的推荐直接用 ElementFromHandle(hwnd) ElementFromPoint(xScreen, yScreen) GetFocusedElement()
+        2.1 简单的推荐直接用 ElementFromHandle(hwnd) ElementFromPoint(xScreen, yScreen) GetFocusedElement()
         2.2 ElementFromPoint(xScreen, yScreen) 有时会获取很大的元素，要用 ElementFromPointEx()
-        2.2如果是非标准窗口，一般先获取整个窗口控件 elWin := UIA.ElementFromHandle(hwnd)，再【搜索】特定的控件
+        2.2 如果是非标准窗口，一般先获取整个窗口控件 elWin := UIA.ElementFromHandle(hwnd)，再【搜索】特定的控件
         搜索方法：
             ①只搜索一次：
-               推荐用封装的函数 UIA.FindElement(, 控件名, 其他字段值, 其他字段名(默认"name"))
+               推荐用封装的函数 UIA.FindControl(控件名, 其他字段值, 其他字段名(默认"name"))
                不需要保存 elWin，而是一次性用完就丢。
                比如Excel的【查找和替换】对话框，可用下面方法获取 Name="范围(H)": 的 ComboBox
                el := UIA.FindControl("ComboBox", "范围(H):")
@@ -83,13 +81,30 @@ NOTE NOTE NOTE 思路：
             某元素的最后1个儿子 GetLast()
             某元素的第N个儿子 GetFirst() 再 GetNext，可否优化 TODO
             某元素的所有子孙 FindAll(cond, 4=子孙|2=儿子)
-    4.获取控件的属性(查看控件所有属性见 IUIAutomation_p，获取方法，见 IUIAutomationElement_vt)
+    4.获取控件的属性
         获取所有属性 见 allProperty
         控件的【默认获取】统一见 get() <2023-07-16 11:13:50>
         TODO 后期完善 elItem.getSiblingItems()
-    5.操作控件，见类 IUIAutomationPattern 上方相关说明，可操作列表见 IUIAutomationPattern_vt
+    5.操作控件
         激活控件 el.SetFocus()
-        控件的【默认动作】统一见 do() <2023-07-16 11:13:50>
+        NOTE 控件的【默认动作】统一见 do() <2023-07-16 11:13:50>
+        各种控件和支持的 pattern 类型 https://docs.microsoft.com/en-us/windows/win32/winauto/uiauto-controlpatternmapping
+        https://docs.microsoft.com/en-us/windows/win32/winauto/uiauto-controlpatternsoverview
+        控件模式
+           Grid 控件模式：呈现表格界面的控件使用 来公开表中的行数和列数，并使客户端能够从表中检索项目。
+           Selection SysTreeView321可用 https://docs.microsoft.com/en-us/windows/win32/winauto/uiauto-implementingselection
+           Invoke 控件模式：按钮等可调用的控件
+           Scroll 控件模式：用于具有滚动条的控件（例如列表框，列表视图或组合框）
+           文本控件模式 https://docs.microsoft.com/en-us/windows/win32/winauto/uiauto-about-text-and-textrange-patterns
+           主查 Text 和 TextRange 两种控件模式，后者可以指定部分内容
+        可以询问控件所支持的【控件模式】，然后通过所支持的控件模式公开的属性，方法，事件和结构与控件进行交互。
+        因为每个控件模式代表一个单独的功能，所以可以【组合控件模式】以描述特定控件支持的全部功能集。
+        方法：操控控件
+        属性和事件：提供状态和功能信息
+        提供者和客户中的控制模式
+           接口没有直接暴露给客户端，而是由UI Automation核心用来实现另一组客户端接口。
+           例如，提供程序公开滚动功能，通过UI自动化 IScrollProvider 和 UI自动化公开通过功能给客户 IUIAutomationScrollPattern
+        某些控件并不总是支持相同的控件模式集，比如多行的滚动功能，内容足够多才会启用
     6.遍历
         见 GetNext 上下文(一般用 FindAll)
     7.事件监听 TODO
@@ -1161,23 +1176,15 @@ class IUIAutomationElement extends IUIABase {
             if (v == 0) {
                 res := x + w // 2
             } else if (v < 0) {
-                if (v is float) {
-                    if isOut
-                        res := x - round(w*abs(v))
-                    else
-                        res := x + w - round(w*abs(v))
-                } else {
-                    res := x - abs(v*A_ScreenDPI//96)
-                }
+                if (v is float)
+                    res := isOut ? x - round(w*abs(v)) : x + w - round(w*abs(v))
+                else
+                    res := isOut ? x - abs(v) : x + w - abs(v)
             } else {
-                if (v is float) {
-                    if isOut
-                        res := x + w + round(w*v)
-                    else
-                        res := x + round(w*v)
-                } else if (v >= 1) {
+                if (v is float)
+                    res := isOut ? x + w + round(w*abs(v)) : x + round(w*abs(v))
+                else
                     res := x + w + v*A_ScreenDPI//96
-                }
             }
             OutputDebug(format("i#{1} {2}:{3} v={4},x={5},w={6} isOut={7}, res={8}", A_LineFile,A_LineNumber,A_ThisFunc,v,x,w,isOut,res))
             return res
@@ -3193,24 +3200,6 @@ class IUIAutomationTextRangeArray extends IUIABase {
     GetElement(index) => (comcall(4, this, "int",index, "ptr*",&element:=0), IUIAutomationTextRange(element))
 }
 
-;pp
-; 各种控件和支持的 pattern 类型 https://docs.microsoft.com/en-us/windows/win32/winauto/uiauto-controlpatternmapping
-; https://docs.microsoft.com/en-us/windows/win32/winauto/uiauto-controlpatternsoverview
-;控件模式
-;   Grid 控件模式：呈现表格界面的控件使用 来公开表中的行数和列数，并使客户端能够从表中检索项目。
-;   Selection SysTreeView321可用 https://docs.microsoft.com/en-us/windows/win32/winauto/uiauto-implementingselection
-;   Invoke 控件模式：按钮等可调用的控件
-;   Scroll 控件模式：用于具有滚动条的控件（例如列表框，列表视图或组合框）
-;   文本控件模式 https://docs.microsoft.com/en-us/windows/win32/winauto/uiauto-about-text-and-textrange-patterns
-;   主查 Text 和 TextRange 两种控件模式，后者可以指定部分内容
-;可以询问控件所支持的【控件模式】，然后通过所支持的控件模式公开的属性，方法，事件和结构与控件进行交互。
-;因为每个控件模式代表一个单独的功能，所以可以【组合控件模式】以描述特定控件支持的全部功能集。
-;方法：操控控件
-;属性和事件：提供状态和功能信息
-;提供者和客户中的控制模式
-;   接口没有直接暴露给客户端，而是由UI Automation核心用来实现另一组客户端接口。
-;   例如，提供程序公开滚动功能，通过UI自动化 IScrollProvider 和 UI自动化公开通过功能给客户 IUIAutomationScrollPattern
-;某些控件并不总是支持相同的控件模式集，比如多行的滚动功能，内容足够多才会启用
 class IUIAutomationTogglePattern extends IUIABase {
     ; Cycles through the toggle states of the control.
     ; A control cycles through its states in this order, ToggleState_On, ToggleState_Off and, if supported, ToggleState_Indeterminate.

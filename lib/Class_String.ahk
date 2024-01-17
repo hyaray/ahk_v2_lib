@@ -402,14 +402,18 @@ class _String {
     ;"XAR.toNum() ;16268
     toNum(numA:=unset) {
         key := this
+        if (key.isNum()) {
+            if (key ~= "^-?\d+$")
+                return integer(key)
+            else
+                return float(key)
+        }
         if (!isset(numA)) {
             res := 0
             loop parse, StrUpper(key)
                 res := res * 26 + ord(A_LoopField)-64
             return res
         } else {
-            if (key ~= "\d")
-                return integer(key)
             key := StrUpper(key)
             return ord(key) - 65 + numA
         }
@@ -1489,6 +1493,7 @@ class _String {
 
     ;isFunc() => this ~= "^(ObjBindMethod|Closure|BoundFunc|Func)$" ;和 type搭配，用 is func 代替
     isZh() => (this ~= "^[\x{4E00}-\x{9FA5}]") ;是否中文
+    isNum() => (this ~= _String.regNum)
     isabs() => (this ~= "i)^[a-z]:[\\/]") ;判断字符串是否为路径格式
 
     ;fp是否64位程序
@@ -2148,6 +2153,7 @@ class _String {
     ; ]
     ;arrV要用这个方法 整数可用 integer() 代替
     ;NOTE 日期表示为 3.20，会影响实际数据
+    ;python里用"{:g}".format()实现相同功能
     delete0() {
         sNum := this
         if (sNum ~= "^-?\d+\.\d+$") {

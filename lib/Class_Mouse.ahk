@@ -1,4 +1,5 @@
-﻿;moveR 坐标进行 .toDPI 来兼容
+﻿;NOTE 坐标小数点处理见 hyf_offsetRect，本库只处理 CoordMode
+;moveR 坐标进行 .toDPI 来兼容
 ;NOTE 光标用 CaretGetPos 获取
 ;修改光标见 _IME.curModify()
 ;鼠标点击和移动类
@@ -6,23 +7,31 @@
 class _Mouse {
     static bMoving := false
     static speed := 1
+    static xySave := []
 
     static save(md:="screen") {
         cmMouse := A_CoordModeMouse
         CoordMode("mouse", md)
         MouseGetPos(&xSave, &ySave)
-        this.arrSave := [xSave, ySave]
+        _Mouse.xySave := [xSave, ySave]
         CoordMode("mouse", cmMouse)
-        return this.arrSave
+        return _Mouse.xySave
     }
 
-    static back(cnt:=0) {
+    static back(cnt:=unset) {
+        if (!_Mouse.xySave.length)
+            return
         cmMouse := A_CoordModeMouse
         CoordMode("mouse", "screen")
-        MouseMove(this.arrSave[1], this.arrSave[2], 0)
-        if (cnt) {
-            sleep(10)
-            click(cnt)
+        MouseMove(_Mouse.xySave[1], _Mouse.xySave[2], 0)
+        if (isset(cnt)) {
+            if (cnt is integer) {
+                sleep(10)
+                click(cnt)
+            } else {
+                MouseGetPos(,, &hwndMouse)
+                WinActivate(hwndMouse)
+            }
         }
         CoordMode("mouse", cmMouse)
     }
@@ -383,6 +392,17 @@ class _Mouse {
         this._clickStay("client", n, x, y)
     }
 
+    static clickToPercent(x:=0, y:=0, n:=1, hwnd:=unset) {
+        if (x is array) {
+            for arr in x
+                this.clickToPercent(arr*)
+            return
+        }
+        xy := hyf_offsetXY(x, y, false, hwnd?)
+        this.clickStayByScreen(xy[1], xy[2], n)
+        return xy
+    }
+
     ;如果x是数组，则y直接当n用(调用时不需要中间空一个参数) NOTE
     static downByWindow(x, y:=1) {
         this.downBase("window", x, y)
@@ -557,47 +577,9 @@ class _Mouse {
         }
     }
 
-    ;从 UIA 里复制
-    static offsetOut(aRect, xOffset, yOffset, isOut:=1) {
-        arrXY := []
-        if (isobject(xOffset)) ;NOTE 支持传入函数
-            arrXY.push(xOffset(aRect))
-        else
-            arrXY.push(deal(xOffset,aRect[1],aRect[3]))
-        if (isobject(yOffset))
-            arrXY.push(yOffset(aRect))
-        else
-            arrXY.push(deal(yOffset,aRect[2],aRect[4]))
-        ;OutputDebug(format("i#{1} {2}:{3} aRect={4} arrXY={5}", A_LineFile,A_LineNumber,A_ThisFunc,json.stringify(aRect),json.stringify(arrXY)))
-        return arrXY
-        deal(v, x, w) {
-            ;TODO 去掉假浮点数
-            if (v is float && integer(v)==v)
-                v := integer(v)
-            if (v == 0) {
-                res := x + w // 2
-            } else if (v < 0) {
-                if (v is float) {
-                    if isOut
-                        res := x - round(w*abs(v))
-                    else
-                        res := x + w - round(w*abs(v))
-                } else {
-                    res := x - abs(v*A_ScreenDPI//96)
-                }
-            } else {
-                if (v is float) {
-                    if isOut
-                        res := x + w + round(w*v)
-                    else
-                        res := x + round(w*v)
-                } else if (v >= 1) {
-                    res := x + w + v*A_ScreenDPI//96
-                }
-            }
-            ;OutputDebug(format("i#{1} {2}:{3} v={4},x={5},w={6} isOut={7}, res={8}", A_LineFile,A_LineNumber,A_ThisFunc,v,x,w,isOut,res))
-            return res
-        }
+    ;两个坐标转成rect
+    static xys2rect(arr) {
+        return [arr[1],arr[2], arr[3]-arr[1], arr[4]-arr[2]]
     }
 
 }

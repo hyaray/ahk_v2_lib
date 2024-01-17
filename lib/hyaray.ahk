@@ -360,21 +360,29 @@ hyf_inputnum(str:="请输入数字", varDefault:="", title:="") {
 }
 
 ;#8::msgbox(hyf_input())
-hyf_input(toLow:=false) {
+hyf_input(toLow:=false, ms:=0) {
     ih := InputHook()
     ih.VisibleNonText := false
     ih.VisibleText := false
     ih.KeyOpt("{All}", "E")
     ih.start()
+    ih.Timeout := ms
     timeSave := A_TickCount
     suspend(true) ;#HotIf HotIfWinActive 优先级更高
     ih.wait() ;. "`n2" . ih.EndKey . "`n1" . ih.EndReason
     if (A_TickCount - timeSave < 200 && ih.EndKey == "LControl") { ;A_MenuMaskKey 会自动发送按键
+        msgbox("hyaray:hyf_input A_MenuMaskKey")
         ih.start()
         ih.wait()
     }
     suspend(false)
-    return toLow ? StrLower(ih.EndKey) . ih.EndMods : ih.EndKey
+    if (ih.EndReason == "Timeout")
+        res := "Timeout"
+    else
+        res := ih.EndKey
+    if (toLow)
+        res := StrLower(res)
+    return res
 }
 
 ;支持多行的 inputbox
@@ -428,6 +436,7 @@ msgbox(json.stringify(objOpt, 4))
 ;   数组，则为 AddComboBox
 ;4.opt
 ;   "n" Edit只能输入数字，返回为数字类型
+;   "f" Edit为浮点数
 ;   "b" 是否的 Checkbox
 ;   数字 多行Edit|ComboBox的默认项
 ;bOne 表示限制单结果，则会在 Edit内容改变时，清空其他控件
@@ -469,6 +478,8 @@ hyf_inputOption(arr2, title:="", bTrim:=false, bOne:=false) {
         if (arr.length == 4) { ;有选项
             switch arr[4] {
                 case "n": ;限制为数字
+                    oGui.AddEdit(funOpt(varName,100) . " number", arr[3]).OnEvent("change", editChange)
+                case "f": ;限制为浮点数
                     oGui.AddEdit(funOpt(varName,100) . " number", arr[3]).OnEvent("change", editChange)
                 case "b": ;boolean
                     oGui.SetFont("cRed")
@@ -523,7 +534,7 @@ hyf_inputOption(arr2, title:="", bTrim:=false, bOne:=false) {
                 ;结果二次加工
                 if (bTrim)
                     v := trim(v) ;TODO 是否trim(比如每行前加"- "转成无序列表)
-                if (arr.length >=4 && arr[4]=="n")
+                if (arr.length >=4 && arr[4]~="n|f")
                     objRes[arr[2]] := number(v)
                 else
                     objRes[arr[2]] := v
@@ -680,6 +691,82 @@ eval(str) {
     oSC := ComObject("ScriptControl")
     oSC.Language := "VBScript" ;"JavaScript"
     return oSC.eval(str)
+}
+
+;返回 screen 的坐标
+;以 xOffset为例, yOffset 同理
+;tp
+;   1=往【外部】偏移，xOffset 情况如下
+;       -0.1=左侧往左0.1宽
+;        0.1=右侧往右0.1宽
+;   0=往【内部】偏移，xOffset 情况如下
+;       -0.1=右侧往左0.1宽
+;        0.1=左侧往右0.1宽
+;   2=NOTE 相对坐标，主要用来转换浮点数和高宽的关系
+hyf_offsetXY(xOffset:=unset, yOffset:=unset, tp:=0, aRect:=unset) {
+    if (!isset(aRect)) {
+        WinGetPos(&winX, &winY, &winW, &winH, "A")
+        aRect := [winX,winY,winW,winH]
+    } else if (aRect is integer) {
+        WinGetPos(&winX, &winY, &winW, &winH, aRect)
+        aRect := [winX,winY,winW,winH]
+    }
+    if (tp == 2) { ;则两个参数必填
+        if (isset(xOffset)) {
+            if (xOffset is float)
+                xOffset *= aRect[3]
+        } else {
+            xOffset := 0
+        }
+        if (isset(yOffset)) {
+            if (yOffset is float)
+                yOffset *= aRect[4]
+        } else {
+            yOffset := 0
+        }
+        return [xOffset, yOffset]
+    }
+    ;只传入单个值
+    if (!isset(xOffset) || !isset(yOffset)) {
+        if (isset(xOffset)) {
+            return isobject(xOffset) ? xOffset(aRect) : deal(xOffset, aRect[1], aRect[3], tp)
+        } else if (isset(yOffset)) {
+            return (isobject(yOffset)) ? yOffset(aRect) : deal(yOffset, aRect[2], aRect[4], tp)
+        } else {
+            throw ValueError("x,y至少传一个")
+        }
+    }
+    arrXY := []
+    arrXY.push(isobject(xOffset) ? xOffset(aRect) : deal(xOffset, aRect[1], aRect[3], tp))
+    arrXY.push(isobject(yOffset) ? yOffset(aRect) : deal(yOffset, aRect[2], aRect[4], tp))
+    ;OutputDebug(format("i#{1} {2}:{3} xOffset={4},yOffset={5} aRect={6} arrXY={7}", A_LineFile,A_LineNumber,A_ThisFunc,xOffset,yOffset,json.stringify(aRect),json.stringify(arrXY)))
+    return arrXY
+    deal(v, x, w, tp) {
+        if (v is float)
+            v := round(w*v)
+        if (v == 0) {
+            res := x + w*tp + v
+        } else if (v < 0) {
+            res := tp ? x + v : x + w + v
+        } else {
+            res := x + w*tp + v
+        }
+        ;OutputDebug(format("i#{1} {2}:{3} v={4},x={5},w={6} tp={7}, res={8}", A_LineFile,A_LineNumber,A_ThisFunc,v,x,w,tp,res))
+        return res
+    }
+}
+
+hyf_offsetRect(xys, tp:=false, aRect:=unset) {
+    if (!isset(aRect)) {
+        WinGetPos(&winX, &winY, &winW, &winH, "A")
+        aRect := [winX,winY,winW,winH]
+    } else if (aRect is integer) {
+        WinGetPos(&winX, &winY, &winW, &winH, aRect)
+        aRect := [winX,winY,winW,winH]
+    }
+    for arr in xys {
+        xy := hyf_offsetXY(arr[1], arr[2], tp, aRect)
+    }
 }
 
 hyf_md5(fp, cSz:=4) { ;获取文件md5值
@@ -1434,7 +1521,7 @@ hyf_rng2arrayV(rng:=unset, funVal:=unset, bWrite:=false) {
 ;普通数组转VBA标准数组
 ;一维时，如果 tp 则转成多行
 ;二维时，如果 tp 0=arr2[1]当列数 1=遍历获取最大列数 >1=直接当列数 
-hyf_arr2arrayA(arr2, tp:=false, cellWrite:=false) {
+hyf_arr2arrayA(arr2, tp:=false, cellWrite:=unset) {
     if (!arr2.length)
         return
     rs := arr2.length
@@ -1474,7 +1561,7 @@ hyf_arr2arrayA(arr2, tp:=false, cellWrite:=false) {
                 arrA[A_Index-1] := arr2[A_Index]
         }
     }
-    if (cellWrite) {
+    if (isset(cellWrite)) {
         if !ProcessExist("excel.exe")
             return arrA
         if (type(cellWrite) != "ComObject")
@@ -1509,11 +1596,14 @@ hyf_getWorkbook(fp, bActive:=false) {
     for hwnd in WinGetList("ahk_class XLMAIN") { ;可能有多个Excel进程
         xl := ox(hwnd)
         try { ;可能是进程残留
+            tooltip(A_Index)
             for wb in xl.workbooks {
                 SplitPath(wb.name,,,, &fnn)
                 if (wb.name = fn || fnn = fn) { ;为什么要 fnn？
-                    if (bActive)
+                    if (bActive) {
                         WinActivate(hwnd)
+                        WinMaximize
+                    }
                     return wb
                 }
             }

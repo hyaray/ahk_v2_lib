@@ -126,10 +126,10 @@ class _Array extends Array {
         return arrRes
     }
 
-    toMapAsKey(v:="") {
+    toMapAsKey(val:="") {
         obj := map()
         for v in this
-            obj[v] := v
+            obj[v] := val
         return obj
     }
 
@@ -670,6 +670,39 @@ class _Array extends Array {
                 arrRes.push(v1)
         }
         return arrRes
+    }
+
+    ;遍历所有元素的排列组合，返回二维数组
+    ;比如[1,2,3] 生成6种
+    traverseGroups() {
+        arr := this
+        switch arr.length {
+            case 1:
+                return [arr]
+            case 2:
+                return [arr, [arr[2],arr[1]]]
+            default:
+                item := arr.pop()
+                arr1 := this.traverseGroups()
+                arr2 := []
+                for a in arr1 {
+                    loop (a.length) { ;item 插入a的n个位置
+                        i := A_Index
+                        aTmp := []
+                        for v in a {
+                            if (A_Index == i)
+                                aTmp.push(item)
+                            aTmp.push(v)
+                        }
+                        arr2.push(aTmp)
+                    }
+                    ;msgbox(json.stringify(arr2, 4))
+                    ;最后再加一种情况
+                    a.push(item)
+                    arr2.push(a)
+                }
+                return arr2
+        }
     }
 
 }

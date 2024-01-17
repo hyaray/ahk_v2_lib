@@ -184,7 +184,7 @@ class _CDP {
         ;bActive := (A_Index==arrUrl.length) ? bActive : false ;只激活最后一个标签
         if (this.detect(1)) {
             if (arrUrl.length) {
-                objPage := this.getPageList(, "host")
+                objPage := this.getPages(, "host")
                 ;OutputDebug(format("i#{1} {2}:{3} objPage={4}", A_LineFile,A_LineNumber,A_ThisFunc,json.stringify(objPage,4)))
                 arrRes := []
                 for urlOpen in arrUrl { ;NOTE 判断页面是否已打开
@@ -360,21 +360,22 @@ class _CDP {
     /*
     所有标签+插件的信息
     顺序为最近激活的顺序，当前页为第一个
-    keyJson
-        ="" 则返回数组
-        否则应设置为 jsonUrl 包含的 key，返回以 keyJson | "href" 为索引的 map(用来判断xx页面是否存在)
+    keys
+        ="" 则返回全key的ao
+        =数组 则返回指定keys的ao
+        否则应设置为 jsonUrl 包含的 key，返回以 keys | "href" 为索引的 map(用来判断xx页面是否存在)
     funTrue
         默认只获取 page，如果要获取所有，则传入(*)=>1
     */
-    getPageList(funTrue:=unset, keyJson:="") {
+    getPages(funTrue:=unset, keys:=unset) {
         if (!isset(funTrue))
             funTrue := (obj)=>obj["type"] == "page"
         arr := this.httpOpen()
         ;OutputDebug(format("i#{1} {2}:arr={3}", A_LineFile,A_LineNumber,json.stringify(arr,4)))
-        if (keyJson == "")
-            arrRes := []
+        if (!isset(keys) || keys is array)
+            res := []
         else
-            objRes := map()
+            res := map()
         this.arrEmpty := [] ;NOTE 初始化空标签
         for obj in arr {
             if (funTrue(obj)) {
@@ -382,8 +383,13 @@ class _CDP {
                 ;额外记录 arrEmpty
                 if (obj["url"] == "chrome://newtab" || obj["url"] == "about:blank")
                     this.arrEmpty.push(obj)
-                if (keyJson == "") {
-                    arrRes.push(obj)
+                if (!isset(keys)) {
+                    res.push(obj)
+                } else if (keys is array) {
+                    objTmp := map()
+                    for key in keys
+                        objTmp[key] := obj[key]
+                    res.push(objTmp)
                 } else {
                     ;格式化 url
                     objUrl := obj["url"].jsonUrl()
@@ -391,18 +397,13 @@ class _CDP {
                     obj["index"] := A_Index
                     obj["json"] := objUrl
                     ;返回结果额外增加 href 的key
-                    objRes.has(objUrl[keyJson]) ? objRes[objUrl[keyJson]].push(obj) : objRes[objUrl[keyJson]] := [obj]
-                    objRes.has(objUrl["href"]) ? objRes[objUrl["href"]].push(obj) : objRes[objUrl["href"]] := [obj]
+                    res.has(objUrl[keys]) ? res[objUrl[keys]].push(obj) : res[objUrl[keys]] := [obj]
+                    res.has(objUrl["href"]) ? res[objUrl["href"]].push(obj) : res[objUrl["href"]] := [obj]
                 }
             }
         }
-        if (keyJson == "") {
-            ;OutputDebug(format("i#{1} {2}:arrRes={3}", A_LineFile,A_LineNumber,json.stringify(arrRes,4)))
-            return arrRes
-        } else {
-            ;OutputDebug(format("i#{1} {2}:objRes={3}", A_LineFile,A_LineNumber,json.stringify(objRes,4)))
-            return objRes
-        }
+        ;OutputDebug(format("i#{1} {2}:res={3}", A_LineFile,A_LineNumber,json.stringify(res,4)))
+        return res
     }
 
     ;Escape a string in a manner suitable for command line parameters
@@ -413,7 +414,7 @@ class _CDP {
 
     ;closeNewtab(id:="") {
     ;    if (id == "") {
-    ;        arr := this.getPageList((obj)=>obj["url"]=="chrome://newtab")
+    ;        arr := this.getPages((obj)=>obj["url"]=="chrome://newtab")
     ;        if (arr.length)
     ;            id := arr[1]['id']
     ;    }
@@ -423,7 +424,7 @@ class _CDP {
 
     ;static FindPages(opts, MatchMode := 'exact') {
     ;    Pages := []
-    ;    for PageData in this.GetPageList() {
+    ;    for PageData in this.getPages() {
     ;        fg := true
     ;        for k, v in (Type(opts) = 'Map' ? opts : opts.OwnProps())
     ;            if !((MatchMode = 'exact' && PageData[k] = v) || (MatchMode = 'contains' && InStr(PageData[k], v))
