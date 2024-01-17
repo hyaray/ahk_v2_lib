@@ -756,7 +756,7 @@ hyf_offsetXY(xOffset:=unset, yOffset:=unset, tp:=0, aRect:=unset) {
     }
 }
 
-hyf_offsetRect(xys, tp:=false, aRect:=unset) {
+hyf_offsetRect(xyxy, tp:=0, aRect:=unset) {
     if (!isset(aRect)) {
         WinGetPos(&winX, &winY, &winW, &winH, "A")
         aRect := [winX,winY,winW,winH]
@@ -764,9 +764,10 @@ hyf_offsetRect(xys, tp:=false, aRect:=unset) {
         WinGetPos(&winX, &winY, &winW, &winH, aRect)
         aRect := [winX,winY,winW,winH]
     }
-    for arr in xys {
-        xy := hyf_offsetXY(arr[1], arr[2], tp, aRect)
-    }
+    res := []
+    xy := hyf_offsetXY(xyxy[1], xyxy[2], tp, aRect)
+    xy1 := hyf_offsetXY(xyxy[3], xyxy[4], tp, aRect)
+    return [xy[1], xy[2], xy1[1]-xy[1], xy1[2]-xy[2]]
 }
 
 hyf_md5(fp, cSz:=4) { ;获取文件md5值
