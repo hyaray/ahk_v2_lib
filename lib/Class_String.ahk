@@ -210,6 +210,7 @@ class _String {
     ;判断文件|文件夹用 instr(FileGetAttrib(fp), "L")
     ;源文件路径暂用 _TC._info()
     ;NOTE mklink的文件和文件夹，打包的时候，zip 都会打包原始文件，7z则会忽略文件
+    ;NOTE 如果mklink文件夹异常，可能上级文件夹已被mklink了
     mklink(fp1, isHard:=false) {
         fp0 := this
         if (!FileExist(fp0)) {
@@ -235,7 +236,7 @@ class _String {
             sCmd := format('{1} /c fsutil hardlink create "{2}" "{3}"',A_ComSpec,fp1,fp0)
         else
             sCmd := format('{1} /c mklink{2} "{3}" "{4}"',A_ComSpec,DirExist(fp0)?" /j":"",fp1,fp0)
-        OutputDebug(format("d#{1} {2}:{3} sCmd={4}", A_LineFile,A_LineNumber,A_ThisFunc,sCmd))
+        ;OutputDebug(format("d#{1} {2}:{3} sCmd={4}", A_LineFile,A_LineNumber,A_ThisFunc,sCmd))
         RunWait(sCmd,, "hide")
     }
 
@@ -785,6 +786,11 @@ class _String {
             }
             return res
         }
+    }
+
+    ;A_Now转时间
+    toTime() {
+
     }
 
     ; https://www.autohotkey.com/boards/viewtopic.php?f=6&t=5538
@@ -1863,9 +1869,8 @@ class _String {
     decode(enc:="utf-8") {
         uri := this
         if (enc == "base64") {
-            dllcall("crypt32.dll\CryptStringToBinary", "Str",uri, "UInt",0, "UInt",0x00000001, "Ptr",0, "Uint*",&SizeOut:=0, "Ptr",0, "Ptr",0)
-            dllcall("crypt32.dll\CryptStringToBinary", "Str",uri, "UInt",0, "UInt",0x00000001, "Ptr",res:=buffer(SizeOut), "Uint*",&SizeOut, "Ptr",0, "Ptr",0)
-            return strget(res, "utf-8")
+            if (dllcall("crypt32.dll\CryptStringToBinary", "Str",uri, "UInt",0, "UInt",0x00000001, "Ptr",0, "Uint*",&SizeOut:=0, "Ptr",0, "Ptr",0) && dllcall("crypt32.dll\CryptStringToBinary", "Str",uri, "UInt",0, "UInt",0x00000001, "Ptr",buf:=buffer(SizeOut), "Uint*",&SizeOut, "Ptr",0, "Ptr",0))
+                return buf ;如果返回字符串用 strget(buf, "utf-8")
         }
         pos := 1
         loop {
@@ -1891,6 +1896,32 @@ class _String {
     ;        res .= hex
     ;    return res
     ;}
+
+    ; ======================================================================================================================
+    ; UrlEscape() -> https://docs.microsoft.com/en-us/windows/win32/api/shlwapi/nf-shlwapi-urlescapea
+    ; URL_DONT_ESCAPE_EXTRA_INFO     = 0x02000000
+    ; URL_ESCAPE_SPACES_ONLY         = 0x04000000
+    ; URL_ESCAPE_PERCENT             = 0x00001000
+    ; URL_ESCAPE_SEGMENT_ONLY        = 0x00002000
+    ; URL_ESCAPE_AS_UTF8             = 0x00040000 (Win 7+)
+    ; URL_ESCAPE_ASCII_URI_COMPONENT = 0x00080000 (Win 8+)
+    ; ======================================================================================================================
+    UrlEscape(Flags := 0) {
+        Static CC := 4096
+        url := this
+        VarSetStrCapacity(&Esc, CC*2)
+        Return !DllCall("Shlwapi.dll\UrlEscape", "Str",url, "Str",Esc, "UIntP", CC, "UInt", Flags, "UInt") ? Esc : ""
+    }
+    ; ======================================================================================================================
+    ; UrlUnescape() -> https://docs.microsoft.com/en-us/windows/win32/api/shlwapi/nf-shlwapi-urlunescapea
+    ; URL_DONT_UNESCAPE_EXTRA_INFO = 0x02000000
+    ; URL_UNESCAPE_AS_UTF8         = 0x00040000 (Win 8+)
+    ; URL_UNESCAPE_INPLACE         = 0x00100000
+    ; ======================================================================================================================
+    UrlUnescape(Flags := 0x00100000) {
+        url := this
+        Return !DllCall("Shlwapi.dll\UrlUnescape", "Str",url, "Ptr", 0, "UInt", 0, "UInt", Flags, "UInt") ? Url : ""
+    }
 
     ;不转义\w和.-_~
     ;和 encode("CP65001","%") 类似，但是这个方法针对网址的特殊性做了处理
@@ -1918,15 +1949,9 @@ class _String {
         }
         return res
     }
+
     uriDecode() {
-        str := this
-        loop {
-            if (RegExMatch(str, "i)(?<=%)[[:xdigit:]]{2}", &hex)) ;;TODO  <2023-10-19 00:07:50> hyaray是否应该是{2}
-                str := StrReplace(str, "%" . hex[0], chr("0x" . hex[0]))
-            else
-                break
-        }
-        return str
+        return this.UrlUnescape()
     }
 
     ;单个中文和编码(不含符号)
@@ -1984,6 +2009,13 @@ class _String {
         if (dllcall("Crypt32.dll\CryptStringToBinary", "ptr",strptr(sBase64), "UInt",lenBase64, "UInt",0x1 , "Ptr",buf, "uint*",lenBytes, "Int",0, "Int",0))
             hICON := dllcall("CreateIconFromResourceEx", "Ptr",buf, "UInt",lenBytes, "Int",1, "UInt","0x30000", "Int",W, "Int",H, "UInt",0, "UPtr")
         return hICON
+    }
+
+    ;如果重复使用，可以把wav保存起来
+    base64_play_wav() {
+        wav := this.decode("base64") ;两个中文，转换100次平均为1.4ms
+        dllcall("LoadLibrary", "str","winmm.dll")
+        dllcall("winmm\sndPlaySound", "Ptr",wav, "int",1|4)
     }
 
     /*

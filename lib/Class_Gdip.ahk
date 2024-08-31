@@ -151,7 +151,11 @@ class _GDIP {
         WinSetTransparent(110, oGui)
         ;记录初始位置
         CoordMode("Mouse", "screen")
-        MouseGetPos(&x0, &y0)
+        MouseGetPos(&x0, &y0, &hwnd)
+        WinGetPos(&winX, &winY, &winW, &winH, hwnd)
+        OutputDebug(format("i#{1} {2}:{3} x0={4},winX={5},winW={6}", A_LineFile.fn(),A_LineNumber,A_ThisFunc,x0,winX,winW))
+        x0P := round((x0-winX) / winW, 2)
+        y0P := round((y0-winY) / winH, 2)
         while(funDo()) { ;鼠标按住不放
             sleep(10)
             MouseGetPos(&x1, &y1)
@@ -161,7 +165,9 @@ class _GDIP {
             h := abs(y0 - y1)
             ;仅显示的宽高要进行调整
             oGui.show(format("x{1} y{2} w{3} h{4} NA", x,y,integer(w*96/A_ScreenDPI),integer(h*96/A_ScreenDPI)))
-            tooltip(format("{1},{2},{3},{4}",x,y,w,h))
+            x1P := round((x1-winX) / winW, 2)
+            y1P := round((y1-winY) / winH, 2)
+            tooltip(format("{1},{2}, {3},{4}`n({5},{6}, {7},{8})",x,y,w,h, x0P,y0P,x1P,y1P))
         }
         if (bHBitmap)
             return 1
@@ -170,6 +176,7 @@ class _GDIP {
         SetTimer(tooltip, -100)
         if (w<=3 || h<=3)
             exit
+        A_Clipboard := format("({1},{2}, {3},{4})", x0P,y0P,x1P,y1P)
         return [x,y,w,h]
     }
 
@@ -194,7 +201,7 @@ class _GDIP {
 
     ;屏幕区域保存为文件
     static rect2fp(aRect, fp:="") {
-        if (aRect is integer) { ;hwnd
+        if (aRect is integer) { ;hwnd，另见 hwnd.toRect()
             WinGetPos(&x, &y, &w, &h, aRect)
             aRect := [x,y,w,h]
         }
@@ -1157,6 +1164,7 @@ class GDIP_PBitmap extends _GDIP {
     ; }
 
     ;Quality 0-100
+    ;另见 _GDIP.rect2fp(hwnd, fp)
     GdipSaveImageToFile(fp, quality:=100) {
         SplitPath(fp,, &dir, &ext)
         if !(ext ~= "^(?i:bmp|dib|rle|jpg|jpeg|jpe|jfif|gif|tif|tiff|png)$")
@@ -1822,7 +1830,7 @@ class GDIP_Graphics extends _GDIP {
     ;------------------------------------------------draw------------------------------------------------
 
     ; 把 pBitmap 画到 画布上。
-    ; 整个函数的参数分别是 Gdip_DrawImage(画布, pBitmap, 新图x, 新图y, 新图宽, 新图高, 原图x, 原图y, 原图宽, 原图高, 矩阵)
+    ; 整个函数的参数分别是 Gdip_DrawImage(画布, pBitmap, 新图rect, 原图rect, 矩阵)
     ; 最后的矩阵参数是给图像改变颜色之类用的，很高级，先不管它。
     ; 原图x, 原图y, 原图宽, 原图高
     ; 代表从原图的 (x,y) 这个坐标点开始，向右获得原图宽、向下获得原图高的图片数据

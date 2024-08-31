@@ -71,6 +71,16 @@ hyf_checkNewPlugin(includeFile, arrDirs, strBefore:="", arrDefault:=unset) {
     }
 }
 
+hyf_speak(text, volume:=0) {
+    if (volume) {
+        vv := round(SoundGetVolume())
+        SoundSetVolume(volume)
+    }
+    ComObject("SAPI.SpVoice").speak(text)
+    if (volume)
+        SoundSetVolume(vv)
+}
+
 ;如果可直接键盘输出，一般用 SendText
 ;用剪切板发送字符串
 hyf_paste(str, k:="", ms:=500) {
@@ -166,6 +176,8 @@ hyf_getSelect(bVimNormal:=false, bInput:=false) {
     if (WinActive("ahk_class XLMAIN")) {
         if (ControlGetClassNN(ControlGetFocus()) == "EXCEL71")
             return rng2str(ox().selection)
+    } else if (WinActive("ahk_exe tabby.exe")) {
+        return A_Clipboard
     } else if (WinActive("ahk_class Vim")) { ;Vim 用接口直接获取内容，无需复制
         oVim := ComObjActive("Vim.application")
         if (oVim.eval("mode()") == "n") {
@@ -371,7 +383,7 @@ hyf_input(toLow:=false, ms:=0) {
     suspend(true) ;#HotIf HotIfWinActive 优先级更高
     ih.wait() ;. "`n2" . ih.EndKey . "`n1" . ih.EndReason
     if (A_TickCount - timeSave < 200 && ih.EndKey == "LControl") { ;A_MenuMaskKey 会自动发送按键
-        msgbox("hyaray:hyf_input A_MenuMaskKey")
+        ;msgbox("hyaray:hyf_input A_MenuMaskKey")
         ih.start()
         ih.wait()
     }
@@ -420,8 +432,9 @@ inputboxEX(tips, sDefaluet:="", sTitle:="", bEmpty:=false) {
 }
 
 /*
+TODO 默认激活控件
 arr2 := [
- ["姓名", "name", "default"],
+ ["姓名", "name", "hy"],
  ["性别", "gender", ["男","女"], 2],
  ["年龄", "age", "20", "n"],
  ["是否党员", "dangyuan", 0, "b"],
@@ -429,19 +442,22 @@ arr2 := [
 ]
 objOpt := hyf_inputOption(arr2, "提示")
 msgbox(json.stringify(objOpt, 4))
-;arr2的子数组
-;1.提示文字
-;2.变量名
-;3.默认值(可选)
-;   数组，则为 AddComboBox
-;4.opt
-;   "n" Edit只能输入数字，返回为数字类型
-;   "f" Edit为浮点数
-;   "b" 是否的 Checkbox
-;   数字 多行Edit|ComboBox的默认项
+;arr2的子数组各项说明:
+;   1.提示文字
+;   2.变量名
+;   3.默认值|数据范围(可选)
+;      数组，则为 ComboBox
+;   4.opt(可选)
+;      "n" Edit只能输入数字，返回为数字类型
+;      "f" Edit为浮点数
+;      "b" 是否的 Checkbox
+;      数字 多行Edit|ComboBox的默认项
+;   5.focus和disable
+;      focus 默认控件
+;      0 禁用(用得少)
 ;bOne 表示限制单结果，则会在 Edit内容改变时，清空其他控件
 ;关闭则返回map()
-;NOTE 自动过滤空值，数字返回的是字符串
+;NOTE 自动过滤空值
 */
 hyf_inputOption(arr2, title:="", bTrim:=false, bOne:=false) {
     if (arr2 is map) {
@@ -459,51 +475,54 @@ hyf_inputOption(arr2, title:="", bTrim:=false, bOne:=false) {
     focusCtl := ""
     for arr in arr2 {
         oGui.AddText("x10 section", arr[1])
-        if (arr.length > 4)
+        if (arr.length >= 5 && arr[5]==0)
             continue
         varName := arr[2]
         ;设置 opt
-        if (arr.length >= 3) { ;下拉框，根据内容设置长度
+        ctl := ""
+        if (arr.length >= 3) {
             if (arr[3] is array) {
+                ctl := "ComboBox"
                 lMax := max(arr[3].map(x=>strlen(x))*)
                 opt := funOpt(varName, max(lMax*30, 50))
+                if (arr.length >= 4)
+                    opt .= format(" choose{1}", arr[4])
             } else if (arr.length>=4 && arr[4] == "b") { ;boolean
+                ctl := "Checkbox"
                 opt := funOpt(varName, 100)
-            } else {
-                opt := funOpt(varName)
             }
-        } else {
+        }
+        ;其他为Edit
+        if (ctl == "") {
+            ctl := "Edit"
             opt := funOpt(varName)
-        }
-        if (arr.length == 4) { ;有选项
-            switch arr[4] {
-                case "n": ;限制为数字
-                    oGui.AddEdit(funOpt(varName,100) . " number", arr[3]).OnEvent("change", editChange)
-                case "f": ;限制为浮点数
-                    oGui.AddEdit(funOpt(varName,100) . " number", arr[3]).OnEvent("change", editChange)
-                case "b": ;boolean
-                    oGui.SetFont("cRed")
-                    if (arr[3])
-                        opt .= " checked"
-                    oGui.AddCheckbox(opt)
-                    oGui.SetFont("cDefault")
-                default:
-                    if (arr[4] is integer) {
-                        if (arr[3] is array) ;默认选择项
-                            oGui.AddComboBox(format("{1} choose{2}", opt,arr[4]), arr[3])
-                        else ;指定行数
-                            oGui.AddEdit(format("{1} r{2}", funOpt(varName),arr[4]), arr[3]).OnEvent("change", editChange)
-                    }
+            if (arr.length >= 4) {
+                switch arr[4] {
+                    case "n","f": ;限制为数字
+                        opt .= " number"
+                    default:
+                        if (arr[4] is integer)
+                            opt .= format(" r{1}", arr[4])
+                }
             }
-        } else if (arr.length == 3) {
-            if (arr[3] is array) ;下拉框，根据内容设置长度
-                oGui.AddComboBox(opt, arr[3])
-            else
-                oGui.AddEdit(opt, arr[3]).OnEvent("change", editChange)
-        } else {
-            oGui.AddEdit(opt).OnEvent("change", editChange)
         }
-        if (arr.length >= 4)
+        switch ctl {
+            case "ComboBox":
+                oGui.AddComboBox(opt, arr[3])
+            case "Checkbox":
+                oGui.SetFont("cRed")
+                if (arr[3])
+                    opt .= " checked"
+                oGui.AddCheckbox(opt)
+                oGui.SetFont("cDefault")
+            case "Edit":
+                if (arr.length >= 3 && arr[3] != "")
+                    oGui.AddEdit(opt, arr[3]).OnEvent("change", editChange)
+                else
+                    oGui.AddEdit(opt).OnEvent("change", editChange)
+        }
+        ;默认激活字段
+        if (arr.length >= 5 && arr[5]=="focus")
             focusCtl := varName
     }
     oBtn := oGui.AddButton("default center", "确定")
@@ -531,7 +550,7 @@ hyf_inputOption(arr2, title:="", bTrim:=false, bOne:=false) {
             v := o[arr[2]]
             ;记录
             if (v != "") { ;过滤空值
-                ;结果二次加工
+                ;输出结果二次加工
                 if (bTrim)
                     v := trim(v) ;TODO 是否trim(比如每行前加"- "转成无序列表)
                 if (arr.length >=4 && arr[4]~="n|f")
@@ -669,10 +688,20 @@ hyf_searchFile(dir, sFile:="*", opt:="RF") {
     ;    arr2.push([substr(A_LoopFileFullPath, l+1)])
     ;}
     arr2 := dir.dir2files(sFile,, true)
-    arrRes := hyf_selectByArr(arr2, 1, sPyAndIndex:="20")
+    arrRes := hyf_selectByArr(arr2, 1, "20")
     if (!arrRes.length)
         exit
     return format("{1}\{2}", dir,arrRes[1])
+}
+
+hyf_searchText(dir, reg, ext:="*") {
+    ext := ltrim(ext, ".")
+    loop files, format("{1}\*.{2}", dir,ext), "F" {
+        if (A_LoopFileAttrib ~= "[HS]")
+            continue
+        if (fileread(A_LoopFileFullPath, "utf-8") ~= reg)
+            return A_LoopFileFullPath
+    }
 }
 
 ;hyf_findCtrl(funCtlTrue, winTitle:="") {
@@ -760,7 +789,7 @@ hyf_offsetRect(xyxy, tp:=0, aRect:=unset) {
     if (!isset(aRect)) {
         WinGetPos(&winX, &winY, &winW, &winH, "A")
         aRect := [winX,winY,winW,winH]
-    } else if (aRect is integer) {
+    } else if (aRect is integer || aRect is string) {
         WinGetPos(&winX, &winY, &winW, &winH, aRect)
         aRect := [winX,winY,winW,winH]
     }
@@ -768,6 +797,42 @@ hyf_offsetRect(xyxy, tp:=0, aRect:=unset) {
     xy := hyf_offsetXY(xyxy[1], xyxy[2], tp, aRect)
     xy1 := hyf_offsetXY(xyxy[3], xyxy[4], tp, aRect)
     return [xy[1], xy[2], xy1[1]-xy[1], xy1[2]-xy[2]]
+}
+
+hyf_offsetBoundingBox(xyxy, tp:=0, aRect:=unset) {
+    if (!isset(aRect)) {
+        WinGetPos(&winX, &winY, &winW, &winH, "A")
+        aRect := [winX,winY,winW,winH]
+    } else if (aRect is integer || aRect is string) {
+        WinGetPos(&winX, &winY, &winW, &winH, aRect)
+        aRect := [winX,winY,winW,winH]
+    }
+    res := []
+    xy := hyf_offsetXY(xyxy[1], xyxy[2], tp, aRect)
+    xy1 := hyf_offsetXY(xyxy[3], xyxy[4], tp, aRect)
+    return [xy[1], xy[2], xy1[1], xy1[2]]
+}
+
+hyf_rect2BoundingBox(rect) {
+    return [rect[1], rect[2], rect[1]+rect[3], rect[2]+rect[4]]
+}
+
+hyf_BoundingBox2rect(xyxy) {
+    return [xyxy[1], xyxy[2], xyxy[3]-xyxy[1], xyxy[4]-xyxy[2]]
+}
+
+hyf_xy2percent(xy, jingdu:=2, aRect:=unset) {
+    if (!isset(aRect)) {
+        WinGetPos(&winX, &winY, &winW, &winH, "A")
+        aRect := [winX,winY,winW,winH]
+    } else if (aRect is integer) {
+        WinGetPos(&winX, &winY, &winW, &winH, aRect)
+        aRect := [winX,winY,winW,winH]
+    }
+    arr := []
+    for v in xy
+        arr.push(round((xy[A_Index]-aRect[A_Index])/aRect[A_Index+2], jingdu))
+    return arr
 }
 
 hyf_md5(fp, cSz:=4) { ;获取文件md5值
@@ -865,6 +930,27 @@ hyf_zdgys(num*) {
 }
 
 ;-----------------------------------Windows__-----------------------------------
+
+;右键并点击菜单(菜单必须有单独窗口)
+;flag !=0 则为包含name
+hyf_contentMenu(winMenu, name:="", flag:=0) {
+    if (!WinExist(winMenu)) {
+        send("{RButton}")
+        if (!WinWait(winMenu,, 0.5))
+            return false
+    }
+    if (name != "") {
+        elItem := UIA.FindControl("MenuItem", name,,, flag)
+        if (elItem) {
+            elItem.clickTo()
+            return true
+        } else {
+            return false
+        }
+    } else {
+        return true
+    }
+}
 
 ;TODO 睡眠后恢复，是否 oInput 还会存在。
 hyf_onekeyHide() {
@@ -1245,10 +1331,13 @@ runEx(var, winTitle) {
     return hwnd
 }
 
-;smartWin 简易版
-hyf_win(fp, winTitle) {
+;hyf_smartWin 简易版
+;适合直接用 winTitle 就能激活主窗口的
+hyf_win(fp, winTitle, objHook:=unset) {
     SplitPath(fp, &fn)
     if (!ProcessExist(fn)) {
+        if (isset(objHook) && objHook.has("br"))
+            objHook["br"]()
         try
             run(fp)
         catch
@@ -1256,14 +1345,124 @@ hyf_win(fp, winTitle) {
         else
             hwnd := WinWait(winTitle)
         WinActivate
+        if (isset(objHook) && objHook.has("ar"))
+            objHook["ar"]()
     } else if (hwnd := WinActive(winTitle)) {
+        if (isset(objHook) && objHook.has("bh"))
+            objHook["bh"]()
         WinHide
+        if (isset(objHook) && objHook.has("ah"))
+            objHook["ah"]()
     } else {
+        if (isset(objHook) && objHook.has("ba"))
+            objHook["ba"]()
         WinShow(winTitle)
         WinActivate(winTitle)
+        if (isset(objHook) && objHook.has("aa"))
+            objHook["aa"]()
         hwnd := WinActive("A")
     }
     return hwnd
+}
+
+;fp要支持fn，见_ET.smartWin
+;funcHwndOrwinClass很多程序，还需要进一步筛选
+;   如果是 ahk_class class，则默认会过滤空标题
+;   如果还要考虑标题，必须要传入函数来判断
+;objHook的键是br(beforeRun), ar(afterRun), ba(beforeActive), aa(afterActive), bh(beforeHide), ah(afterHide)
+;有些窗口不需要记录窗口id
+hyf_smartWin(fp, funcHwndOrwinClass:=unset, objHook:=unset, allWin:=0) {
+    ;获取 exeName
+    if !(instr(fp, ":")) {
+        msgbox(format("{1}`n不是完整路径", fp))
+        exit
+    }
+    SplitPath(fp, &exeName)
+    if (exeName ~= "i)\.[vbe|cmd|bat]") ;NOTE cmd的需要转换
+        exeName := substr(exeName,1,strlen(exeName)-4) . ".exe"
+    ;获取 winTitle(用来遍历)
+    winTitle := "ahk_exe " . exeName
+    if (isset(funcHwndOrwinClass)) {
+        if (funcHwndOrwinClass is string) {
+            winTitle := format("{1} {2}", funcHwndOrwinClass,winTitle)
+            funcHwndOrwinClass := (*)=>1
+        }
+    }
+    ;if (isobject(funcHwndOrwinClass) || (funcHwndOrwinClass == ""))
+    ;    winTitle := "ahk_exe " . exeName
+    ;else
+    ;    winTitle := funcHwndOrwinClass . " ahk_exe " . exeName
+    ;获取 fnn
+    fnn := exeName.fnn64()
+    if (fnn ~= "^\d") ;数字开头不能当函数名
+        fnn := "_" . fnn
+    ;处理逻辑
+    ;OutputDebug(format("i#{1} {2}:ProcessExist(exeName)={3}", A_LineFile,A_LineNumber,ProcessExist(exeName)))
+    if (!ProcessExist(exeName)) {
+        smartRun(fp)
+    } else if (WinActive(winTitle)) {
+        if (isset(objHook) && objHook.has("bh")) ;返回 运行函数
+            objHook["bh"]()
+        WinHide(winTitle)
+        if (allWin) {
+            for hwnd in WinGetList(winTitle)
+                WinHide(hwnd)
+        }
+        ;激活鼠标所在窗口 TODO
+        MouseGetPos(,, &idMouse)
+        WinActivate(idMouse)
+    } else { ;NOTE
+        arrHwnd := hyf_hwnds(winTitle, funcHwndOrwinClass)
+        if (allWin) { ;激活所有匹配窗口(比如开了多个谷歌浏览器)
+            for v in arrHwnd {
+                WinShow(v)
+                WinActivate(v)
+                idWin := v
+            }
+            WinActivate(idWin)
+        } else {
+            if (arrHwnd.length) {
+                idWin := arrHwnd[1]
+                WinShow(idWin)
+                WinActivate(idWin)
+            } else {
+                tooltip("找不到窗口，从激活改成【打开】")
+                smartRun(fp)
+                SetTimer(tooltip, -1000)
+            }
+        }
+        if (isset(objHook) && objHook.has("aa"))
+            objHook["aa"]()
+    }
+    smartRun(fp) {
+        ;_ToolTip.tips("启动中，请稍等...")
+        params := ""
+        if (isset(objHook) && objHook.has("br")) ;返回 运行函数
+            params := objHook["br"]()
+        SplitPath(fp, &fn, &dir)
+        if (params != "")
+            fp := format("{1} {2}", fp,params)
+        OutputDebug(format("i#{1} {2}:fp={3}", A_LineFile,A_LineNumber,fp))
+        ;打开程序
+        try
+            run(format('{1} /c {2}', A_ComSpec,fp), dir, "hide") ;run(fp, dir) ;TODO 尝试 <2023-04-22 23:31:11> hyaray
+        catch
+            throw ValueError(fp)
+        ;打开后自动运行
+        if (isset(objHook) && objHook.has("ar")) { ;返回 运行函数
+            objHook["ar"]()
+        } else {
+            ;sleep(1000)
+            ;if !ProcessExist(exeName) {
+            ;    msgbox(exeName . "`n未出现，打开软件失败",,0x40000)
+            ;    exit
+            ;}
+            if (WinWait(winTitle,, 2)) { ;自动激活
+                if !WinWaitActive(winTitle,, 0.2)
+                    WinActivate(winTitle)
+            }
+        }
+    }
 }
 
 ;NOTE 实现从其他脚本比如 python 获取结果
@@ -1287,6 +1486,7 @@ hyf_win(fp, winTitle) {
 ;       return data
 ;   }
 ;}
+;NOTE 中文编码encode=CP936
 ; https://www.autohotkey.com/boards/viewtopic.php?t=93944
 hyf_cmd(strCode, encode:="utf-8", callback:="") { ;  GAHK32 ; Modified version : SKAN 05-Jul-2013  http://goo.gl/j8XJXY
     ; https://docs.microsoft.com/en-us/windows/win32/api/namedpipeapi/nf-namedpipeapi-createpipe
@@ -1427,7 +1627,7 @@ hyf_cell2objRecord(cell:="", skip:=false) {
     return obj
 }
 
-;值转成数组
+;值转成一维数组
 hyf_rng2array(rng:=unset) {
     if (!isset(rng))
         rng := ox().selection
@@ -1597,7 +1797,6 @@ hyf_getWorkbook(fp, bActive:=false) {
     for hwnd in WinGetList("ahk_class XLMAIN") { ;可能有多个Excel进程
         xl := ox(hwnd)
         try { ;可能是进程残留
-            tooltip(A_Index)
             for wb in xl.workbooks {
                 SplitPath(wb.name,,,, &fnn)
                 if (wb.name = fn || fnn = fn) { ;为什么要 fnn？
@@ -1611,13 +1810,11 @@ hyf_getWorkbook(fp, bActive:=false) {
         }
     }
     ;打开文件
-    ; tooltip("正在打开文件`n" . fp)
     wb := ComObject("Excel.application").workbooks.open(fp)
     if (bActive) {
         wb.parent.visible := -1
         WinWait(wb.application)
         WinActivate(wb.application)
-        tooltip
     }
     return wb
 }
@@ -2432,7 +2629,7 @@ hyf_post(url, objData:="", headers:="application/x-www-form-urlencoded", Encodin
                 else
                     param .= format("&{1}={2}", k,v.uriEncode()) ;NOTE 要转编码
             }
-            OutputDebug(format("d#{1} {2}:param={3}", A_LineFile,A_LineNumber,param))
+            ;OutputDebug(format("d#{1} {2}:param={3}", A_LineFile,A_LineNumber,param))
             param := substr(param, 2)
             rst.send(param)
         }

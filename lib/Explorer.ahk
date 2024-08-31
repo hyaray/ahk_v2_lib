@@ -16,6 +16,11 @@ class Explorer {
         }
     }
 
+    static get() {
+        hwnd := WinGetID("A")
+        return Explorer(hwnd).dir()
+    }
+
     ;修改目录
     static setDir(dn) {
         if (wind := this.get())
@@ -73,9 +78,9 @@ class Explorer {
         if (hwnd is string)
             hwnd := WinExist(hwnd)
         this.hwnd := hwnd
-        OutputDebug(format("i#{1} {2}:{3} this.hwnd={4}", A_LineFile,A_LineNumber,A_ThisFunc,this.hwnd))
         for wind in ComObject("Shell.Application").Windows {
             if (wind.hwnd == hwnd) {
+                OutputDebug(format("i#{1} {2}:{3} get win={4}", A_LineFile.fn(),A_LineNumber,A_ThisFunc,this.hwnd))
                 this.win := wind
                 return
             }

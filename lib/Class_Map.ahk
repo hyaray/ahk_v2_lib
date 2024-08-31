@@ -1,6 +1,7 @@
 ﻿;不修改原obj
 ;优先使用Arrays
 ;连续的 key 保存在 arr里，如何用arr:=["a","b"]一次性引用=obj["a"]["b"]
+;自带了get(key, default)
 ;TODO CDP返回的map，key有顺序，ahk如何实现？
 
 ;v1 https://www.autohotkey.com/board/topic/83081-ahk-l-customizing-object-and-array

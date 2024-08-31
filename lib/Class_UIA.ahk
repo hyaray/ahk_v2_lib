@@ -1544,6 +1544,7 @@ class IUIAutomationElement extends IUIABase {
         switch this.CurrentControlType {
             case UIA.ControlType.Text:
                 elParent := this.GetParent()
+                OutputDebug(format("i#{1} {2}:{3} Text parent.CurrentControlType={4}", A_LineFile.fn(),A_LineNumber,A_ThisFunc,elParent.CurrentControlType))
                 switch elParent.CurrentControlType {
                     case UIA.ControlType.ComboBox: ;下拉选项，比如NxCells的(填报模板|查询模板)选项
                         elParent.do(p*)
@@ -1570,7 +1571,7 @@ class IUIAutomationElement extends IUIABase {
                 }
             case UIA.ControlType.Button:
                 if (p.length) {
-                    switch p {
+                    switch p[1] {
                         case 1: return this.clickTo()
                         case 2: return this.ClickByControl()
                     }

@@ -98,10 +98,10 @@ class _CDP {
     }
 
     ;pathname前面要带 /
-    static httpOpen(http, pathname:="", port:="") {
+    static httpOpen(http, method, pathname:="", port:="") {
         url := format("http://127.0.0.1:{1}/json{2}", port,pathname)
         OutputDebug(format("i#{1} {2}:{3} url={4}", A_LineFile,A_LineNumber,A_ThisFunc,url))
-        http.open('GET', url)
+        http.open(method, url)
         try {
             resSend := http.send()
         } catch {
@@ -109,8 +109,14 @@ class _CDP {
             tooltip("rebuild http",,, 9)
             SetTimer(tooltip.bind(,,, 9), -1000)
             http := ComObject('WinHttp.WinHttpRequest.5.1')
-            http.open('GET', url)
-            resSend := http.send()
+            http.open(method, url)
+            try {
+                resSend := http.send()
+            } catch {
+                tooltip("Chrome Devtools Protocol连接异常",,, 9)
+                SetTimer(tooltip.bind(,,, 9), -1000)
+                exit
+            }
         }
         return pathname=="" ? JSON.parse(http.responseText) : resSend
     }
@@ -186,14 +192,12 @@ class _CDP {
             if (arrUrl.length) {
                 objPage := this.getPages(, "host")
                 ;OutputDebug(format("i#{1} {2}:{3} objPage={4}", A_LineFile,A_LineNumber,A_ThisFunc,json.stringify(objPage,4)))
-                arrRes := []
                 for urlOpen in arrUrl { ;NOTE 判断页面是否已打开
                     urlOpen := rtrim(urlOpen, "/")
                     if (urlOpen == "")
                         continue
                     if (!instr(urlOpen, "://") && !(urlOpen ~= "^\w:\\"))
                         urlOpen := "http://" . urlOpen
-                    arrRes.push(A_Index . urlOpen)
                     objOpen := urlOpen.jsonUrl()
                     hostThis := objOpen["host"]
                     ;激活匹配的标签
@@ -204,12 +208,13 @@ class _CDP {
                         activeTab(objPage[urlOpen][1]["id"])
                         continue
                     }
-                    OutputDebug(format("i#{1} {2}:this.arrEmpty={3}", A_LineFile,A_LineNumber,json.stringify(this.arrEmpty,4)))
+                    ;OutputDebug(format("i#{1} {2}:this.arrEmpty={3}", A_LineFile,A_LineNumber,json.stringify(this.arrEmpty,4)))
                     ;打开标签
                     if (this.arrEmpty.length) { ;优先在空白页打开
-                        this.getPage().navigate(urlOpen, bActive)
+                        id := this.arrEmpty.pop()["id"]
+                        this.getPage((x=>(o=>o["id"]==x))(id)).navigate(urlOpen, bActive)
                     } else { ;新标签打开
-                        this.httpOpen("/new?" . urlOpen) ;TODO 哪里有问题
+                        this.httpPut("/new?" . urlOpen.uriEncode()) ;NOTE put 的网址要转义
                     }
                 }
             }
@@ -242,7 +247,7 @@ class _CDP {
         }
         return true
         activeTab(id) {
-            this.httpOpen("/activate/" . id)
+            this.httpGet("/activate/" . id)
             ;arrUrl.RemoveAt(A_Index)
             tooltip("已激活已存在标签")
             SetTimer(tooltip, -1000)
@@ -338,8 +343,8 @@ class _CDP {
     getByHttp(key:="") {
         ;this.detect(true)
         ;debug 模式获取
-        ;OutputDebug(format("i#{1} {2}:httpAll={3}", A_LineFile,A_LineNumber,json.stringify(this.httpOpen("",true),4)))
-        for objHttp in this.httpOpen() {
+        ;OutputDebug(format("i#{1} {2}:httpAll={3}", A_LineFile,A_LineNumber,json.stringify(this.httpGet("",true),4)))
+        for objHttp in this.httpGet() {
             if (objHttp["type"] == "page" && !(objHttp["title"] ~= "^(DevTools|yonyou U9帮助)$")) { ;NOTE by 火冷 <2022-10-01 17:42:12>
                 objHttp["url"] := rtrim(objHttp["url"], "/")
                 ;OutputDebug(format("i#{1} {2}:{3} key={4}", A_LineFile,A_LineNumber,A_ThisFunc,key))
@@ -370,7 +375,7 @@ class _CDP {
     getPages(funTrue:=unset, keys:=unset) {
         if (!isset(funTrue))
             funTrue := (obj)=>obj["type"] == "page"
-        arr := this.httpOpen()
+        arr := this.httpGet()
         ;OutputDebug(format("i#{1} {2}:arr={3}", A_LineFile,A_LineNumber,json.stringify(arr,4)))
         if (!isset(keys) || keys is array)
             res := []
@@ -410,7 +415,8 @@ class _CDP {
     CliEscape(Param) => format('"{1}"', RegExReplace(Param, '(\\*)"', '$1$1\"'))
 
     ;pathname前面要带 /
-    httpOpen(pathname:="") => _CDP.httpOpen(this.http, pathname, this.DebugPort)
+    httpGet(pathname:="") => _CDP.httpOpen(this.http, "GET", pathname, this.DebugPort)
+    httpPut(pathname:="") => _CDP.httpOpen(this.http, "PUT", pathname, this.DebugPort)
 
     ;closeNewtab(id:="") {
     ;    if (id == "") {
@@ -419,7 +425,7 @@ class _CDP {
     ;            id := arr[1]['id']
     ;    }
     ;    if (id != "")
-    ;        return this.httpOpen("/close/" . id)
+    ;        return this.httpGet("/close/" . id)
     ;}
 
     ;static FindPages(opts, MatchMode := 'exact') {
@@ -440,7 +446,7 @@ class _CDP {
 
     ;static ClosePage(opts, MatchMode:='exact') {
     ;    for page in this.FindPages(opts, MatchMode)
-    ;        return this.httpOpen("/close/" . page["id"])
+    ;        return this.httpGet("/close/" . page["id"])
     ;}
 
     ;https://player.bilibili.com/player.html?aid=976962208&bvid=BV1244y1Y7VR&cid=457445567&page=1
@@ -538,13 +544,13 @@ class _CDP {
     ;_CDP.smartGet().getPage((o)=>instr(o["url"].jsonUrl("pathname"),"/app/print-format/")==1)
     getPage(funHttp:=unset, bActive:=false) {
         if (isset(funHttp)) {
-            arr := this.httpOpen()
+            arr := this.httpGet()
             for objHttp in arr {
                 OutputDebug(format("i#{1} {2}:{3} objHttp={4}", A_LineFile,A_LineNumber,A_ThisFunc,json.stringify(objHttp,4)))
                 if (objHttp["type"] == "page" && objHttp["title"] != "DevTools") {
                     ;if (funHttp(objHttp["url"].jsonUrl()))
                     if (funHttp(objHttp)) {
-                        OutputDebug(format("i#{1} {2}:{3} url={4}", A_LineFile,A_LineNumber,A_ThisFunc,objHttp["url"]))
+                        OutputDebug(format("d#{1} {2}:{3} url={4}", A_LineFile,A_LineNumber,A_ThisFunc,objHttp["url"]))
                         oPage := _CDP.CDPP(objHttp, this.http)
                         if (bActive)
                             oPage.activate()
@@ -604,21 +610,24 @@ class _CDP {
             ; before we receive a response.
 			if !(idx := this.idx += 1)
 				idx := this.idx += 1
-			this.sendText(JSON.stringify(map('id', idx, 'params', Params ?? {}, 'method', DomainAndMethod), 0))
+			this.sendText(JSON.stringify(map("id",idx, "params",Params ?? {}, "method",DomainAndMethod), 0))
 			if (!WaitForResponse)
 				return
 			; Wait for the response
 			this.responses[idx] := false
-			while (this.readyState = 1 && !this.responses[idx])
-				Sleep(20)
-
+			while (this.readyState==1 && !this.responses[idx])
+				sleep(20)
 			; Get the response, check if it's an error
-			if !response := this.responses.Delete(idx)
+			if !(response := this.responses.Delete(idx))
 				throw Error('Not connected to tab')
-			if !(response is Map)
+			if !(response is map)
 				return response
-            if (response.has("error"))
+            if (response.has("error")) {
+                OutputDebug(format("i#{1} {2}:{3} DomainAndMethod={4}", A_LineFile.fn(),A_LineNumber,A_ThisFunc,DomainAndMethod))
+                if (isset(Params))
+                    OutputDebug(format("i#{1} {2}:{3} Params={4}", A_LineFile.fn(),A_LineNumber,A_ThisFunc,json.stringify(Params,4)))
                 throw error("Chrome indicated error in response",, JSON.stringify(response['error']))
+            }
             if (response.has("result"))
                 return response["result"]
         }
@@ -651,11 +660,11 @@ class _CDP {
         }
 
         close() {
-            this.httpOpen(format("/close/{1}",this.id))
+            this.httpGet(format("/close/{1}",this.id))
 			this.__Delete()
         }
 
-        activate() => this.httpOpen(format("/activate/{1}",this.id))
+        activate() => this.httpGet(format("/activate/{1}",this.id))
         ;不见得靠谱
         WaitForLoad(DesiredState:="complete", Interval:=500) {
             loop {
@@ -681,7 +690,8 @@ class _CDP {
 
         ;在当前标签打开 NOTE 注意信息更新问题
         navigate(url, bActive:=true) {
-            this("Page.navigate", map("url",url))
+            resp := this("Page.navigate", map("url",url))
+            OutputDebug(format("#{1} {2}:{3} resp={4}", A_LineFile.fn(),A_LineNumber,A_ThisFunc,json.stringify(resp,4)))
             this.setProp(url)
             if (bActive)
                 this.activate()
@@ -699,7 +709,7 @@ class _CDP {
         }
 
         ;pathname前面要带 /
-        httpOpen(pathname:="") => _CDP.httpOpen(this.http, pathname, this.DebugPort)
+        httpGet(pathname:="") => _CDP.httpOpen(this.http, "GET", pathname, this.DebugPort)
 
         saveIco() {
             if !this.HasProp("faviconUrl")

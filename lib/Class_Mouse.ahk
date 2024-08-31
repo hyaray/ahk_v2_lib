@@ -45,6 +45,18 @@ class _Mouse {
         ;dllcall("SystemParametersInfo", "UInt",SPI_SETMOUSESPEED:=0x71, "UInt",0, "Ptr",OrigMouseSpeed, "UInt",0)  ; 恢复原始速度
     }
 
+    static getMousePercent(n:=3) {
+        cmMouse := A_CoordModeMouse
+        CoordMode("Mouse", "screen")
+        MouseGetPos(&x0, &y0, &hwnd)
+        CoordMode("Mouse", cmMouse)
+        WinGetPos(&winX, &winY, &winW, &winH, hwnd)
+        ;OutputDebug(format("i#{1} {2}:{3} x0={4},winX={5},winW={6}", A_LineFile.fn(),A_LineNumber,A_ThisFunc,x0,winX,winW))
+        x0P := round((x0-winX) / winW, n)
+        y0P := round((y0-winY) / winH, n)
+        return [x0P, y0P]
+    }
+
     ;主要用来生成代码
     ;如果偏右/下，则返回负数
     ;xPercent=100则不会获取相对坐标
@@ -192,12 +204,28 @@ class _Mouse {
         return cl
     }
 
-    static getColorByScreen(x, y) { ;获取鼠标位置的颜色(6位16进制)
+    static getColorByScreen(x, y, moveto:=false) { ;获取鼠标位置的颜色(6位16进制)
         cmPixel := A_CoordModePixel
         CoordMode("pixel", "screen")
+        if (moveto)
+            _Mouse.moveByScreen(x, y)
         cl := substr(PixelGetColor(x,y), 3)
         CoordMode("pixel", cmPixel)
         return cl
+    }
+
+    ;xy := _Mouse.searchColorByScreen(xyxy, cl)
+    ;if (xy.length)
+    ;   xxx
+    static searchColorByScreen(xyxy, cl, p:=0) {
+        cmPixel := A_CoordModePixel
+        CoordMode("pixel", "screen")
+        if (PixelSearch(&x, &y, xyxy[1],xyxy[2],xyxy[3],xyxy[4], cl, p))
+            res := [x, y]
+        else
+            res := []
+        CoordMode("pixel", cmPixel)
+        return res
     }
 
     static getXYColor(screenX, screenY) { ;获取鼠标位置的颜色
@@ -578,7 +606,7 @@ class _Mouse {
     }
 
     ;两个坐标转成rect
-    static xys2rect(arr) {
+    static xyxy2rect(arr) {
         return [arr[1],arr[2], arr[3]-arr[1], arr[4]-arr[2]]
     }
 

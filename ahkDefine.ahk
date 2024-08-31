@@ -39,10 +39,12 @@ company := "My Company"
 #include lib\Class_Array.ahk
 #include lib\Class_Map.ahk
 #include lib\Class_Date.ahk
+#include lib\Class_Timer.ahk
 #include lib\Yaml.ahk
 #include lib\WinHttpRequest.ahk
 #include lib\Class_Gui.ahk
 #include lib\LVICE_XXS.ahk
+#include lib\WatchFolder.ahk
 
 #include lib\Socket.ahk
 #include lib\Class_CDP.ahk
@@ -51,6 +53,7 @@ company := "My Company"
 #include lib\msedge.ahk
 #include lib\Class_Pinyin.ahk
 #include lib\hyaray.ahk
+#include lib\Class_XYXY.ahk
 #include lib\Class_Mouse.ahk
 #include lib\Class_Ctrl.ahk
 #include lib\Class_UIA.ahk

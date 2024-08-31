@@ -49,6 +49,47 @@ class _Number {
         return true
     }
 
+    ;转大写金额
+    ;作者：sikongshan
+    ;更新日期：2022年09月14日
+    ;限制：因为不涉及到大数值计算，可以到20位或者更高，但是中文转回阿拉伯的时候，超过17位数值则会有问题（受限于ahk计算），下次考虑拼接方式避免
+    toAmount() {
+        sNum := string(this)
+        arrNum := StrSplit(sNum,".")
+        if (strlen(arrNum[1])>17) ;设定20位，
+            return sNum
+        res:=""
+        objNum := {0:"零",1:"壹",2:"贰",3:"叁",4:"肆",5:"伍",6:"陆",7:"柒",8:"捌",9:"玖"}
+        objDanwu := {1:"元",2:"拾",3:"佰",4:"仟",5:"万",6:"拾",7:"佰",8:"仟",9:"亿",10:"拾",11:"佰",12:"仟",13:"兆",14:"拾",15:"佰",16:"仟",17:"万",18:"拾",19:"佰",20:"仟"}
+        objDicimal := {1:"角",2:"分",3:"毫",4:"厘"}
+        ;整数部分
+        loop(strlen(arrNum[1]))
+            res := objNum[substr(arrNum[1], -A_Index, 1)] . objDanwu[A_Index] . res
+        loop 3 {
+            res:=RegExReplace(res,"零(拾|佰|仟)","零")
+            res:=RegExReplace(res,"零{1,3}","零")
+            res:=RegExReplace(res,"零(?=(兆|亿|万|元))","")
+            res:=RegExReplace(res,"亿零万","亿")
+            res:=RegExReplace(res,"兆零亿","兆")
+        }
+        ;小数部分
+        if(arrNum.length > 1) {
+            DP := arrNum[2]
+            res .= "零"
+            loop parse, DP {
+                A_LoopField
+                if(A_Index>5)
+                    break
+                if(A_LoopField=0)
+                    continue
+                res .= format("{1}{2}", objNum[A_LoopField],objDicimal[A_Index])
+            }
+        } else {
+            res .= "整"
+        }
+        return res
+    }
+
     ;超过numA用 A-Z
     ;逆向见 _String.toNum(10)
     toABCD(numA:=10, bLower:=false) {
@@ -99,9 +140,14 @@ class _Number {
 
     ;用NTLCalc(str)
     floatErr() => number(string(round(this+0.00000001,6)).delete0())
-    delete0() => string(this).delete0()
+    delete0() {
+        if (integer(this) == this)
+            return integer(this)
+        return float(string(this).rtrim("0"))
+    }
 
-    ;左边填充0
+    ;左边填充0(补0)
+    ;format("{:02s}", 1)
     zfill(l) => format(format("{:0{1}s}",l), string(this))
 
     mod1(num, m) => mod(num-1, m)+1

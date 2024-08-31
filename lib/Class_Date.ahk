@@ -10,19 +10,14 @@ class _Date {
     __new(arr) {
         if (arr is ComObject)
             arr := arr.value
-        if (arr is string) {
-            this.year := RegExReplace(arr, "\D.*")
-            this.char := substr(arr, strlen(this.year)+1, 1)
-            this.day := RegExReplace(arr, ".*\D")
-            this.month := substr(arr, strlen(this.year)+2, strlen(this.day))
-        } else if (arr is array) {
-            this.char := "-"
-            this.year := arr[1]
-            this.month := arr[2]
-            this.day := arr[3]
-        }
+        if (arr is string)
+            arr := StrSplit(arr, ["-","/"])
+        this.char := "-"
+        this.year := arr[1]
         if (strlen(this.year) == 2)
             this.year := "20" . this.year
+        this.month := arr[2]
+        this.day := arr[3]
         this.value := format("{1}{2}{3}", this.year,this.month.zfill(2),this.day.zfill(2))
         ;日期和月份的长度，有一个为1，则为1
         this.len := (strlen(this.month)==1 || strlen(this.day)==1) ? 1 : 2
@@ -45,6 +40,19 @@ class _Date {
         m := round(m0, -1)
         h := m0 > 55 ? string(h0+1) : h0
         return format("{1}:{2}-{3}:{2}", format("{:02s}",h),m,format("{:02s}",h+1))
+    }
+
+    ;上1季度
+    static lastQuarter(month:=0) {
+        if (!month)
+            month := integer(A_MM)
+        ;当前季度
+        res := mod(month-1, 3) + 1
+        ;上一季度
+        if (res > 1)
+            return res - 1
+        else
+            return 4
     }
 
     ;转成 A_Now 的格式

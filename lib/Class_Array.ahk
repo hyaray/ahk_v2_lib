@@ -4,9 +4,17 @@
 ;除了方法名以r开头的会修改原arr，且无返回值(rMoveDown)
 ;ip 1.2 转成 192.168.1.2
 ;NOTE map 方法已自带，参数是(v,k)，注意区分 map 的返回值和被 map 修改之后的 arr
+;arr.map(xxx) 命令运行之后，arr 已经被修改了
+;arr := arr.map(xxx) 加了赋值，这是 map 的函数返回值拼接的结果
 ;提取二维数组的第1项组成一维数组
 ;arr2.map((a)=>a[1])
-;自带 arr.filter((v)=>v == 2)
+;内置方法
+;   arr.indexOf(val, start_index:=1)
+;   arr.FindIndex(callback: (value [, index]) => Boolean, start_index := 1)
+;   arr.join(",")
+;   arr.filter((v)=>v == 2) 返回true的保留，python和js也都是此逻辑
+;   arr.sort(callback?: (a, b) => Integer) => $this 修改原数组，示例: arr.sort((a,b)=>a[2]-b[2])
+
 
 ; https://autohotkey.com/board/topic/83081-ahk-l-customizing-object-and-array
 defprop := object.DefineProp.bind(array.prototype)
@@ -19,6 +27,45 @@ for k in proto.OwnProps() {
 class _Array extends Array {
 
     toString() => this.toJson()
+
+    ;只处理第1级
+    ;如果fitOutdebug，则前面增加换行符让调试信息更整齐
+    toString1(fitOutdebug:=false) {
+        if (!this.length)
+            return ""
+        if (this.length == 1)
+            return json.stringify(this[1])
+        res := json.stringify(this[1])
+        if (fitOutdebug)
+            res := "`n" . res
+        for obj in this {
+            if (A_Index > 1)
+                res .= "`n" . json.stringify(obj)
+        }
+        return res
+    }
+
+    ;暂时只支持2维
+    ;第2维长度只看第1个值
+    size() {
+        if (!this.length)
+            return [0]
+        res := [this.length]
+        if (this[1] is array)
+            res.push(this[1].length)
+        return res
+    }
+
+    ;只支持一维数组，普通值对比
+    equal(arr) {
+        if (this.length != arr.length)
+            return false
+        for v in this {
+            if (v != arr[A_Index])
+                return false
+        }
+        return true
+    }
 
     toArr2() {
         if (!this.length)
@@ -89,6 +136,7 @@ class _Array extends Array {
     }
 
     ;不要最后一个 end=-1
+    ;切片功能
     slice(start:=1, end:=0, step:=1) {
         len := this.length
         i := start < 1 ? len + start : start
@@ -226,7 +274,7 @@ class _Array extends Array {
             res := v0
         }
         loop(arr.length-idx)
-            res := fun.call(res, arr[idx+A_Index])
+            res := fun(res, arr[idx+A_Index])
         return res
     }
 
@@ -304,20 +352,35 @@ class _Array extends Array {
         return res
     }
 
-    sort(tp:="") { ;默认升序，D为降序
-        obj := map()
-        obj.default := 0
-        for v in this
-            obj[v]++
+    ;参考python的 sorted
+    ;用map的key来排序，没有过滤功能
+    ;NOTE reverse还要考虑相同值的情况，是否也要倒序，如下示例的，2的两项顺序
+    ;arr2 := [
+    ;    [2, 3], 
+    ;    [2, 4], 
+    ;    [3, "b"],
+    ;    [1, "c"],
+    ;]
+    sorted(fun, reverse:=0) {
+        oa := map()
+        for o in this {
+            k := fun(o)
+            if (oa.has(k))
+                oa[k].push(o)
+            else
+                oa[k] := [o]
+        }
         arrRes := []
-        if (tp == "") {
-            for k, v in obj {
-                loop(v)
-                    arrRes.push(k)
+        for k, ao in oa {
+            switch reverse {
+                case 0:
+                    arrRes.extend(ao)
+                case 1: ;内部 o 正序
+                    arrRes := ao.extend(arrRes)
+                case 2: ;内部 o 倒序
+                    loop (ao.length)
+                        arrRes.push(ao[-A_Index])
             }
-        } else if (tp = "D") {
-            for k, v in obj
-                arrRes.insertat(1, v)
         }
         return arrRes
     }
@@ -346,7 +409,7 @@ class _Array extends Array {
                         if (v1 is array) {
                             arrRes.extend(this.noBranch(v1))
                         } else if (v1 is string) {
-                            msgbox(v1)
+                            msgbox(v1) ;TODO
                         } else {
                             msgbox(type(v1))
                         }
@@ -455,6 +518,20 @@ class _Array extends Array {
             } else
                 arrRes[r].push(v)
         }
+    }
+
+    ;v1移到v0后
+    moveAfterValue(v1, v0) {
+        arr := this
+        i1 := arr.indexOf(v1)
+        if (!i1)
+            throw ValueError(format("{1}不在数组内", v1))
+        i0 := arr.indexOf(v0)
+        if (!i0)
+            throw ValueError(format("{1}不在数组内", v0))
+        arr.RemoveAt(i1)
+        arr.InsertAt(i0+1, v1)
+        return arr
     }
 
     moveDown(arr, idx) {

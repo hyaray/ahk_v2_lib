@@ -9,6 +9,7 @@
         oGG.data_arr2()
         oGG.ListViewEx()
         oGG.lv_bindClick()
+        return oGG
     }
 
     static play() {
@@ -132,7 +133,8 @@
             }
         } else {
             ;this.oLV.ModifyCol(A_Index, 1000//cntCol)
-            this.oLV.ModifyCol()
+            loop(cntCol)
+                this.oLV.ModifyCol(A_Index, "AutoHdr")
         }
         this.oLV.opt("+Redraw")
     }

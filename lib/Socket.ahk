@@ -20,7 +20,7 @@ class Socket {
     ;    }
     ;    ;return
     ;    newSocket.sendText(res)
-    ;    if (close) ;是否立即关闭连接
+    ;    if (1) ;是否立即关闭连接
     ;        newSocket.disconnect()
     ;}
     static server(arrAddr, fun) {
