@@ -434,11 +434,11 @@ inputboxEX(tips, sDefaluet:="", sTitle:="", bEmpty:=false) {
 /*
 TODO 默认激活控件
 arr2 := [
- ["姓名", "name", "hy"],
- ["性别", "gender", ["男","女"], 2],
- ["年龄", "age", "20", "n"],
- ["是否党员", "dangyuan", 0, "b"],
- ["备注", "beizhu", "", "2"],
+    ["姓名", "name", "hy"],
+    ["性别", "gender", ["男","女"], 2],
+    ["年龄", "age", "20", "n"],
+    ["是否党员", "dangyuan", 0, "b"],
+    ["备注", "beizhu", "", "2"],
 ]
 objOpt := hyf_inputOption(arr2, "提示")
 msgbox(json.stringify(objOpt, 4))
@@ -459,7 +459,7 @@ msgbox(json.stringify(objOpt, 4))
 ;关闭则返回map()
 ;NOTE 自动过滤空值
 */
-hyf_inputOption(arr2, title:="", bTrim:=false, bOne:=false) {
+hyf_inputOption(arr2, title:="", funOut:="", bOne:=false) {
     if (arr2 is map) {
         for k, v in arr2.clone()
             arr2.push([k,k,v])
@@ -482,6 +482,8 @@ hyf_inputOption(arr2, title:="", bTrim:=false, bOne:=false) {
         ctl := ""
         if (arr.length >= 3) {
             if (arr[3] is array) {
+                ;if (arr.length>=4 && arr[4] == "m") #TODO 单控件无法实现多选返回数组
+                ;    ctl := "Checkbox"
                 ctl := "ComboBox"
                 lMax := max(arr[3].map(x=>strlen(x))*)
                 opt := funOpt(varName, max(lMax*30, 50))
@@ -551,8 +553,8 @@ hyf_inputOption(arr2, title:="", bTrim:=false, bOne:=false) {
             ;记录
             if (v != "") { ;过滤空值
                 ;输出结果二次加工
-                if (bTrim)
-                    v := trim(v) ;TODO 是否trim(比如每行前加"- "转成无序列表)
+                if (funOut)
+                    v := funOut(v) ;TODO 是否trim(比如每行前加"- "转成无序列表)
                 if (arr.length >=4 && arr[4]~="n|f")
                     objRes[arr[2]] := number(v)
                 else
