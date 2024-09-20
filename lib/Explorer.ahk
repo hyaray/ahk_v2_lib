@@ -74,8 +74,10 @@ class Explorer {
         "sc config ShellHWDetection start= disabled".runCmdHide() ;disabled前必须带空格
     }
 
-    __new(hwnd) {
-        if (hwnd is string)
+    __new(hwnd:=0) {
+        if (!hwnd)
+            hwnd := WinActive("ahk_exe explorer.exe")
+        else if (hwnd is string)
             hwnd := WinExist(hwnd)
         this.hwnd := hwnd
         for wind in ComObject("Shell.Application").Windows {

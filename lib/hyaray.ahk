@@ -173,11 +173,12 @@ deepclone(obj) {
 ;NOTE 可直接获取的不依赖复制
 ;bVimNormal 获取 Vim normal模式下的内容
 hyf_getSelect(bVimNormal:=false, bInput:=false) {
+    do_copy := true
     if (WinActive("ahk_class XLMAIN")) {
         if (ControlGetClassNN(ControlGetFocus()) == "EXCEL71")
             return rng2str(ox().selection)
     } else if (WinActive("ahk_exe tabby.exe")) {
-        return A_Clipboard
+        do_copy := false
     } else if (WinActive("ahk_class Vim")) { ;Vim 用接口直接获取内容，无需复制
         oVim := ComObjActive("Vim.application")
         if (oVim.eval("mode()") == "n") {
@@ -215,33 +216,34 @@ hyf_getSelect(bVimNormal:=false, bInput:=false) {
         }
     }
     ;其他情况复制
-    clipSave := A_Clipboard
-    A_Clipboard := ""
-    sleep(10)
-    if (WinActive("ahk_class VirtualConsoleClass")) {
-        send("{enter}")
-    } else {
-        OutputDebug(format("i#{1} {2}:^c", A_LineFile,A_LineNumber))
-        send("{ctrl down}c{ctrl up}")
-    }
-    if (ClipWait(0.2)) {
-        if (WinActive("ahk_class OpusApp"))
-            res := RegExReplace(trim(A_Clipboard,"`r`n"), "^\d+(\.\d+)*\.?\s") ;word列表复制的内容
-        else
-            res := A_Clipboard ;TODO 可trim(A_Clipboard)能会耗时较长
-        ;OutputDebug(format("i#{1} {2}:res={3}", A_LineFile,A_LineNumber,res))
-        A_Clipboard := clipSave
-        return res
-    } else {
+    if (do_copy) {
+        clipSave := A_Clipboard
+        A_Clipboard := ""
+        sleep(10)
+        if (WinActive("ahk_class VirtualConsoleClass")) {
+            send("{enter}")
+        } else {
+            OutputDebug(format("i#{1} {2}:^c", A_LineFile,A_LineNumber))
+            send("{ctrl down}c{ctrl up}")
+        }
+        if (ClipWait(0.2)) {
+            if (WinActive("ahk_class OpusApp"))
+                res := RegExReplace(trim(A_Clipboard,"`r`n"), "^\d+(\.\d+)*\.?\s") ;word列表复制的内容
+            else
+                res := A_Clipboard ;TODO 可trim(A_Clipboard)能会耗时较长
+            ;OutputDebug(format("i#{1} {2}:res={3}", A_LineFile,A_LineNumber,res))
+            A_Clipboard := clipSave
+            return res
+        }
         OutputDebug(format("d#{1} {2}:copy failed clip={3}", A_LineFile,A_LineNumber,A_Clipboard))
         A_Clipboard := clipSave
-        if (bInput) {
-            res := inputbox("获取和复制失败，请手工输入内容")
-            if (res.result!="Cancel" && (res.value != ""))
-                return res.value
-        } else {
-            return ""
-        }
+    }
+    if (bInput) {
+        res := inputbox("获取和复制失败，请手工输入内容")
+        if (res.result!="Cancel" && (res.value != ""))
+            return res.value
+    } else {
+        return ""
     }
     ;暂时应用是选中多个标题名
     ;NOTE qz 里获取值依赖
@@ -2231,13 +2233,18 @@ hyf_selectByArr(arr2, indexKey:=1, sPyAndIndex:="21", bDistinct:=false) {
     tooltip
     oGui.title := format("读取耗时 {1} 加载到Gui耗时 {2}", nLoad,nGui)
     oGui.show()
-    WinWaitActive(oGui)
-    ctl := ControlGetFocus(oGui) || WinGetID()
-    PostMessage(0x50,, dllcall("LoadKeyboardLayout", "str","04090409", "uint",1), ctl)
     resGui := []
-    OnMessage(0x100, selectN)
-    WinWaitClose(oGui)
-    return resGui
+    WinWaitActive(oGui)
+    try { ;可能gui还没加载完成，按键已经触发了 oGui.destroy()
+        ctl := ControlGetFocus(oGui) || WinGetID()
+    } catch {
+        return resGui
+    } else {
+        PostMessage(0x50,, dllcall("LoadKeyboardLayout", "str","04090409", "uint",1), ctl)
+        OnMessage(0x100, selectN)
+        WinWaitClose(oGui)
+        return resGui
+    }
     doEscape(oGui, p*) {
         OnMessage(0x100, selectN, 0)
         oGui.destroy()
