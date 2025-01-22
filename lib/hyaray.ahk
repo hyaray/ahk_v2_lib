@@ -148,7 +148,7 @@ hyf_readyaml(fp, arr:=unset, default:=unset) {
 
 deepclone(obj) {
 	objs := map()
-	objs.default := ''
+	objs.default := ""
 	return clone(obj)
 	clone(obj) {
 		switch type(obj) {
@@ -579,7 +579,7 @@ hyf_runByVim(fp, line:=0, params:="--remote-tab-silent") { ;用文本编辑器�
     } else if (line != "") {
         if (instr(line, " "))
             line := format('"{1}"', StrReplace(line,'"','\"'))
-        params .= format(' +/{1}', line)
+        params .= format(" +/{1}", line)
         if !(line ~= "\/[+-]\d+$") ;查找内容没有偏移行数，则手工添加/(FIXME 临时方案)
             params .= "/"
     }
@@ -620,7 +620,7 @@ hyf_runByIE(url:="") { ;关闭当前窗口
 ;ext
 ;   ""精准
 ;   "*"搜索
-hyf_findFile(dirIn, arrFnn, ext:="*") {
+hyf_findFile(dirIn, arrFnn, ext:="*", funFilter:=unset) {
     ;数组
     if (dirIn is array) {
         for _ in dirIn {
@@ -646,14 +646,17 @@ hyf_findFile(dirIn, arrFnn, ext:="*") {
     loop(arrFnn.length) {
         if (ext == "") { ;精准文件名
             dir := format("{1}\{2}", dir,arrFnn[-A_Index]) ;d:\a\b.txt 可以遍历搜索b.txt
-            loop files, dir, "RF"
-                fps.push(A_LoopFileFullPath)
+            loop files, dir, "RF" {
+                if (!isset(funFilter) || funFilter(A_LoopFileFullPath))
+                    fps.push(A_LoopFileFullPath)
+            }
         } else {
             fp := format("{1}\{2}.{3}", dir,arrFnn[-A_Index],ext)
             loop files, fp, "RF" {
                 if (A_LoopFileAttrib ~= "[HS]")
                     continue
-                fps.push(A_LoopFileFullPath)
+                if (!isset(funFilter) || funFilter(A_LoopFileFullPath))
+                    fps.push(A_LoopFileFullPath)
             }
         }
         if (fps.length)
@@ -1090,7 +1093,7 @@ hyf_getDocumentPath(winTitle:="") { ;获取当前窗口编辑文档的路径
     getDocPathOfHH(winTitle:="") {
         ctl := ControlGetHwnd("Internet Explorer_Server1", winTitle)
         dllcall("LoadLibrary", "Str","oleacc", "Ptr")
-        numput('int64',0x11CF3C3D618736E0, 'int64',0x719B3800AA000C81, IID:=buffer(16))
+        numput("int64",0x11CF3C3D618736E0, "int64",0x719B3800AA000C81, IID:=buffer(16))
         if (!dllcall("oleacc\AccessibleObjectFromWindow", "ptr",ctl, "uint",0, "ptr",IID, "ptr*",&pacc:=0)) {
             accWin := ComValue(9, pacc, 1)
             chmPath := Query_Service(accWin, "{332C4427-26CB-11D0-B483-00C04FD90119}").document.url
@@ -1102,7 +1105,7 @@ hyf_getDocumentPath(winTitle:="") { ;获取当前窗口编辑文档的路径
         Query_Service(pobj, SID, IID:="!", bRaw:="") {
             if (isobject(pobj))
                 pobj := ComObjValue(pobj)
-            numput('int64',0x11CE74366D5140C1, 'int64',0xFA096000AA003480, pid:=buffer(16))
+            numput("int64",0x11CE74366D5140C1, "int64",0xFA096000AA003480, pid:=buffer(16))
             res0 := comcall(0, pobj, "Ptr",pid, "Ptr*",&psp:=0)
             res3 := comcall(3, psp, "Ptr",Query_Guid4String(&SID, SID), "Ptr",IID=="!"?SID:Query_Guid4String(&IID,IID), "Ptr*",&pobj:=0)
             if (!res0 && !res3 || ObjRelease(psp)) {
@@ -1449,7 +1452,7 @@ hyf_smartWin(fp, funcHwndOrwinClass:=unset, objHook:=unset, allWin:=0) {
         OutputDebug(format("i#{1} {2}:fp={3}", A_LineFile,A_LineNumber,fp))
         ;打开程序
         try
-            run(format('{1} /c {2}', A_ComSpec,fp), dir, "hide") ;run(fp, dir) ;TODO 尝试 <2023-04-22 23:31:11> hyaray
+            run(format("{1} /c {2}", A_ComSpec,fp), dir, "hide") ;run(fp, dir) ;TODO 尝试 <2023-04-22 23:31:11> hyaray
         catch
             throw ValueError(fp)
         ;打开后自动运行
@@ -1580,8 +1583,8 @@ ox(winTitle:="ahk_class XLMAIN") {
         ctlID := ControlGetHwnd("EXCEL71")
     else
         return ComObject("Excel.application")
-    numput('Int64',0x20400, 'Int64',0x46000000000000C0, IID_IDispatch:=buffer(16))
-    dllcall("oleacc\AccessibleObjectFromWindow", "ptr",ctlID, "uint",0xFFFFFFF0, "ptr",IID_IDispatch, "ptr*",win:=ComValue(9,0), 'HRESULT')
+    numput("Int64",0x20400, "Int64",0x46000000000000C0, IID_IDispatch:=buffer(16))
+    dllcall("oleacc\AccessibleObjectFromWindow", "ptr",ctlID, "uint",0xFFFFFFF0, "ptr",IID_IDispatch, "ptr*",win:=ComValue(9,0), "HRESULT")
     loop {
         try
             return win.application
@@ -1666,7 +1669,7 @@ hyf_rng2array(rng:=unset) {
 hyf_rng2arrayV(rng:=unset, funVal:=unset, bWrite:=false) {
     if (!isset(rng))
         rng := ox().selection
-    if (rng.areas.count > 1) { ;TODO 多区域则直接修改值或转成arr
+    if (rng.areas.count > 1 || rng.MergeCells) { ;TODO 多区域则直接修改值或转成arr
         if (!isset(funVal)) { ;NOTE 未定义修改函数，则返回arrVal
             arrVal := []
             for cell in rng
@@ -1676,12 +1679,15 @@ hyf_rng2arrayV(rng:=unset, funVal:=unset, bWrite:=false) {
         xl := rng.application
         xl.ScreenUpdating := false
         for cell in rng {
+            if (cell.MergeCells && cell.address != cell.MergeArea.cells(1).address)
+                continue
             if (funVal is map)
                 cell.value := funVal.get(cell.value, cell.value)
             else
                 cell.value := funVal(cell)
         }
         xl.ScreenUpdating := true
+        return
     }
     if (!isset(funVal)) {
         funVal := hyf_delete0
@@ -1893,11 +1899,11 @@ hyf_props(cls, funFilter:=unset) {
 *     sUUID := UUIDCreate( [ mode := 1 , format := "" , &UUID := "" ] )
 * Parameter(s):
 *     sUUID     [retval] - UUID (string)
-*     mode     [in, opt] - Defaults to one(1) which uses 'Rpcrt4\UuidCreate',
-*                          otherwise specify two(2) for 'UuidCreateSequential'
-*                          or zero(0) for 'UuidCreateNil'.
-*     format   [in, opt] - if 'format' contains an opening brace('{'), output
-*                          will be wrapped in braces. Include the letter 'U' to
+*     mode     [in, opt] - Defaults to one(1) which uses "Rpcrt4\UuidCreate",
+*                          otherwise specify two(2) for "UuidCreateSequential"
+*                          or zero(0) for "UuidCreateNil".
+*     format   [in, opt] - if "format" contains an opening brace("{"), output
+*                          will be wrapped in braces. Include the letter "U" to
 *                          convert output to uppercase. default is blank.
 *     UUID  [ByRef, opt] - Pass this parameter if you need the raw UUID
 */
@@ -1940,7 +1946,7 @@ hyjson2arr(obj, mark:=1) {
 
 ;运行ahk脚本
 ;hyf_pipeRun('strlen("abc")')
-;hyf_pipeRun('msgbox(1)')
+;hyf_pipeRun("msgbox(1)")
 ;WM_COPYDATA_send("aaa")
 ;TODO  "`n`n" 这种字符串不兼容
 ;也可见 DynaRun.ahk https://www.autohotkey.com/board/topic/56141-ahkv2-dynarun-run-autohotkey-process-dynamically
@@ -1976,7 +1982,7 @@ hyf_pipeRun(code, fn:="", callback:=0) {
         )"
         strCode .= format('`nWM_COPYDATA_send(string({1}), "{2}")', code,fn)
     } else {
-        strCode := format('#SingleInstance Force`n#NoTrayIcon`n{1}', code)
+        strCode := format("#SingleInstance Force`n#NoTrayIcon`n{1}", code)
     }
     shell := ComObject("WScript.Shell")
     oExec := shell.exec(A_AhkPath . " *")
@@ -2165,13 +2171,14 @@ hyf_GuiListView(arr2, arrField:=0, title:="", arrWidth:=unset) {
 }
 
 ;去重或生成拼音都是根据 subArr[indexKey]
-;indexKey 主值在 subArr 的序号(不能重复，否则返回结果有问题)
+;indexKey 主值在 subArr 的序号(用来搜索和生成拼音)
 ;sPyAndIndex
 ;   第1位：0=不添加拼音 1=已有拼音(无需添加，但要匹配搜索) 2=添加拼音
 ;   第2位：0=不push序号 1=要
 ;bDistinct 是否去重
+;unicodeKey，去重和objRaw用
 ;返回 subArr
-hyf_selectByArr(arr2, indexKey:=1, sPyAndIndex:="21", bDistinct:=false) {
+hyf_selectByArr(arr2, indexKey:=1, sPyAndIndex:="21", bDistinct:=false, uniqueKey:=1) {
     if (!arr2.length)
         return []
     bAddIndex := (substr(sPyAndIndex, 1, 2) == "1")
@@ -2184,12 +2191,21 @@ hyf_selectByArr(arr2, indexKey:=1, sPyAndIndex:="21", bDistinct:=false) {
         arrNew := arr2
     }
     ;   去重(根据 subArr[1])
-    if (bDistinct)
-        arrNew := arrNew.filter2((v,k)=>v[indexKey]!="", (v,k)=>v[indexKey])
+    if (bDistinct) {
+        arrTmp := deepclone(arrNew)
+        arrNew := []
+        obj := map()
+        for arr in arrTmp {
+            if obj.has(arr[uniqueKey])
+                continue
+            obj[arr[uniqueKey]] := 1
+            arrNew.push(arr)
+        }
+    }
     ;记录 objRaw 最终返回用(因为有些对象不会在 ListView 显示)
     objRaw := map()
     for subArr in arrNew
-        objRaw[subArr[indexKey]] := subArr
+        objRaw[subArr[uniqueKey]] := subArr
     ;添加标题
     arrField := ["序号"]
     loop(arrNew[1].length)
@@ -2325,7 +2341,7 @@ hyf_selectByArr(arr2, indexKey:=1, sPyAndIndex:="21", bDistinct:=false) {
         ;OutputDebug(format("d#{1} {2}:{3} resGui={4}", A_LineFile,A_LineNumber,A_ThisFunc,json.stringify(resGui,4)))
         ;做任何事
         ;设置返回值
-        key := oLv.GetText(r, indexKey+1)
+        key := oLv.GetText(r, uniqueKey+1)
         OutputDebug(format("w#{1} {2}:r={3} indexKey={4} key={5}", A_LineFile,A_LineNumber,r,indexKey,key))
         resGui := objRaw[key] ;NOTE 有些是对象不是文本，要求key不能有重复值
         doEscape(oLv.gui)

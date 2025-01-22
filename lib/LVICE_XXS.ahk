@@ -40,6 +40,8 @@ class LVICE_XXS {
       c := numget(L + (A_PtrSize * 3), 4, "int")
       arr := this.getLineText(LV, r+1)
       ;CellText := LV.GetText(r + 1, c + 1)
+      tooltip(format("R{1}C{2}", r+1,c+1), 0, 0, 9)
+      SetTimer(tooltip.bind(,,, 9), -1000)
       CellText := arr[c+1]
       A_Clipboard := CellText
       tooltip(CellText)

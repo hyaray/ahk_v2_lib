@@ -1,9 +1,14 @@
 ﻿class _CB extends _CDP {
 
     ;只是为了方便打开网页
-    __new(url:="", funAfterDo:=unset) {
-        if (url != "")
-            _CDP.smartGet("chrome").tabOpenLink(url, funAfterDo?)
+    __new(url:="", fp:=unset, funAfterDo:=unset) {
+        if (url != "") {
+            if (isset(fp))
+                oCB := _CDP.smartGet(fp)
+            else
+                oCB := _CDP.smartGet("chrome")
+            oCB.tabOpenLink(url, funAfterDo?)
+        }
     }
 
     static onekey() {

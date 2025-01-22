@@ -7,6 +7,7 @@ class _Date {
     static LeapMonth := ""
     static Chuyi := ""
 
+    ;arr := [2024,1,2]
     __new(arr) {
         if (arr is ComObject)
             arr := arr.value

@@ -76,7 +76,7 @@ class Explorer {
 
     __new(hwnd:=0) {
         if (!hwnd)
-            hwnd := WinActive("ahk_exe explorer.exe")
+            hwnd := WinActive("ahk_class CabinetWClass ahk_exe explorer.exe")
         else if (hwnd is string)
             hwnd := WinExist(hwnd)
         this.hwnd := hwnd

@@ -1,5 +1,20 @@
 ﻿class _Gui {
 
+    ; https://www.autohotkey.com/boards/viewtopic.php?f=82&t=131752
+    static getTextWidth(ctrl, arrText) {
+        hFont := SendMessage(0x31,,, ctrl) ;WM_GETFONT
+        hDC := dllcall("GetDC", "Ptr", 0, "Ptr")
+        hObj := dllcall("SelectObject", "Ptr", hDC, "Ptr", hFont, "Ptr")
+        res := []
+        for text in arrText {
+            height := dllcall("DrawText", "Ptr",hDC, "Str",text, "Int",strlen(text), "Ptr",RECT:=buffer(16), "UInt",0x400) ;DT_CALCRECT=0x400
+            res.push(numget(RECT, 8, "UInt") - numget(RECT, "UInt"))
+        }
+        dllcall("SelectObject", "Ptr", hDC, "Ptr", hObj, "Ptr")
+        dllcall("ReleaseDC", "Ptr", 0, "Ptr", hDC)
+        return res
+    }
+
     static lv_show(arr2) {
         oGG := _Gui(arr2)
         ;oGG.callback := (p*)=>msgbox(json.stringify(p, 4))
@@ -7,7 +22,7 @@
         ;oGG.setFontSize(11)
         ;oGG.setWidth(1600)
         oGG.data_arr2()
-        oGG.ListViewEx()
+        oGG.ListViewEx(300)
         oGG.lv_bindClick()
         return oGG
     }
@@ -95,7 +110,7 @@
 
     ;复制用
     ;单击复制单元格
-    ListViewEx() {
+    ListViewEx(maxWidth:=300) {
         oGui := this.createGui()
         this.oLV := oGui.AddListView(format("VScroll count grid w{1} r{2}", this.w-50,this.rs+2), this.headers)
         this.oLV.header := SendMessage(0x101F,,, this.oLV.hwnd) ; LVM_GETHEADER - get hWnd of Header control
@@ -103,7 +118,7 @@
         ControlSetStyle("^0x100", this.oLV.Header) ; toggle the HDS_FILTERBAR style
         this.oLV.OnNotify(-312, ObjBindMethod(this,"do_lv_FilterChange")) ; HDN_FILTERCHANGE
         this.oLV.name := "lv"
-        this.lv_addData()
+        this.lv_addData(maxWidth) ;NOTE
         oGui.AddButton("default center section", "确定").OnEvent("click", ObjBindMethod(this,"do_btn_click"))
         oGui.AddButton("center ys", "复制当前表格内容").OnEvent("click", ObjBindMethod(this,"do_btn_copy"))
         ;oGui.AddButton("center ys", "全选").OnEvent("click", ObjBindMethod(this,"do_btn_lv_select_all"))
@@ -113,7 +128,7 @@
         this.LVICE := LVICE_XXS(this.oLV)
     }
 
-    lv_addData() {
+    lv_addData(maxWidth:=300) {
         this.data_querys()
         this.oLV.opt("-Redraw")
         this.oLv.delete()
@@ -135,6 +150,15 @@
             ;this.oLV.ModifyCol(A_Index, 1000//cntCol)
             loop(cntCol)
                 this.oLV.ModifyCol(A_Index, "AutoHdr")
+            ;TODO 调整过长的列
+            arrWidth := []
+            loop(this.oLV.GetCount("column"))
+                arrWidth.push(SendMessage(0x1000+29,A_Index-1,,, this.oLV))
+            OutputDebug(format("i#{1} {2}:{3} arrWidth={4}", A_LineFile.fn(),A_LineNumber,A_ThisFunc,json.stringify(arrWidth)))
+            for width in arrWidth {
+                if (width > maxWidth)
+                this.oLV.ModifyCol(A_Index, maxWidth)
+            }
         }
         this.oLV.opt("+Redraw")
     }

@@ -427,14 +427,23 @@ class UIA {
         }
     }
 
-    static WaitFocusedElement(ctlName:="Edit", ms:=3000) {
+    static WaitFocusedElement(funEl:="Edit", funSleep:=unset, ms:=3000) {
         endTime := A_TickCount + ms
+        if (funEl is string) {
+            ctlName := funEl
+            funEl := (el)=>el.CurrentControlType == UIA.ControlType.%ctlName%
+        }
         loop {
             el := this.GetFocusedElement()
-            if (el.CurrentControlType == UIA.ControlType.%ctlName%)
+            if (funEl(el))
                 return el
+            if (!isset(funSleep)) {
+                funSleep := 200
+            }
+            if (funSleep is integer)
+                sleep(funSleep)
             else
-                sleep(200)
+                funSleep()
         } until (A_TickCount >= endTime)
     }
 
@@ -745,7 +754,7 @@ class UIA {
             }
             ControlType := UIA.ControlType.%ControlType% ;转成数值
         }
-        if (!isset(value))
+        if (!isset(value)) ;NOTE 单条件
             return UIA.CreatePropertyCondition(30003, ControlType)
         else if (flag)
             return UIA.CreateAndCondition(UIA.CreatePropertyCondition(30003,ControlType), UIA.CreatePropertyConditionEx(UIA.property.%field%, value, flag))

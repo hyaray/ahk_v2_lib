@@ -1133,6 +1133,8 @@ class _String {
     }
 
     ;转成全角
+    ;half_all := "`"!#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_``abcdefghijklmnopqrstuvwxyz{|}~"
+    ;full_all := "＂！＃＄％＆＇（）＊＋，－．／０１２３４５６７８９：；＜＝＞？＠ＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶＷＸＹＺ［＼］＾＿｀ａｂｃｄｅｆｇｈｉｊｋｌｍｎｏｐｑｒｓｔｕｖｗｘｙｚ｛｜｝～"
     toWidth() {
         str := this
         res := ""
@@ -1155,10 +1157,8 @@ class _String {
             return chr(n + 65248)
         else if (n > 65248) && (n < 65504)
             return chr(n - 65248)
-        else {
-            tooltip("没找到匹配的字符")
-            SetTimer(tooltip, -1000)
-        }
+        else
+            return ""
     }
 
     ;同Python
@@ -1188,6 +1188,8 @@ class _String {
                     return res
                 }
             }
+        } else if (data is map) {
+            return json.stringify(data)
         } else if (data != "") {
             res := substr(data, 1, 1)
             loop parse, substr(data,2)
